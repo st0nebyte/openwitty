@@ -3,6 +3,7 @@
 #include <mutex>
 
 #include "IDeviceTransport.hpp"
+#include "protocol/Messages.hpp"
 
 namespace lewitt {
 
@@ -16,6 +17,8 @@ public:
     void close() override { open_ = false; }
     bool isOpen() const override { return open_; }
     DeviceInfo info() const override;
+    // Simulated USB mode: PID 0x0004 normal, 0x0002 macOS streaming (settings are preserved).
+    DeviceMode mode() const { return mode_; }
     Result<Bytes> read(MessageId id) override;
     Status write(MessageId id, std::span<const std::uint8_t> data) override;
     bool isSimulated() const override { return true; }
@@ -45,6 +48,11 @@ private:
     Bytes api_;
     std::vector<MessageId> log_;
     int agProgress_{-1};
+    DeviceMode mode_{DeviceMode::Normal};
+    std::vector<std::uint16_t> triggerLog_;
+public:
+    std::vector<std::uint16_t> triggers() const { return triggerLog_; }
+private:
     std::uint8_t agOutcome_{0x20};  // SIMULATED result bits (meaning of values unverified)
 };
 

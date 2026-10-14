@@ -184,3 +184,90 @@ TEST(GuiBackend, CustomButtonAndMixToSpeakers) {
     c.setValue("set.mixToSpeakers", true);
     ASSERT_TRUE(waitFor([&] { return c.values()["set.mixToSpeakers"].toBool(); }));
 }
+
+TEST(GuiSync, FailedWriteIsKeptAndFlaggedThenRetried) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in1.gain"); }));
+    Count err(&c, &DeviceController::errorChanged);
+    c.injectFault("timeout");
+    c.setValue("in1.gain", 44.0);
+    ASSERT_TRUE(waitFor([&] { return err.count() > 0; }));
+    // the user's value stays visible and is marked pending; it was not silently dropped
+    ASSERT_TRUE(waitFor([&] { return c.values()["pending.in1.gain"].toBool(); }));
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 44.0);
+    c.retryPending();
+    ASSERT_TRUE(waitFor([&] { return !c.values().contains("pending.in1.gain"); }));
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 44.0);
+}
+
+TEST(GuiSync, DiscardPendingRestoresDeviceValue) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in2.gain"); }));
+    Count err(&c, &DeviceController::errorChanged);
+    c.injectFault("stall");
+    c.setValue("in2.gain", 10.0);
+    ASSERT_TRUE(waitFor([&] { return err.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return c.values()["pending.in2.gain"].toBool(); }));
+    c.discardPending();
+    ASSERT_TRUE(waitFor([&] { return !c.values().contains("pending.in2.gain"); }));
+    ASSERT_TRUE(waitFor([&] { return c.values()["in2.gain"].toDouble() == 25.0; }));
+}
+
+TEST(GuiSync, ExternalHardwareChangeAppearsWithoutLosingPendingEdit) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("hp.volume"); }));
+    Count err(&c, &DeviceController::errorChanged);
+    c.injectFault("timeout");
+    c.setValue("in1.gain", 50.0);                       // fails -> pending
+    ASSERT_TRUE(waitFor([&] { return c.values()["pending.in1.gain"].toBool(); }));
+    c.simulateExternalChange("hp.volume", -20.0);       // knob turned on the device
+    ASSERT_TRUE(waitFor([&] { return c.values()["hp.volume"].toDouble() == -20.0; }, 4000));
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 50.0);   // pending edit survived
+    EXPECT_TRUE(c.values()["pending.in1.gain"].toBool());
+}
+
+TEST(GuiSync, IdenticalValueSendsNoCommand) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("hp.mute"); }));
+    c.setValue("hp.mute", true);
+    ASSERT_TRUE(waitFor([&] { return c.values()["hp.mute"].toBool(); }));
+    Count err(&c, &DeviceController::errorChanged);
+    c.setValue("hp.mute", true);                        // same value again
+    c.flush();
+    EXPECT_EQ(err.count(), 0);
+    EXPECT_TRUE(c.values()["hp.mute"].toBool());
+}
+
+TEST(GuiBackend, SimulatedModeSwitchRestartsAndPreservesSettings) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in1.gain"); }));
+    c.setValue("in1.gain", 41.0);
+    ASSERT_TRUE(waitFor([&] { return c.values()["in1.gain"].toDouble() == 41.0; }));
+    EXPECT_EQ(c.values()["device.mode"].toString(), "Normal");
+    c.setDeviceMode(true);
+    ASSERT_TRUE(waitFor([&] { return c.values()["restarting"].toBool(); }));
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected" && !c.values()["restarting"].toBool(); }, 5000));
+    ASSERT_TRUE(waitFor([&] { return c.values()["device.mode"].toString() == "MacOSStreaming"; }));
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 41.0);      // settings preserved
+    EXPECT_TRUE(c.values()["set.macosStreaming"].toBool());
+}
+
+TEST(GuiBackend, AutoGainSendsSessionBracket) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("auto.state"); }));
+    c.trigger("autogain2");
+    ASSERT_TRUE(waitFor([&] { return c.values()["auto.state"] == "finished"; }, 6000));
+    EXPECT_EQ(c.values()["auto.progress"].toInt(), 100);
+}

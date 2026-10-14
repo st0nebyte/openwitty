@@ -46,3 +46,11 @@ if(LEWITT_BUILD_TESTS)
                  COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_SOURCE_DIR}/tools/py)
     endif()
 endif()
+
+# Visual geometry regression (needs Pillow/numpy from the project venv; skipped otherwise)
+if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/.venv/bin/python)
+    add_test(NAME visual_geometry
+             COMMAND ${CMAKE_SOURCE_DIR}/.venv/bin/python ${CMAKE_SOURCE_DIR}/tools/visual/check_geometry.py
+                     $<TARGET_FILE:lewitt-control-center>)
+    set_tests_properties(visual_geometry PROPERTIES ENVIRONMENT "QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
+endif()

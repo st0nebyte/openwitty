@@ -254,6 +254,16 @@ enum class Trigger : std::uint16_t {
     DenoiseMeasureMicrophone = 6,    // id DenoiseMeasurement (Microphone)
     DenoiseMeasureInstrument = 7,    // id DenoiseMeasurement (Instrument)
     DenoiseMeasureBoth = 8,          // id DenoiseMicPlusInst
+    // Written by UI handlers (macOS InputChannelPanel::onAutoGainButtonClicked /
+    // onDenoiseButtonClicked, CaptionInputChannel::onAutoSetupButtonClicked store 4;
+    // autoGainFinished / denoiseFinished / ~AutoSetupWindow store 5; same set found on
+    // Windows). Bracket a measurement session; exact device-side effect unverified.
+    BeginMeasurementSession = 4,
+    EndMeasurementSession = 5,
+    // PowerCycleComponent::onOKButtonClicked (macOS) / FUN_140201510 (Windows): target
+    // mode 0 -> 0x105, target mode 1 -> 0x104; device re-enumerates with the new PID.
+    SwitchToNormalMode = 0x105,
+    SwitchToMacOSStreamingMode = 0x104,
     ResetLedColors = 0x103,          // id ResetLedColors  (persistent LED change)
     FactoryReset = 0x106,            // id FactoryReset    (destructive; never sent)
 };

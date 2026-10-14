@@ -51,3 +51,23 @@ onboarding, factory reset.
 * MUTE long-press = panic mute (hardware); hidden showcase mode via icon
   sequence on the hardware (not reproduced).
 * Firmware updates via Control Center; after an error power-cycle the device.
+
+## Additional facts from reviews and software captures (2026-10)
+Sources: bonedo.de and delamar.de reviews, product page (see `VISUAL_REFERENCES.md`).
+* Window is resizable; the UI scales. The lower **status bar shows the hint of the
+  control under the pointer** ("Mute the signal"), controlled by *Show tooltips*.
+* Autosetup chooser: Microphone (guided walkthrough, 45 s, +48 V step), Instrument
+  (guided, 45 s), Mic + instrument (quick gain setup, 10 s).
+* Onboarding: four steps (Inputs, Loopback, Outputs, Monitoring) with Back/Next/Skip
+  and progress dots; re-triggerable in Settings.
+* Settings (5.2.1): versions, Check for updates / Manual update, switches for
+  automatic updates, usage data, tooltips, onboarding, links (register, support,
+  file a bug), Factory reset.
+* Active MUTE is a solid red button; Dim/Mono/Clean etc. use a lime outline.
+* The CONNECT 2 has two headphone sockets that share **one** headphone control
+  path (one Headphone strip in software) — confirmed by the binary (single
+  `Headphone` group; `Headphone1/2` identifiers belong to CONNECT 6).
+* Loopback strip: meters + MUTE only, no fader — consistent with the binary
+  (`Loopback` group has `LeftLevel/RightLevel/Mute`, no `Volume`).
+* Reviews describe 24-segment hardware LED metering and a capacitive touch surface
+  (hardware, not Control Center).

@@ -55,7 +55,10 @@ public:
     void setSampleRateHint(std::uint32_t hz) { sampleRate_ = hz; }
     std::uint32_t sampleRate() const { return sampleRate_; }
     void discardPending() { pending_.reset(); }
-    bool dirty() const { return pending_ && !(*pending_ == *current_); }
+    bool dirty() const { return pending_ && current_ && !(*pending_ == *current_); }
+    // What the UI should show: the user's unconfirmed edits on top of the device state.
+    std::optional<SettingsMessage> effectiveSettings() const { return pending_ ? pending_ : current_; }
+    const std::optional<SettingsMessage>& pendingSettings() const { return pending_; }
     Status commit();           // write pending settings (policy gated), then re-read
     Status sendTrigger(Trigger t);
 

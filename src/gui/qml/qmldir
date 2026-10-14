@@ -1,4 +1,7 @@
 singleton Theme 1.0 Theme.qml
+singleton Hint 1.0 Hint.qml
+OnboardingOverlay 1.0 OnboardingOverlay.qml
+GlyphIcon 1.0 GlyphIcon.qml
 GainKnob 1.0 GainKnob.qml
 ToggleButton 1.0 ToggleButton.qml
 ToolTip_ 1.0 ToolTip_.qml

@@ -237,6 +237,8 @@ serves (see tree order), so the pairing is exact:
 | 7 | DenoiseMeasurement (Instrument) | |
 | 8 | DenoiseMicPlusInst | |
 | 0x103 | **ResetLedColors** | persistent LED colour change |
+| 4 / 5 | begin / end measurement session | see below |
+| 0x104 / 0x105 | switch to macOS-streaming / normal mode | device restarts; see below |
 | 0x106 | **FactoryReset** | destructive; never sent by this project |
 
 ### Measurement status  [V-bin, medium]
@@ -251,8 +253,51 @@ counters: `u16 @0x2E` (input 1) and `@0x30` (input 2), compared with the
 previous snapshot. Auto-gain result `u8 @0x02`/`@0x0B` = measured gain.
 Denoise measurement shares the same progress/result bytes.
 
+### Mode switching and measurement bracket (phase 5B, corrected scanners)  [V-bin mac+win, high]
+Earlier "not found" results for the macOS-streaming command were wrong: the
+call-graph filter hid `PowerCycleComponent::onOKButtonClicked`. It reads the
+target mode (0 normal / 1 macOS streaming), compares with `getCurrentMode()`,
+and if different stores a **trigger word into the trigger buffer** and sends it
+with `LewittDevice::write`, then clears the buffer:
+
+| target mode | trigger word | macOS | Windows |
+|---|---|---|---|
+| 0 normal (PID 0x0004) | **0x0105** | `mov ax,0x105` @0x1000be6f2 | `uVar2 = 0x105` in FUN_140201510 |
+| 1 macOS streaming (PID 0x0002) | **0x0104** | `mov ax,0x104` @0x1000be705 | `uVar2 = 0x104`, else "Device mode not recognized" |
+
+`SettingsComponent::onFactoryResetButtonClicked` stores **0x106** directly
+(`mov word [dev+0x2e0],0x106`) and shows the same restart window; the tree
+lambdas for `ResetLedColors`/`FactoryReset` store 0x103/0x106 (Windows: same
+immediates at `[obj+0x300]`). A whole-binary scan for 16-bit stores into the
+trigger buffer (mac `+0x2e0`, win `+0x300`) yields exactly this word set:
+1, 2, 3, 6, 7, 8, **4**, **5**, 0x103, 0x104, 0x105, 0x106 (0 = clear).
+
+| word | stored by | meaning (confidence) |
+|---|---|---|
+| 4 | `InputChannelPanel::onAutoGainButtonClicked`, `::onDenoiseButtonClicked`, `CaptionInputChannel::onAutoSetupButtonClicked` | begin measurement session (name inferred; device effect unverified) |
+| 5 | `autoGainFinished`, `denoiseFinished`, `~AutoSetupWindow` | end measurement session (same caveat) |
+
+Sequence implemented in the mock/GUI: `4` → `1|2|3` (or `6|7|8`) → poll
+progress/result → `5`. The handlers stop the sync thread, write the word and
+restart it, so the word goes out in the next tick's trigger write.
+
+### Cross-validation summary (phase 5B)
+| Finding | macOS | Windows | Status |
+|---|---|---|---|
+| Transport: MEM GET/SET, entity 0x33, req 3/0x85/0x05, 500 ms | ✔ | ✔ | high |
+| Custom-button values 0,0xC,0xD,1,2,8,9,0xE | ✔ (CustomSettingsComponent ctor, rdx imm) | ✔ (EnumCircleRadioButton ctor, r8b imm) | values high; label↔value mapping medium-high (Windows member/label offset rule, same order on macOS) |
+| Trigger words 1,2,3,6,7,8 | ✔ lambdas | ✔ stores to +0x300 | high |
+| 0x103 / 0x106 | ✔ | ✔ | high |
+| 0x104 / 0x105 mode switch | ✔ | ✔ | high (effects unverified on HW) |
+| 4 / 5 | ✔ | ✔ (3 + 4 sites) | high that they are written; semantics medium |
+| MixToSpeakers boolean | ✔ (toggle bound via Paths) | not re-traced | medium |
+| Auto-gain result/progress | ✔ | ✔ (timer callback decompile) | medium |
+| API handshake 0x0A | ✔ | not re-traced | medium |
+| Settings schema / sync merge | ✔ | not re-traced | high (single binary) |
+
+Nothing above is hardware-verified.
+
 ### Not found / still open
-* The command that switches macOS-streaming (PID) mode.
 * `OutputSource` enumerator names; bytes 54–56, 58, 60–70 semantics.
 * Authoritative range for the input/playback mix value (Q8.8 sign-inverted).
 * `iface_version_t` layout (no consumer).

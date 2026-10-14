@@ -3,6 +3,7 @@
 #pragma once
 #include <QObject>
 #include <QThread>
+#include <QSet>
 #include <QTimer>
 #include <QVariantMap>
 #include <memory>
@@ -24,12 +25,18 @@ public slots:
     void poll();
     void simulateUnplug();
     void simulateReplug();
+    void setDeviceMode(bool macosStreaming);   // simulation only
+    void retryPending();
+    void discardPending();
+    void injectFault(const QString& kind);                       // simulation only
+    void simulateExternalChange(const QString& key, const QVariant& v);  // simulation only
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
     void errorOccurred(const QString& message);
 private:
     void publish();
+    void refreshDeviceState();
     void report(const lewitt::Status& s);
     void startTimer(int ms);
     std::unique_ptr<lewitt::DeviceSession> session_;
@@ -38,7 +45,11 @@ private:
     QVariantMap last_;
     double phase_{0};
     int sampleRate_{48000};
-    QString autoState_{"idle"};  // idle | running | finished
+    int pollCount_{0};
+    QSet<QString> pendingKeys_;
+    QString autoState_{"idle"};
+    bool inMeasureSession_{false};
+    bool restarting_{false};  // idle | running | finished
 };
 
 class DeviceController : public QObject {
@@ -67,6 +78,11 @@ public:
     Q_INVOKABLE void setSampleRate(int hz);
     Q_INVOKABLE void simulateUnplug();
     Q_INVOKABLE void simulateReplug();
+    Q_INVOKABLE void setDeviceMode(bool macosStreaming);
+    Q_INVOKABLE void retryPending();
+    Q_INVOKABLE void discardPending();
+    Q_INVOKABLE void injectFault(const QString& kind);
+    Q_INVOKABLE void simulateExternalChange(const QString& key, const QVariant& v);
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
 signals:

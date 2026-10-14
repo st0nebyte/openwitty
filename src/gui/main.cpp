@@ -16,7 +16,9 @@ int main(int argc, char** argv) {
     p.addOption(mock);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
-    QCommandLineOption show("show", "Open a page at start: settings | wizard.", "page");
+    QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
+    p.addOption(sizeOpt);
+    QCommandLineOption show("show", "Open a page at start: settings | wizard | onboarding.", "page");
     p.addOption(show);
     p.addHelpOption();
     p.process(app);
@@ -31,9 +33,16 @@ int main(int argc, char** argv) {
         QObject* root = engine.rootObjects().first();
         if (p.value(show) == "settings") root->setProperty("showSettings", true);
         if (p.value(show) == "wizard") root->setProperty("showWizard", true);
+        if (p.value(show) == "onboarding") root->setProperty("showOnboarding", true);
     }
     if (p.isSet(mock)) controller.connectMock();
     else controller.connectUsb();  // read-only; reports "not found" if absent
+    if (p.isSet(sizeOpt) && !engine.rootObjects().isEmpty()) {
+        auto parts = p.value(sizeOpt).split('x');
+        if (parts.size() == 2)
+            if (auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().first()))
+                w->resize(parts[0].toInt(), parts[1].toInt());
+    }
     if (p.isSet(shot)) {
         QTimer::singleShot(1200, &app, [&] {
             auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));

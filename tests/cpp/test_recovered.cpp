@@ -2,6 +2,7 @@
 // disassembly/decompilation (constructor immediates, schema table, bit tests),
 // not from our encoder. Simulated only -- not hardware-verified.
 #include <gtest/gtest.h>
+#include <set>
 
 #include "core/DeviceSession.hpp"
 #include "transport/MockTransport.hpp"
@@ -243,4 +244,84 @@ TEST(ApiVersion, UnsupportedMajorRefusedBeforeAnyOtherTraffic) {
 TEST(ApiVersion, ShortResponseIsAnError) {
     auto b = Bytes(0x20, 0);
     EXPECT_EQ(ApiVersionMessage::fromBytes(b).error().code, Errc::ShortTransfer);
+}
+
+TEST(Session, IdenticalEditDoesNotWrite) {
+    auto m = std::make_unique<MockTransport>();
+    MockTransport* mock = m.get();
+    DeviceSession s(std::move(m));
+    ASSERT_TRUE(s.connect().ok());
+    double g = s.settings()->gainDb(0);
+    ASSERT_TRUE(s.edit([&](SettingsMessage& x) { return x.setGainDb(0, g); }).ok());
+    EXPECT_FALSE(s.dirty());
+    ASSERT_TRUE(s.commit().ok());
+    EXPECT_TRUE(mock->writeLog().empty());
+    ASSERT_TRUE(s.edit([&](SettingsMessage& x) { return x.setGainDb(0, g + 1); }).ok());
+    ASSERT_TRUE(s.commit().ok());
+    EXPECT_EQ(mock->writeLog().size(), 1u);
+}
+
+TEST(Session, EffectiveSettingsShowPendingOverDevice) {
+    auto m = std::make_unique<MockTransport>();
+    MockTransport* mock = m.get();
+    DeviceSession s(std::move(m));
+    ASSERT_TRUE(s.connect().ok());
+    ASSERT_TRUE(s.edit([](SettingsMessage& x) { return x.setSpeakerVolumeDb(-30); }).ok());
+    EXPECT_DOUBLE_EQ(s.effectiveSettings()->speakerVolumeDb(), -30.0);
+    EXPECT_DOUBLE_EQ(s.settings()->speakerVolumeDb(), 0.0);   // device state unchanged until commit
+    mock->injectFault(MockTransport::Fault::Timeout);
+    EXPECT_FALSE(s.commit().ok());
+    EXPECT_TRUE(s.dirty());                                    // not silently dropped
+}
+
+TEST(ModeSwitch, SimulatedDeviceChangesPidButHardwareRefuses) {
+    auto m = std::make_unique<MockTransport>();
+    MockTransport* mock = m.get();
+    DeviceSession s(std::move(m));
+    ASSERT_TRUE(s.connect().ok());
+    EXPECT_EQ(deviceModeFromPid(s.info().pid), DeviceMode::Normal);
+    ASSERT_TRUE(s.sendTrigger(Trigger::SwitchToMacOSStreamingMode).ok());
+    EXPECT_EQ(mock->mode(), DeviceMode::MacOSStreaming);
+    EXPECT_EQ(s.info().pid, 0x0002);
+    EXPECT_EQ(mock->triggers().back(), 0x104);
+    ASSERT_TRUE(s.sendTrigger(Trigger::SwitchToNormalMode).ok());
+    EXPECT_EQ(s.info().pid, 0x0004);
+    EXPECT_EQ(mock->triggers().back(), 0x105);
+
+    // A non-simulated transport never receives mode switches, even with hardware writes on.
+    struct Fake final : IDeviceTransport {
+        std::string name() const override { return "fake"; }
+        Status open() override { return okStatus(); }
+        void close() override {}
+        bool isOpen() const override { return true; }
+        DeviceInfo info() const override { return {}; }
+        Result<Bytes> read(MessageId id) override {
+            Bytes b(messageInfo(id)->size, 0);
+            if (id == MessageId::ApiVersion) b[0] = 1;
+            return b;
+        }
+        Status write(MessageId, std::span<const std::uint8_t>) override { ++writes; return okStatus(); }
+        int writes{0};
+    };
+    auto f = std::make_unique<Fake>();
+    Fake* fr = f.get();
+    DeviceSession hw(std::move(f), WritePolicy{.allowRoutingChanges = true, .allowPersistentChanges = true,
+                                                .allowHardwareWrites = true});
+    ASSERT_TRUE(hw.connect().ok());
+    EXPECT_EQ(hw.sendTrigger(Trigger::SwitchToMacOSStreamingMode).error().code, Errc::NotSupported);
+    EXPECT_EQ(hw.sendTrigger(Trigger::SwitchToNormalMode).error().code, Errc::NotSupported);
+    EXPECT_EQ(fr->writes, 0);
+}
+
+TEST(Triggers, AllCommandWordsAreDistinct) {
+    std::set<int> seen;
+    for (auto t : {Trigger::AutoGainMicrophone, Trigger::AutoGainInstrument, Trigger::AutoGainBoth,
+                   Trigger::BeginMeasurementSession, Trigger::EndMeasurementSession,
+                   Trigger::DenoiseMeasureMicrophone, Trigger::DenoiseMeasureInstrument,
+                   Trigger::DenoiseMeasureBoth, Trigger::ResetLedColors,
+                   Trigger::SwitchToMacOSStreamingMode, Trigger::SwitchToNormalMode, Trigger::FactoryReset})
+        EXPECT_TRUE(seen.insert(static_cast<int>(t)).second);
+    EXPECT_EQ(seen.size(), 12u);
+    EXPECT_EQ(static_cast<int>(Trigger::BeginMeasurementSession), 4);
+    EXPECT_EQ(static_cast<int>(Trigger::EndMeasurementSession), 5);
 }

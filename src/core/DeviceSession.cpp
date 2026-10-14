@@ -80,6 +80,10 @@ Status DeviceSession::commit() {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
     if (!pending_) return okStatus();
+    if (current_ && *pending_ == *current_) {   // nothing differs: no duplicate command
+        pending_.reset();
+        return okStatus();
+    }
     if (sampleRate_ != 0 && violatesDspRestriction(*current_, *pending_, sampleRate_))
         return makeError(Errc::NotSupported,
                          "Denoise and Comp are not available at 96 kHz (documented restriction)");
@@ -95,6 +99,10 @@ Status DeviceSession::commit() {
 Status DeviceSession::sendTrigger(Trigger t) {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
+    if ((t == Trigger::SwitchToNormalMode || t == Trigger::SwitchToMacOSStreamingMode) &&
+        !transport_->isSimulated())
+        return makeError(Errc::NotSupported,
+                         "device mode switching restarts the device and is not enabled on real hardware");
     if (t == Trigger::FactoryReset)
         return makeError(Errc::NotSupported, "factory reset is destructive and never sent by this build");
     if (t == Trigger::ResetLedColors && !(policy_.allowPersistentChanges || transport_->isSimulated()))

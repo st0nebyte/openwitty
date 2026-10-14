@@ -31,7 +31,7 @@ control wired to the mock backend; writes to real hardware are disabled.
 | 21 | High-impedance headphone mode | Settings▸Audio | @31 | core+GUI | — | no |
 | 22 | High-volume speaker mode | Settings▸Audio | @24 | core+GUI (confirm) | — | no |
 | 23 | Mobile streaming mode (routing change) | Settings▸Audio | @67 | core (gated, read) | routing semantics; disruptive | no |
-| 24 | macOS streaming mode (restarts device) | Settings▸Audio | USB-PID mode 0x0002 vs 0x0004; switch command not found | **not implemented** (mode detection only) | the switching command; disruptive | no |
+| 24 | macOS streaming mode (restarts device) | Settings▸Audio | trigger 0x104 (on) / 0x105 (off); PID 0x0002 vs 0x0004 | simulation only (confirm dialog, restart sim); **refused on real hardware** | device-side effect; disruptive | no |
 | 25 | LED brightness | Settings▸LEDs | @37 (0–100) | core+GUI | — | no |
 | 26 | LED colours (icons/mute/parameter/metering/gain reduction) | Settings▸LEDs | @38–52 RGB; reset = trigger 0x103 | core+GUI+tests (reset gated) | — | no |
 | 27 | Custom button function (8 options) | Settings▸Custom button | @53: 0,1,2,8,9,0xC,0xD,0xE | core+GUI+tests | long-press config (bytes 54–56?) | no |
@@ -44,3 +44,7 @@ control wired to the mock backend; writes to real hardware are disabled.
 Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 
 | 33 | Device-side change sync (hardware knob/button) | — | schema merge, full-struct write | core (merge)+tests | — | no |
+| 34 | Footer hint bar + "Show tooltips" | footer / Settings | host-side | GUI | — | n/a |
+| 35 | Onboarding tour (4 steps) | overlay / Settings | host-side | GUI (on demand) | first-run persistence | n/a |
+| 36 | Unsent-edit tracking (retry/discard) | footer bar | session staging | core+GUI+tests | — | n/a |
+| 37 | Measurement session bracket (words 4/5) | Autogain/Denoise/Autosetup | trigger buffer | core+mock+GUI | device-side effect | no |

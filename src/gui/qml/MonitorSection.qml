@@ -1,39 +1,45 @@
 import QtQuick
 
-// Monitoring: Input/playback mix, direct input selection, Dim, Mono.
+// Monitoring column at the reference's measured coordinates (section 155 x 267).
 Item {
     id: root
     property bool interactive: false
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
-    implicitWidth: 180; implicitHeight: 290
-    Text { anchors.horizontalCenter: parent.horizontalCenter; color: Theme.text; font.pixelSize: 12; text: "Input / playback" }
+    width: 155; height: 267
+    GlyphIcon { x: 77 - 15; y: 8; width: 30; height: 30; kind: "shuffle"; color: "#f0f0f0" }
+    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 47; color: Theme.textDim
+           font.pixelSize: 10; text: "Input / playback" }
     GainKnob {
-        y: 24; anchors.horizontalCenter: parent.horizontalCenter
-        enabled: root.interactive; showValue: false
+        x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
+        enabled: root.interactive; showValue: false; warnFrom: 1
+        tip: "Hear your input signal and computer"
         from: -1; to: 1; step: 0.05
         value: root.v("mon.mix", 0)
         minLabel: "100:0"; maxLabel: "0:100"
         onMoved: (nv) => device.setValue("mon.mix", nv)
     }
-    Text { x: 10; y: 140; color: Theme.textDim; font.pixelSize: 10; text: "Direct\ninput signal" }
-    Text { anchors.right: parent.right; anchors.rightMargin: 10; y: 140; horizontalAlignment: Text.AlignRight
-           color: Theme.textDim; font.pixelSize: 10; text: "Computer\naudio" }
+    Text { x: 3; y: 186; horizontalAlignment: Text.AlignHCenter; width: 78; color: Theme.textDim
+           font.pixelSize: 9; text: "Direct\ninput signal" }
+    Text { x: 80; y: 186; horizontalAlignment: Text.AlignHCenter; width: 70; color: Theme.textDim
+           font.pixelSize: 9; text: "Computer\naudio" }
     Row {
-        y: 180; x: 10; spacing: 4
-        ToggleButton { width: 40; text: "Mic"; enabled: root.interactive; active: root.v("mon.mic", false)
-                       tip: "Monitor the microphone (at least one source stays selected)"
+        x: 21; y: 210; spacing: 3
+        ToggleButton { width: 23; height: 21; icon: "mic"; enabled: root.interactive
+                       active: root.v("mon.mic", false)
+                       tip: "Activate to listen to the direct input signal"
                        onClicked: device.setValue("mon.mic", !active) }
-        ToggleButton { width: 40; text: "Inst"; enabled: root.interactive; active: root.v("mon.inst", false)
-                       tip: "Monitor the instrument"
+        ToggleButton { width: 23; height: 21; icon: "guitar"; enabled: root.interactive
+                       active: root.v("mon.inst", false)
+                       tip: "Activate to listen to the direct input signal"
                        onClicked: device.setValue("mon.inst", !active) }
     }
-    Row {
-        y: 258; anchors.horizontalCenter: parent.horizontalCenter; spacing: 6
-        ToggleButton { width: 70; text: "Dim"; enabled: root.interactive; active: root.v("out.dim", false)
-                       tip: "Lower speaker and headphone volume"
-                       onClicked: device.setValue("out.dim", !active) }
-        ToggleButton { width: 70; text: "Mono"; enabled: root.interactive; active: root.v("out.mono", false)
-                       tip: "Listen in mono"
-                       onClicked: device.setValue("out.mono", !active) }
-    }
+    GlyphIcon { x: 101; y: 207; width: 32; height: 26; kind: "laptop"; color: "#f0f0f0" }
+    ToggleButton { x: 22; y: 241; width: 49; height: 23; text: "Dim"; enabled: root.interactive
+                   active: root.v("out.dim", false)
+                   tip: "Lower the speaker and headphone output volume"
+                   onClicked: device.setValue("out.dim", !active) }
+    ToggleButton { x: 78; y: 241; width: 50; height: 23; text: "Mono"; enabled: root.interactive
+                   active: root.v("out.mono", false)
+                   tip: "Listen to your signals in mono"
+                   onClicked: device.setValue("out.mono", !active) }
 }

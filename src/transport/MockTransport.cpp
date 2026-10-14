@@ -24,7 +24,8 @@ Status MockTransport::open() {
 }
 
 DeviceInfo MockTransport::info() const {
-    return DeviceInfo{kLewittVendorId, 0x0004, "CONNECT 2 (simulated)", "MOCK0001", "mock"};
+    return DeviceInfo{kLewittVendorId, std::uint16_t(mode_ == DeviceMode::Normal ? 0x0004 : 0x0002),
+                      "CONNECT 2 (simulated)", "MOCK0001", "mock"};
 }
 
 Result<Bytes> MockTransport::maybeFault() {
@@ -81,7 +82,10 @@ Status MockTransport::write(MessageId id, std::span<const std::uint8_t> data) {
     if (id == MessageId::Settings) settings_.assign(data.begin(), data.end());
     if (id == MessageId::Triggers) {
         auto cmd = static_cast<std::uint16_t>(data[0] | (data[1] << 8));
+        triggerLog_.push_back(cmd);
         if (cmd == 1 || cmd == 2 || cmd == 3) { agProgress_ = 0; status_[0x23] = 0x40; }
+        if (cmd == 0x104) mode_ = DeviceMode::MacOSStreaming;
+        if (cmd == 0x105) mode_ = DeviceMode::Normal;
     }
     log_.push_back(id);
     return okStatus();

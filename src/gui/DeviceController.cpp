@@ -109,7 +109,70 @@ void DeviceWorker::poll() {
     }
     auto s = session_->refreshStatus();
     if (!s) report(s);
+    // Re-read settings periodically (the original does this every tick): device-side
+    // changes (hardware knob, other software) are merged, pending user edits survive.
+    if (++pollCount_ % (mock_ ? 10 : 4) == 0) refreshDeviceState();
     publish();
+}
+
+void DeviceWorker::refreshDeviceState() {
+    if (!session_ || session_->state() != ConnectionState::Connected) return;
+    auto s = session_->refreshSettings();
+    if (!s) report(s);
+}
+
+void DeviceWorker::setDeviceMode(bool macos) {
+    if (!session_ || !mock_) return;   // real hardware: never (also refused in DeviceSession)
+    auto s = session_->sendTrigger(macos ? Trigger::SwitchToMacOSStreamingMode : Trigger::SwitchToNormalMode);
+    if (!s) { report(s); return; }
+    // simulate the re-enumeration: device disappears, then returns with the other PID
+    restarting_ = true;
+    mock_->setPresent(false);
+    session_->disconnect();
+    if (timer_) timer_->stop();
+    publish();
+    QTimer::singleShot(1500, this, [this] {
+        restarting_ = false;
+        if (mock_) { mock_->setPresent(true); report(session_->connect()); startTimer(40); }
+        publish();
+    });
+}
+
+void DeviceWorker::retryPending() {
+    if (!session_) return;
+    auto c = session_->commit();
+    if (c) pendingKeys_.clear(); else report(c);
+    publish();
+}
+
+void DeviceWorker::discardPending() {
+    if (!session_) return;
+    session_->discardPending();
+    pendingKeys_.clear();
+    publish();
+}
+
+void DeviceWorker::injectFault(const QString& kind) {
+    if (!mock_) return;   // never on real hardware
+    if (kind == "timeout") mock_->injectFault(MockTransport::Fault::Timeout);
+    else if (kind == "stall") mock_->injectFault(MockTransport::Fault::Stall);
+}
+
+void DeviceWorker::simulateExternalChange(const QString& key, const QVariant& v) {
+    if (!mock_) return;
+    auto cur = SettingsMessage::fromBytes(mock_->settingsBytes());
+    if (!cur) return;
+    SettingsMessage m = cur.value();
+    if (key == "spk.mute") (void)m.setSpeakerMute(v.toBool());
+    else if (key == "hp.mute") (void)m.setHeadphoneMute(v.toBool());
+    else if (key == "spk.volume") (void)m.setSpeakerVolumeDb(v.toDouble());
+    else if (key == "hp.volume") (void)m.setHeadphoneVolumeDb(v.toDouble());
+    else if (key == "in1.gain") (void)m.setGainDb(0, v.toDouble());
+    else if (key == "in2.gain") (void)m.setGainDb(1, v.toDouble());
+    else if (key == "in1.mute") (void)m.setMute(0, v.toBool());
+    else return;
+    auto b = m.bytes();
+    mock_->setSettingsBytes(Bytes(b.begin(), b.end()));
 }
 
 void DeviceWorker::publish() {
@@ -121,9 +184,16 @@ void DeviceWorker::publish() {
                                     : QString(),
                            session_ && session_->writesEnabled(), session_ && session_->isSimulated());
     v["sampleRate"] = sampleRate_;
+    v["restarting"] = restarting_;
+    if (session_) {
+        auto mode = deviceModeFromPid(session_->info().pid);
+        v["device.mode"] = mode == DeviceMode::MacOSStreaming ? "MacOSStreaming"
+                         : mode == DeviceMode::Normal ? "Normal" : "Unknown";
+        v["set.macosStreaming"] = mode == DeviceMode::MacOSStreaming;
+    }
     v["dsp.available"] = dspAvailable(static_cast<std::uint32_t>(sampleRate_));
-    if (session_ && session_->settings()) {
-        const auto& s = *session_->settings();
+    if (session_ && session_->effectiveSettings()) {
+        const auto s = *session_->effectiveSettings();   // user's unconfirmed edits shown on top
         for (int i = 0; i < 2; ++i) {
             QString p = QString("in%1.").arg(i + 1);
             v[p + "gain"] = s.gainDb(i);
@@ -172,11 +242,16 @@ void DeviceWorker::publish() {
         QString state = autoState_;
         if (autoState_ == "running" && mock_ && !mock_->autoGainRunning() && prog >= 100) state = "finished";
         if (autoState_ == "running" && !mock_ && prog >= 100) state = "finished";
+        if (state == "finished" && autoState_ == "running" && inMeasureSession_) {
+            report(session_->sendTrigger(Trigger::EndMeasurementSession));
+            inMeasureSession_ = false;
+        }
         autoState_ = state;
         v["auto.state"] = autoState_;
         v["auto.progress"] = prog;
         v["auto.resultCode"] = int(st.autosetupResultRaw());  // meaning of 1 vs 2 unverified
     }
+    for (const auto& k : pendingKeys_) v["pending." + k] = true;
     // Emit only what changed (keeps QML bindings and redraws to the minimum).
     QVariantMap changed;
     for (auto it = v.begin(); it != v.end(); ++it)
@@ -193,8 +268,13 @@ void DeviceWorker::trigger(const QString& name) {
         {"autogain1", Trigger::AutoGainMicrophone}, {"autogain2", Trigger::AutoGainInstrument},
         {"autogainBoth", Trigger::AutoGainBoth}};
     if (!map.contains(name)) return;
+    // Same bracket the original uses: begin-session word, then the measurement word;
+    // the end-session word is sent when the measurement finishes.
+    auto b = session_->sendTrigger(Trigger::BeginMeasurementSession);
+    if (!b) { report(b); publish(); return; }
+    inMeasureSession_ = true;
     auto s = session_->sendTrigger(map[name]);
-    if (s) autoState_ = "running"; else report(s);
+    if (s) autoState_ = "running"; else { report(s); (void)session_->sendTrigger(Trigger::EndMeasurementSession); inMeasureSession_ = false; }
     publish();
 }
 
@@ -250,9 +330,15 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
         return makeError(Errc::NotSupported, "unknown or unsupported control " + key.toStdString());
     };
     auto e = session_->edit(fn);
-    if (!e) { report(e); return; }
+    if (!e) { report(e); return; }         // invalid value: nothing staged, nothing sent
+    if (!session_->dirty()) { session_->discardPending(); publish(); return; }   // no-op edit
     auto c = session_->commit();
-    if (!c) { report(c); session_->discardPending(); }
+    if (c) {
+        pendingKeys_.remove(key);
+    } else {
+        report(c);                           // keep the edit, flag it, let the user retry/discard
+        pendingKeys_.insert(key);
+    }
     publish();
 }
 
@@ -292,6 +378,13 @@ void DeviceController::simulateUnplug() { QMetaObject::invokeMethod(worker_, "si
 void DeviceController::simulateReplug() { QMetaObject::invokeMethod(worker_, "simulateReplug"); }
 void DeviceController::setSampleRate(int hz) { QMetaObject::invokeMethod(worker_, "setSampleRate", Q_ARG(int, hz)); }
 void DeviceController::flush() { QMetaObject::invokeMethod(worker_, "poll", Qt::BlockingQueuedConnection); }
+void DeviceController::setDeviceMode(bool m) { QMetaObject::invokeMethod(worker_, "setDeviceMode", Q_ARG(bool, m)); }
+void DeviceController::retryPending() { QMetaObject::invokeMethod(worker_, "retryPending"); }
+void DeviceController::discardPending() { QMetaObject::invokeMethod(worker_, "discardPending"); }
+void DeviceController::injectFault(const QString& k) { QMetaObject::invokeMethod(worker_, "injectFault", Q_ARG(QString, k)); }
+void DeviceController::simulateExternalChange(const QString& k, const QVariant& v) {
+    QMetaObject::invokeMethod(worker_, "simulateExternalChange", Q_ARG(QString, k), Q_ARG(QVariant, v));
+}
 void DeviceController::trigger(const QString& n) {
     QMetaObject::invokeMethod(worker_, "trigger", Q_ARG(QString, n));
 }

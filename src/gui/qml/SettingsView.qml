@@ -7,7 +7,8 @@ Rectangle {
     id: root
     property bool interactive: false
     signal closeRequested()
-    color: Theme.bg
+    signal onboardingRequested()
+    color: "#1e1e1e"
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
     property string open: "audio"
 
@@ -50,7 +51,10 @@ Rectangle {
                        checked: root.v("set.mobileStreaming", false) }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                text: "Streaming modes change USB channel routing and (macOS mode) restart the device. They are not enabled in this build." }
-        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: false; checked: false }
+        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: device.simulated && root.interactive
+                       checked: root.v("set.macosStreaming", false)
+                       tip: device.simulated ? "Simulated: restarts the (simulated) device" : "Not enabled on real hardware"
+                       onToggled: (b) => confirmMode.ask(b) }
     }
     Column {
         visible: root.open === "leds"
@@ -116,19 +120,40 @@ Rectangle {
 
     // right column
     Column {
-        x: 400; y: 60; width: 340; spacing: 10
+        x: 390; y: 60; width: 310; spacing: 10
         Text { color: Theme.text; font.pixelSize: 12; text: "Control Center (unofficial) version 0.1.0" }
         Text { color: Theme.textDim; font.pixelSize: 12
                text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated" : "not decoded yet") }
         Row { spacing: 8
-            ToggleButton { width: 120; text: "Check for updates"; enabled: false; tip: "Not implemented" }
-            ToggleButton { width: 100; text: "Manual update"; enabled: false; tip: "Firmware update is out of scope" } }
-        Text { width: 340; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+            ToggleButton { width: 120; height: 26; text: "Check for updates"; primary: true; enabled: false; tip: "Not implemented" }
+            ToggleButton { width: 100; height: 26; text: "Manual update"; enabled: false; tip: "Firmware update is out of scope" } }
+        Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                text: "Firmware update and factory reset are disabled: they are destructive/persistent and not validated." }
+        Rectangle { width: 310; height: 1; color: "#333" }
+        ToggleSwitch { width: 310; label: "Show tooltips"; checked: Hint.enabled
+                       onToggled: (b) => { Hint.enabled = b; if (!b) Hint.clear(); } }
+        ToggleSwitch { width: 310; label: "Retrigger onboarding"; checked: false
+                       onToggled: (b) => { if (b) root.onboardingRequested(); } }
     }
     ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom
                    anchors.bottomMargin: 14; width: 100; text: "Factory reset"; enabled: false
                    tip: "Disabled by policy" }
+
+    Rectangle {
+        id: confirmMode
+        visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 120; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        property bool target: false
+        function ask(on) { target = on; visible = true; }
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: (confirmMode.target ? "Turning on" : "Turning off") + " macOS streaming mode will restart your USB device. All current settings will be preserved. Do you want to continue?" }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmMode.visible = false }
+                ToggleButton { width: 70; text: "Continue"; primary: true
+                               onClicked: { confirmMode.visible = false; device.setDeviceMode(confirmMode.target); } } }
+        }
+    }
 
     Rectangle {
         id: confirmLoud
