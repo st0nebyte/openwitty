@@ -4,10 +4,14 @@
 1. ✔ done 2026-10-14: `openwitty-cli list`/`devices`; descriptors recorded (`docs/HARDWARE_TEST_RESULTS.md`).
 2. ✔ done 2026-10-14: `probe --execute` — **access method decided: interface 3** (unbound,
    vendor-specific `ff/f0/00`), not the AudioControl interface. See `docs/USB_ACCESS.md` §3b.
-3. **Next:** extend `read version`/`read status`/`read settings` to target interface 3 the same way
-   `probe` already does for message 0x0A (small, reviewed code change — not yet done); then compare
-   with the official app / front panel.
-4. Propose one low-risk write test (e.g. mute toggle) for explicit approval — still blocked on 3.
+3. ✔ done 2026-10-14: `read version|status|settings --interface 3` all answer read-only, over the
+   same unbound interface (new `--interface N` flag on `openwitty-cli read`, no new USB call site).
+   `settings` decodes cleanly into plausible real values (mic gain 27 dB, phantom on, headphone
+   -19.71 dB muted, etc.) — see `docs/HARDWARE_TEST_RESULTS.md` §7b. `version`/`api` return an
+   unexplained byte-identical payload despite different `wValue` — open question, not yet resolved.
+4. **Next:** plan step 9 — change one setting on the hardware itself, re-read settings, diff the raw
+   hex against PROTOCOL.md's field table. Needs the user present at the device; no code change needed.
+5. Propose one low-risk write test (e.g. mute toggle) for explicit approval — still blocked on 4.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).

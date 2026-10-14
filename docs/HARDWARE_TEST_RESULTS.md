@@ -162,6 +162,38 @@ audio in any observed way.
   byte-offset reading above as authoritative; it is a verbatim capture plus the one correlation
   (serial number substring) that could be confirmed independently against `devices` output.
 
+## 7b. Extending to version/status/settings (same session, after user approval)
+
+`UsbTransport` already supported an explicit `interfaceNumber` override (`UsbOptions::interfaceNumber`,
+previously unexposed on the CLI); the `InterfaceRecipient` read path never claims or detaches
+regardless of which interface number is used — identical in shape to what `probe` already did safely
+for interface 3. Added a `--interface N` flag to `openwitty-cli read` (src/cli/main.cpp) wiring
+straight into that existing field; no new USB call site (`ctest`'s `audit_usb_call_sites` still
+passes), no change to transport logic. Rebuilt; full suite still 95/95.
+
+Results, all via `--interface 3`, all read-only GET, no claim, no write:
+
+| Message | wValue | Result |
+|---|---|---|
+| `api` | `0x000A` | 64 bytes — identical to the earlier `probe` capture (confirms the new flag is wired correctly) |
+| `version` | `0x0103` | 64 bytes — **byte-for-byte identical to `api`**, despite a genuinely different `wValue` (verified in `Types.hpp`: `wValueFor` computes `0x000A` vs `0x0103` correctly). Unexplained; flagged, not reinterpreted. Possible explanations, none confirmed: this interface serves one fixed "device identity" block regardless of requested message for these two IDs specifically; or `iface_version_t`'s real layout coincides with this blob by construction. Needs further investigation before updating `iface_version_t`'s evidence level. |
+| `status` | `0x0102` | 64 bytes, **genuinely different payload**: `009c00009c...0101010101016400640a0b000c0000006f0064...` — structured, not the api/version blob, not all-zero. Not yet mapped against PROTOCOL.md's status byte offsets (that requires the step 9 comparison below). |
+| `settings` | `0x0100` | **128 bytes, decodes cleanly through the existing `SettingsMessage` codec** into plausible real values: mic gain 27.00 dB (mute on, low-cut on, Clipguard on, preamp=Vivid, denoise off, comp on), instrument gain 12.00 dB (mute on, preamp=Vivid), phantom power **on**, speaker 0.00 dB, headphone −19.71 dB (muted), dim off, mono off, mix −15.91, monitor source 2 (both), custom-button value 2. |
+
+All four reads repeated 3–5× each: byte-identical every time (device state was not touched between
+reads). `aplay -l`/`/proc/asound/cards` and `amixer -c C2 controls` checked after: card and its
+(pre-existing, unrelated) mixer control set unchanged — see the separate long-standing
+`amixer`/volume-control memory note for this device, not something this session touched or needed to
+touch.
+
+**This is the strongest evidence yet that interface 3 is a real, working, read-only control channel**
+for at least `status` and `settings` — not just a fixed identity block. The `settings` decode in
+particular produces numbers in-range for every field PROTOCOL.md documents (gain 0–72/0–60 dB,
+booleans 0/1, preamp 0–2, monitor 0–2, mix within ±1), which is itself a form of validation of the
+settings schema, though **not yet cross-checked against the device's actual front-panel/app state**
+(test plan step 9 — needs the user to change a setting on the hardware between two reads; not done
+this session, proposed as the immediate next step).
+
 ## 8. What was deliberately not done
 
 - No write of any kind (`UsbOptions::allowWrites` stayed false the whole session; the CLI has no
@@ -173,10 +205,10 @@ audio in any observed way.
   suggests this device's firmware uses one shared EP0 handler for class/interface requests regardless
   of the declared interface number (i.e., it is very likely *not* actually running the DFU state
   machine for this GET), but this was not verified further and should not be re-tested casually.
-- No extension of `read version`/`read status`/`read settings` to interface 3 — the CLI does not yet
-  support targeting an arbitrary interface for those message types (only the `probe` command's
-  hardcoded message-0x0A matrix does). This is the natural next step and is proposed, not executed —
-  see the session's final report.
+- §7b (same session, after explicit user approval) extended this to `version`/`status`/`settings` via
+  a new `--interface N` flag reusing the existing, already-safe `UsbOptions::interfaceNumber` field —
+  still GET-only, still no claim/detach, confirmed via `audit_usb_call_sites` that no new USB call
+  site was introduced.
 
 ## 9. Recommendation going forward
 
@@ -184,12 +216,18 @@ audio in any observed way.
    interface 4 except for a single confirmatory re-run if ever needed — prefer interface 3
    exclusively, since it has no declared alternate meaning that could be misread as a firmware
    command.
-2. Extend the transport/CLI with a narrowly-scoped "unbound interface" access method (reusing the
-   exact pattern already proven safe in `probe`) so `read version|status|settings` can be attempted
-   the same way message 0x0A was. Read-only, GET only, same safety gates as today. **Proposed, not
-   yet implemented** — needs review before writing to hardware traffic again.
+2. ✔ done this session: `--interface N` added to `read`; `version`/`status`/`settings` all answer
+   over interface 3, read-only, GET only, same safety gates as today, no new USB call site.
 3. Update PROTOCOL.md's message 0x0A field table to mark bytes 0–1 "hardware-verified" and bytes
-   2–63 "hardware-captured, unidentified" (not "opaque"/unknown-and-presumed-zero as before).
+   2–63 "hardware-captured, unidentified" (not "opaque"/unknown-and-presumed-zero as before). **Done.**
 4. The hwdep kernel-driver approach (USB_ACCESS.md option E) is no longer the only path forward now
    that option C works from pure userspace with no kernel changes — deprioritize it pending option C
-   proving sufficient for all five message types.
+   proving sufficient for all five message types. **Done** (option C now confirmed sufficient for 4 of
+   5 read message types; `triggers`, id 4, is write-only and untested — correctly so, per policy).
+5. **Next (not done, needs the user physically present at the device):** plan step 9 — change one
+   setting on the hardware itself (touch surface) or leave it as-is and simply tap the mic / play
+   audio, re-run `read settings`/`read status` via `--interface 3`, and diff the raw hex against the
+   captures in §7b. This is the first real cross-check of PROTOCOL.md's byte offsets against actual
+   device behaviour and doesn't require any code change or write from OpenWitty.
+6. Investigate the `version`/`api` identical-payload anomaly (§7b) before treating `iface_version_t`
+   as understood — it is currently an open question, not a documented field layout.

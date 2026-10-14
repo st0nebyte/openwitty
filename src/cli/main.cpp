@@ -3,13 +3,19 @@
 //   devices                 enumerate LEWITT devices from sysfs: descriptors, interfaces,
 //                           endpoints, bound kernel drivers, usbfs node permissions (no USB I/O)
 //   diagnose                devices + what each finding means for control access + next steps
-//   read api|version|status|settings [--method M] [--request R] [--mock]
+//   read api|version|status|settings [--method M] [--request R] [--interface N] [--mock]
 //                           one read-only control transfer; errors are classified
 //   probe [--execute]       dry-run (default) or run a small matrix of GET-only experiments
 //   list                    quick libusb enumeration (VID/PID only)
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
 //           LEWITT_ALLOW_DISRUPTIVE=1 as well).  Requests: uac2 (default) | uac1.
+// --interface N overrides which interface number goes in wIndex (default: auto-discover the
+// AudioControl interface). Hardware session 2026-10-14 found the AudioControl interface (0) fails
+// with an IO error while the kernel driver owns it; an unbound vendor-specific interface (3 on the
+// CONNECT 2) answers read-only GETs instead (docs/USB_ACCESS.md §3b). This never claims or detaches
+// anything regardless of the interface number — same no-claim GET-only behaviour `probe` already
+// uses. Never pass the DFU interface (4 on the CONNECT 2) here beyond a one-off confirmatory check.
 #ifdef LEWITT_HAVE_USB
 #include <libusb.h>
 #endif
@@ -111,6 +117,7 @@ struct ReadArgs {
     bool mock{false};
     AccessMethod method{AccessMethod::InterfaceRecipient};
     MemRequest request{MemRequest::Uac2Mem};
+    int interfaceNumber{-1};   // -1 = auto-discover AudioControl interface (default, unchanged)
     bool bad{false};
 };
 
@@ -130,6 +137,8 @@ ReadArgs parseRead(int argc, char** argv, int first) {
             if (r == "uac1") a.request = MemRequest::Uac1Mem;
             else if (r == "uac2") a.request = MemRequest::Uac2Mem;
             else { std::fprintf(stderr, "unknown --request %s\n", r.c_str()); a.bad = true; }
+        } else if (!std::strcmp(argv[i], "--interface") && i + 1 < argc) {
+            a.interfaceNumber = std::atoi(argv[++i]);
         } else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); a.bad = true; }
     }
     return a;
@@ -158,6 +167,7 @@ int cmdRead(const ReadArgs& a) {
         UsbOptions o;
         o.request = a.request;
         o.method = a.method;
+        o.interfaceNumber = a.interfaceNumber;
         o.allowDisruptive = std::getenv("LEWITT_ALLOW_DISRUPTIVE") != nullptr;   // checked above too
         t = std::make_unique<UsbTransport>(o);
     }
@@ -265,7 +275,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: openwitty-cli devices | diagnose | list | probe [--execute] |\n"
                      "                  read <api|version|status|settings> [--method interface|device-recipient|detach]\n"
-                     "                       [--request uac2|uac1] [--mock]\n"
+                     "                       [--request uac2|uac1] [--interface N] [--mock]\n"
                      "read-only tool: it never writes to the device. --method detach is disruptive and also\n"
                      "needs LEWITT_ALLOW_DISRUPTIVE=1.\n");
         return 64;
