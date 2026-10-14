@@ -2,7 +2,7 @@
 """Visual comparison of our Qt rendering against reference screenshots (local, git-ignored).
 
 usage: compare.py OURS.png REF.jpg REF_KIND OUTPREFIX
-  OURS.png : screenshot taken with `lewitt-control-center --mock --size 720x401 --screenshot`
+  OURS.png : screenshot taken with `openwitty --mock --size 720x401 --screenshot`
              (28 px simulation banner on top is cropped; stage = 720x373)
   REF_KIND : guide (720x373 official guide, CC 4.0.18) | bonedo (5.x retina capture)
              | delamar (5.2.1 capture)

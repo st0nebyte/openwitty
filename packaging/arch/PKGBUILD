@@ -1,6 +1,6 @@
-# Maintainer: unofficial community project <noreply@example.invalid>
+# Maintainer: st0nebyte <https://github.com/st0nebyte>
 #
-# Local-source PKGBUILD for the UNOFFICIAL LEWITT CONNECT 2 control centre (experimental,
+# Local-source PKGBUILD for the OpenWitty (unofficial LEWITT CONNECT 2 control application; experimental,
 # not validated on hardware). It builds from a tarball of THIS repository, never from the
 # network and never from proprietary files:
 #
@@ -10,14 +10,13 @@
 # On the Ubuntu development host the genuine makepkg script was run rootless with --nodeps
 # (tools/packaging/run_makepkg_rootless.sh); namcap could not be run there (needs libalpm).
 # A run on an Arch/CachyOS system with `makepkg -s` and `namcap` is still outstanding.
-pkgname=lewitt-connect2-unofficial
+pkgname=openwitty
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2 (not hardware-validated)'
 arch=('x86_64')
-url='https://example.invalid/lewitt-connect2-linux'
-# No licence has been chosen by the project owner yet; see docs/PACKAGING.md.
-license=('LicenseRef-custom')
+url='https://github.com/st0nebyte/openwitty'
+license=('MIT')
 depends=('qt6-base' 'qt6-declarative' 'libusb' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'gtest')
 optdepends=('usbutils: lsusb for manual diagnostics'
@@ -39,10 +38,13 @@ build() {
 check() {
     # Offscreen platform: no display needed. The Python/venv based tests are skipped
     # automatically when their prerequisites are missing.
-    QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
+    # packaging_staging is excluded: makepkg's CFLAGS add -g with the build host's include paths
+    # (stripped later by makepkg), which that dev-path leak check would flag pre-strip.
+    QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure -E packaging_staging
 }
 
 package() {
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     # Arch uses /usr/lib/udev/rules.d (already the default prefix-relative location).
 }

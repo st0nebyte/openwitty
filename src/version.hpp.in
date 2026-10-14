@@ -1,7 +1,7 @@
 // Generated from src/version.hpp.in by CMake. No timestamps (reproducible builds).
 #pragma once
 #define LEWITT_VERSION_STRING "@PROJECT_VERSION@"
-#define LEWITT_APP_NAME "CONNECT 2 Control Center for Linux (unofficial)"
-#define LEWITT_APP_DESKTOP_ID "lewitt-control-center"
+#define LEWITT_APP_NAME "OpenWitty"
+#define LEWITT_APP_DESKTOP_ID "io.github.st0nebyte.openwitty"
 #define LEWITT_BUILD_FLAVOUR "@LEWITT_BUILD_FLAVOUR@"
 #define LEWITT_NOTICE "Unofficial, experimental. Not affiliated with or endorsed by LEWITT. Not validated on real hardware."

@@ -18,5 +18,5 @@ for fn in build check package; do
     echo "== $fn()"; "$fn"
 done
 echo "== pkgdir contents"; (cd "$pkgdir" && find . -type f | sort | head -40)
-test -x "$pkgdir/usr/bin/lewitt-control-center" && test -f "$pkgdir/usr/lib/udev/rules.d/70-lewitt-connect2.rules"
+test -x "$pkgdir/usr/bin/openwitty" && test -f "$pkgdir/usr/lib/udev/rules.d/70-openwitty.rules"
 echo "PKGBUILD EMULATION: PASS"

@@ -1,5 +1,5 @@
 # LEWITT CONNECT 2 (VID 0x29c2): give the logged-in (seat) user read/write access to the
-# USB device node so that userspace tools (lewitt-cli, the control application) can open it.
+# USB device node so that userspace tools (openwitty-cli, the control application) can open it.
 #
 # * The file must sort BEFORE 73-seat-late.rules, which turns the "uaccess" tag into an ACL,
 #   hence the 70- prefix (a 99- prefix would be applied too late).

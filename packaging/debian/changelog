@@ -1,7 +1,7 @@
-lewitt-connect2-unofficial (0.1.0-1) unstable; urgency=low
+openwitty (0.1.0-1) unstable; urgency=low
 
   * Initial experimental packaging. Not validated on real hardware; hardware
     writes are disabled; a simulated device is included.
-  * No project licence has been chosen yet.
+  * Released under the MIT licence; project renamed OpenWitty.
 
- -- st0nebyte <noreply@example.invalid>  Wed, 14 Oct 2026 12:00:00 +0000
+ -- st0nebyte <noreply@users.noreply.github.com>  Wed, 14 Oct 2026 12:00:00 +0000

@@ -146,8 +146,8 @@ std::string suggestionFor(const Error& e) {
             return "Filesystem permission problem (EACCES/EPERM): this user cannot open the USB device node "
                    "read/write. Driver ownership is a separate issue. Without administrator rights the node "
                    "permissions cannot be changed; an administrator can add a udev rule "
-                   "(packaging/udev/99-lewitt-connect2.rules). Descriptors and driver bindings can still be "
-                   "shown from sysfs (`lewitt-cli devices`).";
+                   "(packaging/udev/70-openwitty.rules). Descriptors and driver bindings can still be "
+                   "shown from sysfs (`openwitty-cli devices`).";
         case Errc::Busy:
             return "Interface is owned by another kernel driver (EBUSY, normally snd-usb-audio). File "
                    "permissions are not the cause and cannot fix it. Options: try "
@@ -159,7 +159,7 @@ std::string suggestionFor(const Error& e) {
                    "expects. Try `--request uac1` or another --method.";
         case Errc::Timeout:
             return "No answer within 500 ms. The device may be busy or in a different mode; retry once and "
-                   "check `lewitt-cli devices` for the current product id.";
+                   "check `openwitty-cli devices` for the current product id.";
         case Errc::Disconnected:
             return "The device disappeared (unplugged or re-enumerating, e.g. after a mode change).";
         case Errc::ShortTransfer:
@@ -169,7 +169,7 @@ std::string suggestionFor(const Error& e) {
         case Errc::NotSupported:
             return "Unsupported by this build or device (protocol/API version or device mode).";
         case Errc::NotFound:
-            return "No matching CONNECT 2 found (VID 0x29c2, PID 0x0002/0x0004). Check `lewitt-cli devices`.";
+            return "No matching CONNECT 2 found (VID 0x29c2, PID 0x0002/0x0004). Check `openwitty-cli devices`.";
         case Errc::Cancelled:
             return "Request was cancelled by the application.";
         default:

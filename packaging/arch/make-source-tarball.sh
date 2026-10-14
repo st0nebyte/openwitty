@@ -5,8 +5,8 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)
-name=lewitt-connect2-unofficial
-ver=$(sed -n 's/^project(lewitt-connect2 VERSION \([0-9.]*\).*/\1/p' "$root/CMakeLists.txt")
+name=openwitty
+ver=$(sed -n 's/^project(openwitty VERSION \([0-9.]*\).*/\1/p' "$root/CMakeLists.txt")
 [ -n "$ver" ] || { echo "cannot determine version" >&2; exit 1; }
 out="$here/$name-$ver.tar.gz"
 git -C "$root" archive --format=tar.gz --prefix="$name-$ver/" -o "$out" HEAD

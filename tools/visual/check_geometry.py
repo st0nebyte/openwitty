@@ -6,7 +6,7 @@ geometry/colour invariants that were *measured* from public screenshots of the
 official Control Center 5.x (see docs/GUI_DESIGN.md). Tolerances reflect
 screenshot scaling/JPEG error, so this is a guard against regressions, not a claim
 of pixel accuracy.
-usage: check_geometry.py PATH/TO/lewitt-control-center
+usage: check_geometry.py PATH/TO/openwitty
 """
 import os, subprocess, sys, tempfile
 import numpy as np

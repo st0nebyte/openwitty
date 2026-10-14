@@ -1,12 +1,12 @@
-.TH LEWITT-CLI 1 "October 2026" "lewitt-connect2-unofficial 0.1.0" "User Commands"
+.TH LEWITT-CLI 1 "October 2026" "openwitty 0.1.0" "User Commands"
 .SH NAME
-lewitt-cli \- read-only diagnostic tool for the LEWITT CONNECT 2 (unofficial, experimental)
+openwitty-cli \- read-only diagnostic tool for the LEWITT CONNECT 2 (unofficial, experimental)
 .SH SYNOPSIS
-.B lewitt-cli
+.B openwitty-cli
 .RB { devices | diagnose | list | probe " [" \-\-execute "] | read"
 .IR what " [" options "] | \-\-version }"
 .SH DESCRIPTION
-.B lewitt-cli
+.B openwitty-cli
 inspects LEWITT USB devices (vendor id 0x29c2) and performs single read-only control
 transfers. It has no command that writes to the device. This software is not affiliated with
 LEWITT, and its protocol knowledge has not been validated on real hardware.
@@ -38,5 +38,5 @@ Read one message. Options:
 Must be set, in addition to \fB\-\-method detach\fR, to allow detaching the kernel audio driver
 (this removes the sound card while it runs). Never set by default.
 .SH SEE ALSO
-.BR lewitt-control-center (1),
-/usr/share/doc/lewitt-connect2-unofficial/USB_PERMISSIONS.md
+.BR openwitty (1),
+/usr/share/doc/openwitty/USB_PERMISSIONS.md

@@ -28,7 +28,7 @@ fi
 W=$T/work; rm -rf "$W"; mkdir -p "$W/pkg" "$W/build"
 cp "$repo/packaging/arch/PKGBUILD" "$W/build/"
 ( cd "$repo" && git ls-files -co --exclude-standard -z | tar --null -T - \
-      --transform "s,^,lewitt-connect2-unofficial-0.1.0/," -czf "$W/build/lewitt-connect2-unofficial-0.1.0.tar.gz" )
+      --transform "s,^,openwitty-0.1.0/," -czf "$W/build/openwitty-0.1.0.tar.gz" )
 cp "$T/root/etc/makepkg.conf" "$W/makepkg.conf"
 printf 'PKGDEST=%s\nBUILDDIR=%s\n' "$W/pkg" "$W/bd" >> "$W/makepkg.conf"
 export MAKEPKG_LIBRARY=$T/root/usr/share/makepkg

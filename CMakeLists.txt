@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(lewitt-connect2 VERSION 0.1.0 LANGUAGES CXX)
+project(openwitty VERSION 0.1.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -21,8 +21,8 @@ option(LEWITT_REPRODUCIBLE "Strip build/source paths from binaries (-ffile-prefi
 set(LEWITT_UDEV_RULES_DIR "lib/udev/rules.d" CACHE STRING
     "udev rule destination (relative to the install prefix, or absolute)")
 # Debian-style doc directory named after the package
-if(NOT DEFINED CMAKE_INSTALL_DOCDIR OR CMAKE_INSTALL_DOCDIR MATCHES "lewitt-connect2$")
-    set(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/lewitt-connect2-unofficial")
+if(NOT DEFINED CMAKE_INSTALL_DOCDIR OR CMAKE_INSTALL_DOCDIR MATCHES "lewitt-connect2$|lewitt-connect2-unofficial$")
+    set(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/openwitty")
 endif()
 set(LEWITT_BUILD_FLAVOUR "full")
 if(NOT LEWITT_ENABLE_USB)
@@ -69,9 +69,12 @@ if(LEWITT_ENABLE_USB)
     target_compile_definitions(lewitt_core PUBLIC LEWITT_HAVE_USB=1)
 endif()
 
-add_executable(lewitt-cli src/cli/main.cpp)
-target_link_libraries(lewitt-cli PRIVATE lewitt_core)
-install(TARGETS lewitt-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+add_executable(openwitty-cli src/cli/main.cpp)
+target_link_libraries(openwitty-cli PRIVATE lewitt_core)
+install(TARGETS openwitty-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# Compatibility alias for the pre-rebranding command name (docs, scripts, muscle memory).
+install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli \
+    \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/lewitt-cli)")
 
 if(LEWITT_BUILD_TESTS)
     enable_testing()
@@ -99,7 +102,7 @@ endif()
 if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/.venv/bin/python)
     add_test(NAME visual_geometry
              COMMAND ${CMAKE_SOURCE_DIR}/.venv/bin/python ${CMAKE_SOURCE_DIR}/tools/visual/check_geometry.py
-                     $<TARGET_FILE:lewitt-control-center>)
+                     $<TARGET_FILE:openwitty>)
     set_tests_properties(visual_geometry PROPERTIES ENVIRONMENT "QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
 endif()
 
@@ -127,19 +130,20 @@ target_link_libraries(lewitt_bench PRIVATE lewitt_core)
 #   cmake --install build --prefix ~/.local          (user-local, no root)
 #   DESTDIR=/tmp/stage cmake --install build         (staging for packages)
 set(LEWITT_ICON_DIR ${CMAKE_INSTALL_DATADIR}/icons/hicolor)
-install(FILES packaging/linux/icons/lewitt-control-center.svg
-        DESTINATION ${LEWITT_ICON_DIR}/scalable/apps)
-foreach(sz 48 64 128 256)
-    install(FILES packaging/linux/icons/lewitt-control-center-${sz}.png
-            DESTINATION ${LEWITT_ICON_DIR}/${sz}x${sz}/apps
-            RENAME lewitt-control-center.png)
+# Branding: the project's own OpenWitty icons (assets/icons), installed unmodified.
+install(FILES assets/icons/openwitty.svg DESTINATION ${LEWITT_ICON_DIR}/scalable/apps)
+foreach(sz 16 24 32 48 64 128 256 512)
+    install(FILES assets/icons/png/${sz}x${sz}/openwitty.png
+            DESTINATION ${LEWITT_ICON_DIR}/${sz}x${sz}/apps)
 endforeach()
-install(FILES packaging/linux/lewitt-control-center.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES packaging/linux/lewitt-control-center.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+install(FILES packaging/linux/io.github.st0nebyte.openwitty.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES packaging/linux/io.github.st0nebyte.openwitty.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
-              docs/HARDWARE_TEST_PLAN.md PROTOCOL.md FEATURES.md
+              docs/HARDWARE_TEST_PLAN.md docs/HANDOFF_HARDWARE_TESTING.md docs/THIRD_PARTY.md
+              PROTOCOL.md FEATURES.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
-install(FILES packaging/udev/70-lewitt-connect2.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)
+install(FILES packaging/udev/70-openwitty.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE)
 
 # Debian changelog and man pages are compressed at configure time with a timestamp-free
 # gzip (-n) so the output is reproducible.
@@ -147,7 +151,7 @@ find_program(LEWITT_GZIP gzip)
 if(LEWITT_GZIP)
     set(_gzdir ${CMAKE_BINARY_DIR}/packaging-gz)
     file(MAKE_DIRECTORY ${_gzdir})
-    foreach(_f debian/changelog man/lewitt-cli.1 man/lewitt-control-center.1)
+    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1)
         get_filename_component(_n ${_f} NAME)
         if(_n STREQUAL "changelog")
             set(_out ${_gzdir}/changelog.Debian.gz)
@@ -162,10 +166,12 @@ if(LEWITT_GZIP)
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/packaging/${_f})
     endforeach()
     install(FILES ${_gzdir}/changelog.Debian.gz DESTINATION ${CMAKE_INSTALL_DOCDIR})
-    install(FILES ${_gzdir}/lewitt-cli.1.gz ${_gzdir}/lewitt-control-center.1.gz
+    install(FILES ${_gzdir}/openwitty-cli.1.gz ${_gzdir}/openwitty.1.gz
             DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli.1.gz \
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz)")
 endif()
 if(LEWITT_INSTALL_UDEV_RULES)
-    install(FILES packaging/udev/70-lewitt-connect2.rules DESTINATION ${LEWITT_UDEV_RULES_DIR})
+    install(FILES packaging/udev/70-openwitty.rules DESTINATION ${LEWITT_UDEV_RULES_DIR})
 endif()
 include(packaging/CPackConfig.cmake)

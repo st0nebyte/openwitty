@@ -4,7 +4,7 @@ import QtQuick.Window
 Window {
     id: win
     width: 1008; height: 566; visible: true
-    title: "LEWITT CONNECT 2 — Control Center for Linux (unofficial)"
+    title: "OpenWitty — Linux control for LEWITT CONNECT 2 (unofficial)"
     color: Theme.footer
     minimumWidth: 720; minimumHeight: 440
 

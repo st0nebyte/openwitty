@@ -1,4 +1,5 @@
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCommandLineParser>
@@ -10,10 +11,12 @@
 
 int main(int argc, char** argv) {
     QGuiApplication app(argc, argv);
-    app.setApplicationName("lewitt-control-center");
+    app.setApplicationName("openwitty");
     app.setApplicationDisplayName(LEWITT_APP_NAME);
     app.setApplicationVersion(LEWITT_VERSION_STRING);
-    app.setOrganizationName("lewitt-linux");
+    app.setOrganizationName("openwitty");
+    // Installed builds resolve the themed icon; development runs use the embedded PNG.
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("openwitty"), QIcon(QStringLiteral(":/openwitty.png"))));
     QGuiApplication::setDesktopFileName(LEWITT_APP_DESKTOP_ID);   // Wayland app-id / icon matching
     QCommandLineParser p;
     QCommandLineOption mock("mock", "Start with the simulated device.");

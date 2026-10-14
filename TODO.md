@@ -1,8 +1,8 @@
 # TODO
 
 ## Needs the device (do in this order, read-only first)
-1. `lewitt-cli list`; record VID/PID + descriptors (`lsusb -v`), `amixer -c N contents`.
-2. `lewitt-cli probe` (dry run), then `probe --execute` (GETs only) — decides the access method.
+1. `openwitty-cli list`; record VID/PID + descriptors (`lsusb -v`), `amixer -c N contents`.
+2. `openwitty-cli probe` (dry run), then `probe --execute` (GETs only) — decides the access method.
 3. Version → status → settings reads; compare with the official app / front panel.
 4. Propose one low-risk write test (e.g. mute toggle) for explicit approval.
 
@@ -15,7 +15,7 @@
 * ✔ done (5A): custom-button enum, OutputSource usage, trigger words incl. 0x103/0x106, measurement result bits, settings schema, sync algorithm, API handshake (0x0A).
 * ✔ macOS-streaming mode switch = trigger 0x104/0x105 (phase 5B); measurement bracket words 4/5.
 * Still open: device-side effect of 4/5; bytes 54–56, 58, 60–70; "Background noise too loud" status source (ambient-noise panel); mix range; `iface_version_t`.
-* Hardware: first read `lewitt-cli read api` (message 0x0A) — it validates the whole transport with the smallest read-only message.
+* Hardware: first read `openwitty-cli read api` (message 0x0A) — it validates the whole transport with the smallest read-only message.
 * Use REA MCP session for iterative function/xref work (CLI re-imports each call, ~2 min).
 * Recover `iface_version_t` layout; identify which settings groups are headphone/speaker.
 * Disassemble the write path & tick cadence (`Connect2Device::tick`).
@@ -34,7 +34,7 @@
 ## Backend (phase 5C follow-ups)
 * On hardware: follow `docs/HARDWARE_TEST_PLAN.md`; send the filled result template.
 * If options A–C in `docs/USB_ACCESS.md` fail: prototype `HwdepTransport` + the snd-usb-audio quirk (option E) — needs kernel build rights.
-* An administrator must install `packaging/udev/99-lewitt-connect2.rules` (EACCES otherwise).
+* An administrator must install `packaging/udev/70-openwitty.rules` (EACCES otherwise).
 * Interruptible control transfers (libusb async + cancel) to bound shutdown latency below 500 ms.
 * Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).
 * Persist onboarding flag; log file / diagnostics export.
@@ -47,11 +47,10 @@
 - USB mode: stop retrying after EACCES/EBUSY until the device list changes.
 - Re-examine autogain completion inference before any write test.
 - Auto-select UAC1/UAC2 request variant from bcdDevice once known.
-- Choose a licence (docs/LICENSE_ASSESSMENT.md).
+- Licence: MIT (repository LICENSE, by the owner). Review third-party notes in docs/THIRD_PARTY.md.
 
 ## Packaging (phase 5D follow-ups)
 
-- Owner: choose a project licence (metadata currently "all rights reserved until chosen").
 - Owner: replace placeholder homepage/maintainer in CPack, PKGBUILD, metainfo.
 - Run makepkg + namcap (Arch) and lintian (Debian) on real hosts; smoke-test installs in a VM.
 - Install the udev rule manually only after review (docs/USB_PERMISSIONS.md).

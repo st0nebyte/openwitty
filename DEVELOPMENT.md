@@ -15,9 +15,9 @@ Arch/CachyOS `base-devel cmake ninja libusb gtest qt6-base qt6-declarative alsa-
 ## Build / test
 ```
 cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
-build/src/gui/lewitt-control-center --mock     # simulated device
-build/src/gui/lewitt-control-center --mock --screenshot out.png
-build/lewitt-cli probe                          # dry run
+build/src/gui/openwitty --mock     # simulated device
+build/src/gui/openwitty --mock --screenshot out.png
+build/openwitty-cli probe                          # dry run
 ```
 Qt 6.4 note: QML cachegen is disabled (AOT singleton lookup looped on the
 `Theme` singleton); revisit when requiring Qt ≥ 6.5.
@@ -55,7 +55,7 @@ cmake --build build-tsan; setarch $(uname -m) -R build-tsan/lewitt_tests
 # benchmarks
 cmake --build build --target lewitt_bench lewitt_bench_gui && build/lewitt_bench && QT_QPA_PLATFORM=offscreen build/src/gui/lewitt_bench_gui
 # diagnostics (read-only)
-build/lewitt-cli devices | diagnose | read api [--method interface|device-recipient] [--request uac2|uac1] | probe [--execute]
+build/openwitty-cli devices | diagnose | read api [--method interface|device-recipient] [--request uac2|uac1] | probe [--execute]
 ```
 
 ## Presets

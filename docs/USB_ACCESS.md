@@ -21,7 +21,7 @@ needs the device. Nothing here is hardware-verified.
 | F6 | There is precedent for exposing a vendor protocol of a class-audio device through ALSA `hwdep`: Focusrite Scarlett2 (`sound/usb/sc2.c: snd_hwdep_new(…"Focusrite Control"…)` + ioctls) and Creative SB remote (`mixer_quirks.c`). Hook: `snd_usb_mixer_apply_create_quirk()` keyed on USB id. | [src] |
 | F7 | Detaching **any** interface of the card tears down the *whole* sound card: first disconnect does `atomic_inc_return(&chip->shutdown)==1` → `snd_card_disconnect()` + release of all PCM streams, endpoints, MIDI and mixers. Re-attaching creates a new card. | [src] `card.c: __usb_audio_disconnect` |
 | F8 | `/dev/snd/*` nodes get a per-user ACL for the logged-in seat user (`70-uaccess.rules: SUBSYSTEM=="sound", TAG+="uaccess"`). `/dev/bus/usb/*` nodes are tagged only for specific classes (still-image `060101`, media players, hwdb "AV production controllers"); LEWITT's VID is not in `70-av-production.hwdb`. | [sys] udev rules + `getfacl /dev/snd/controlC0` |
-| F9 | Here, 28 of 31 `/dev/bus/usb/*/*` nodes are `root:root 0664` → **no write access for the user** → `libusb_open()` fails with `EACCES` for a typical USB audio interface. | [sys] `ls -l`, `lewitt-cli`'s `access(2)` check on a real UAC2 device |
+| F9 | Here, 28 of 31 `/dev/bus/usb/*/*` nodes are `root:root 0664` → **no write access for the user** → `libusb_open()` fails with `EACCES` for a typical USB audio interface. | [sys] `ls -l`, `openwitty-cli`'s `access(2)` check on a real UAC2 device |
 | F10 | `/sys/bus/usb/devices/*/descriptors` (raw device + configuration descriptors), `idVendor/idProduct`, and the `driver` symlink of each interface are world-readable → descriptors and driver ownership can be shown with no usbfs access and no I/O. | [sys] |
 | F11 | Windows and macOS both issue exactly the request shape we use (entity 0x33, req 3 / 0x85 / 0x05, wValue = apiMajor<<8\|msg, 500 ms). On Windows the Thesycon driver chooses the interface; macOS passes `0x3300\|ifnum`. | [bin] PROTOCOL.md |
 
@@ -34,7 +34,7 @@ needs the device. Nothing here is hardware-verified.
 | `EBUSY` on transfer | kernel ownership (F2) | `snd-usb-audio` is bound | Not by permissions; see options below |
 | `EPIPE` / stall | device | firmware rejected variant/recipient | Yes (protocol question) |
 
-`lewitt-cli` reports each with its own code name and next step; the exit codes differ
+`openwitty-cli` reports each with its own code name and next step; the exit codes differ
 (3 = access denied, 4 = busy, 5 = stall, 6 = timeout, 7 = disconnected/not found,
 8 = unsupported, 9 = bad response).
 
@@ -53,7 +53,7 @@ needs the device. Nothing here is hardware-verified.
 | **I. Out-of-tree standalone kernel driver** | Competes with `snd-usb-audio` for the interface | root | — | rejected: duplicates the claim problem |
 
 ### Recommendation
-1. On hardware, first run `lewitt-cli diagnose` (sysfs only) → learn PID, interfaces, driver
+1. On hardware, first run `openwitty-cli diagnose` (sysfs only) → learn PID, interfaces, driver
    ownership, node permissions without any I/O.
 2. If the node is writable (admin installed the rule): `read api` (A), then B, then C —
    each read-only, each opt-in.

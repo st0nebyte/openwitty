@@ -6,19 +6,19 @@ unbinds interfaces and never resets the device on its own. Hardware writes are d
 
 ## Three different failures
 
-| Symptom (`lewitt-cli` exit code)       | Meaning | Fixed by the udev rule? |
+| Symptom (`openwitty-cli` exit code)       | Meaning | Fixed by the udev rule? |
 | -------------------------------------- | ------- | ----------------------- |
 | `EACCES` / permission denied (3)       | `/dev/bus/usb/BBB/DDD` is `root:root 0664`; the user may not open it for writing (usbfs control transfers need a writable fd). | **Yes** |
 | `EBUSY` / resource busy (4)            | `snd-usb-audio` owns the AudioControl interface; interface-recipient requests must claim it. | **No** – a driver question, not a permission one |
 | `EPIPE` / stall (5)                    | The device rejected the request (unsupported on this firmware/recipient). | No |
 
-If `lewitt-cli diagnose` reports EACCES, install the rule below. If it then reports EBUSY the
+If `openwitty-cli diagnose` reports EACCES, install the rule below. If it then reports EBUSY the
 permission problem is solved and what remains is covered by `docs/USB_ACCESS.md` (recommended
 long-term route: a kernel quirk + hwdep interface, not implemented here).
 
 ## The udev rule
 
-`packaging/udev/70-lewitt-connect2.rules` (installed to `/usr/lib/udev/rules.d/` by the
+`packaging/udev/70-openwitty.rules` (installed to `/usr/lib/udev/rules.d/` by the
 packages):
 
 ```
@@ -35,20 +35,20 @@ SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="29c2", TAG+="uacc
 ## Installing it manually (administrator step, not done automatically)
 
 ```sh
-sudo install -m 0644 packaging/udev/70-lewitt-connect2.rules /etc/udev/rules.d/
+sudo install -m 0644 packaging/udev/70-openwitty.rules /etc/udev/rules.d/
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=29c2   # or replug
 ```
 
-Removal: `sudo rm /etc/udev/rules.d/70-lewitt-connect2.rules` and reload. Packages (`.deb`,
+Removal: `sudo rm /etc/udev/rules.d/70-openwitty.rules` and reload. Packages (`.deb`,
 PKGBUILD) install the same file into `/usr/lib/udev/rules.d/` and the `.deb` postinst reloads udev.
 
 ## Verifying
 
 ```sh
-lewitt-cli devices                       # is the device visible in sysfs?
+openwitty-cli devices                       # is the device visible in sysfs?
 getfacl /dev/bus/usb/BBB/DDD             # expect user:<you>:rw- after the rule applied
-lewitt-cli diagnose                      # read-only report with next steps
+openwitty-cli diagnose                      # read-only report with next steps
 ```
 
 User-local installs (`--prefix ~/.local`) do not ship the rule: udev only reads system

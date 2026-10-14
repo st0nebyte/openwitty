@@ -20,8 +20,8 @@ root and nothing is installed on the build host.
 * The `.deb` Depends come from `dpkg-shlibdeps` plus `qml6-module-qtquick`,
   `qml6-module-qtquick-window` and `qt6-qpa-plugins` (QML modules are loaded at runtime, so
   shlibdeps cannot see them).
-* Identity is explicitly unofficial: package name `lewitt-connect2-unofficial`, desktop name
-  "CONNECT 2 Control Center (unofficial)", own icon (no LEWITT artwork).
+* Identity is explicitly unofficial: package name `openwitty`, desktop name
+  "OpenWitty", own icon (no LEWITT artwork).
 * Mock-only builds (`-DLEWITT_ENABLE_USB=OFF`) have no libusb dependency and an
   identically-behaving write guard in the stub transport.
 * The udev rule is shipped in system-prefix packages only and is never installed by a
@@ -60,14 +60,12 @@ properties (uaccess, vendor-scoped, no 0666).
 * The decisive point: it cannot install the udev rule, so USB access would still need an
   administrative step and would fail with EACCES; the kernel-driver question (EBUSY) is
   unaffected. An AppImage would therefore only be useful for the simulated device.
-* Revisit when a license is chosen and hardware access works. A Flatpak would have the same
+* Revisit when hardware access works. A Flatpak would have the same
   udev limitation and also needs device portal permissions.
 
 ## Open items for the project owner
 
-* **Choose a licence.** Metadata uses `LicenseRef-proprietary` (appstream) /
-  `LicenseRef-custom` (PKGBUILD) and `copyright` says "all rights reserved until chosen".
-* Replace the placeholder homepage `https://example.invalid/…` and maintainer address.
+* Maintainer/contact e-mail in the packages is the GitHub no-reply placeholder; replace if desired.
 * Run `makepkg -s` and `namcap` on a real Arch/CachyOS host (namcap has not been run at all).
 * Install and smoke-test the packages in a clean VM/container (nothing was installed on the
   development host; install/remove was simulated into a private root).

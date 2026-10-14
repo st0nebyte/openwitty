@@ -135,7 +135,7 @@ write (`verifyOnlyKnownFieldsChanged`), and the snapshot is re-read after the wr
    `docs/HARDWARE_TEST_PLAN.md` (Appendix A) and is read-only.
 2. **USB permissions**: the udev rule needs an administrator to install it (documented, not
    installed). EBUSY from `snd-usb-audio` is expected and is a research outcome, not a bug.
-3. **Licence** not chosen (docs/LICENSE_ASSESSMENT.md).
+3. **Licence**: resolved in Phase 5F — MIT (repository `LICENSE`, owner-provided); see docs/THIRD_PARTY.md.
 4. **namcap** could not be run (needs libalpm/pyalpm); `makepkg` was run rootless with
    `--nodeps` on Ubuntu, not on Arch. Real `makepkg -s` + `namcap` on Arch/CachyOS remains.
 5. **Package installation** was simulated into a private root with a stubbed `udevadm`; no

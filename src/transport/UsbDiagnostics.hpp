@@ -45,7 +45,7 @@ bool parseDescriptors(const Bytes& raw, UsbDeviceReport& out);
 // rejected the request).
 std::string suggestionFor(const Error& e);
 
-// Multi-line text summary (used by `lewitt-cli diagnose`).
+// Multi-line text summary (used by `openwitty-cli diagnose`).
 std::string formatReport(const UsbDeviceReport& r);
 
 }  // namespace lewitt

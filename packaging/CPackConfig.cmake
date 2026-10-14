@@ -1,13 +1,13 @@
 # CPack configuration (included at the end of the top-level CMakeLists.txt).
 #   cmake --build build && (cd build && cpack -G DEB)        # no root needed
-set(CPACK_PACKAGE_NAME "lewitt-connect2-unofficial")
+set(CPACK_PACKAGE_NAME "openwitty")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_VENDOR "unofficial community project")
-set(CPACK_PACKAGE_CONTACT "LEWITT CONNECT 2 Linux project <noreply@example.invalid>")
+set(CPACK_PACKAGE_CONTACT "st0nebyte <noreply@users.noreply.github.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Unofficial, experimental control application for the LEWITT CONNECT 2")
 set(CPACK_PACKAGE_DESCRIPTION
     "Independent Linux control application and diagnostic tool for the\nLEWITT CONNECT 2 USB audio interface.\nNot affiliated with LEWITT. The control protocol was derived by static\nanalysis and has not been validated on real hardware; hardware writes are\ndisabled and a simulated device is included.")
-set(CPACK_PACKAGE_HOMEPAGE_URL "https://example.invalid/lewitt-connect2-linux")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/st0nebyte/openwitty")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES ON)
 set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS

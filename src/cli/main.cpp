@@ -1,4 +1,4 @@
-// lewitt-cli: read-only diagnostic tool. There is NO write command.
+// openwitty-cli: read-only diagnostic tool. There is NO write command.
 //
 //   devices                 enumerate LEWITT devices from sysfs: descriptors, interfaces,
 //                           endpoints, bound kernel drivers, usbfs node permissions (no USB I/O)
@@ -263,7 +263,7 @@ int cmdProbe(bool execute) {
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: lewitt-cli devices | diagnose | list | probe [--execute] |\n"
+                     "usage: openwitty-cli devices | diagnose | list | probe [--execute] |\n"
                      "                  read <api|version|status|settings> [--method interface|device-recipient|detach]\n"
                      "                       [--request uac2|uac1] [--mock]\n"
                      "read-only tool: it never writes to the device. --method detach is disruptive and also\n"
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
     }
     std::string cmd = argv[1];
     if (cmd == "--version" || cmd == "version") {
-        std::printf("lewitt-cli %s (%s build)\n%s\n", LEWITT_VERSION_STRING, LEWITT_BUILD_FLAVOUR, LEWITT_NOTICE);
+        std::printf("openwitty-cli %s (%s build)\n%s\n", LEWITT_VERSION_STRING, LEWITT_BUILD_FLAVOUR, LEWITT_NOTICE);
         return 0;
     }
     if (cmd == "devices") return cmdDevices(false);
