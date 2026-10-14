@@ -565,3 +565,70 @@ whether a SET to this field persists across a power cycle remains unverified eit
   post-write state. The *separate* read performed immediately afterward in this session is what
   actually confirmed each write. A future session should fix the command to delay or poll before
   reporting its own read-back, rather than relying on a manual follow-up read as was done here.
+
+## 15. Phase 6D — timing experiment, then a software-only session (no further hardware writes)
+
+### 15.1 Timing experiment (hardware; 2 writes, same approved shape as Phase 6C)
+
+Goal: pin down the settling delay found in §13.4 more precisely. Proposed and explicitly approved
+before execution: one write to a probe value, a bounded sequence of timed read-only observations, one
+write back to the original value.
+
+```
+write led-brightness 50 --interface 3 --execute    (bm=0x21 req=0x03 wValue=0x0100 wIndex=0x3303)
+  -> success, no error
+[separate-process read, ~1ms after the write process exited]
+  -> settings.byte37 = 0x32 (50) - ALREADY converged
+[separate-process read, ~53ms after]
+  -> settings.byte37 = 0x32 (50) - still converged; 2 consecutive matches, stopped early per plan
+write led-brightness 100 --interface 3 --execute   (restore)
+  -> success; confirmatory read: settings.byte37 = 0x64 (100), exact match to pre-experiment baseline
+```
+
+The script's `sleep` calls between the planned longer intervals (100/250/500/1000ms) failed locally
+(`bc` not installed on this machine) and were skipped; this did not require any additional hardware
+writes since the 2 writes already covered the approved shape, and the finding is unambiguous from the
+data actually collected: **convergence happened within ~1ms**, far faster than §13.4's "tens to
+hundreds of ms" characterization, which is hereby corrected. `status` was also read at each point for
+comparison but is not directly informative for this field (LED brightness lives only in `settings`).
+Card present and unchanged throughout; no disruption.
+
+**Revised understanding**: the earlier same-process staleness (§13.4) is best explained by the
+near-zero gap between `UsbTransport::write()` returning and `DeviceSession::refreshSettings()`'s
+following `read()` within `commit()` — not by a genuinely long device-side settling time. Any
+reasonable inter-process gap (even ~1ms) was already enough to observe the converged value.
+
+### 15.2 Remainder of Phase 6D: software/architecture only, no hardware interaction
+
+Everything after §15.1 was mock-tested and documentation work; **no further USB traffic of any kind**
+was sent to the real device for the rest of this session. Specifically:
+
+* `core/WriteVerification.hpp/.cpp` (new): a `WriteState` enum (`Prepared` → `Submitted` →
+  `TransferCompleted` → `AwaitingConvergence` → `Verified` / `VerificationTimedOut` / `Ambiguous` /
+  `Failed`) and `DeviceSession::commitAndVerify()`, which performs a fresh pre-write re-read (reusing
+  the existing device-wins merge algorithm, satisfying "obtain a fresh snapshot before writing"),
+  calls the existing `commit()` unchanged, and — only if the immediate readback doesn't yet match —
+  polls (read-only, bounded, default ~570ms total budget informed by §15.1's measurement, never
+  retrying the SET) until it converges, times out, or an out-of-band byte change makes the outcome
+  `Ambiguous`. 11 new mock-backed tests (`tests/cpp/test_write_verification.cpp`) exercise every
+  state transition deterministically (no wall-clock sleeps) using two small, additive `MockTransport`
+  hooks: count-based stale-reads-after-write simulation, and a one-shot external-change injector.
+* `src/gui`: `DeviceWorker::setValue`/`retryPending` now go through `commitAndVerify()` instead of
+  `commit()`, and `publish()` exposes `write.state`, `write.verifying`, and a composite `ui.status`
+  label (`Disconnected` / `Connecting` / `Hardware error` / `Mock mode` / `Connected read-only` /
+  `Connected with authorized controls` / `Pending verification`). GUI write policy is **unchanged** —
+  `allowHardwareWrites` still defaults off for real hardware, so "Connected with authorized controls"
+  remains unreachable there by construction; only mock mode can show it. `Pending verification` is
+  tracked accurately but not currently externally observable mid-flight, because `commitAndVerify()`
+  runs synchronously on the worker thread — see the code comment above `DeviceWorker::retryPending`
+  for why an earlier attempt at a mid-flight publish was reverted (it broke
+  `GuiBackend.DspRestrictionAt96kHz` by reordering `stateChanged` ahead of `errorOccurred`; root-caused
+  via a minimal standalone repro before fixing, not guessed at).
+* PROTOCOL.md: a full write-policy table for all 8 controls from the task's "progressive control"
+  list — offsets, encoding, risk, required state, rollback, and current evidence status for each.
+  Only LED brightness is active; everything else is specification only, not wired to any command.
+* Full suite: 106/106 (95 original + 11 new), confirmed stable across 4 repeated full runs and 20
+  repeated runs of the specific test that briefly regressed during development.
+
+No phantom power, firmware, factory reset, streaming-mode, or arbitrary-trigger code was touched or
+enabled anywhere in this session.

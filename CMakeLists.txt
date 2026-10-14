@@ -61,6 +61,7 @@ add_library(lewitt_core STATIC
     src/transport/SerializedTransport.cpp
     src/protocol/WriteGuard.cpp
     src/core/DeviceSession.cpp
+    src/core/WriteVerification.cpp
     src/core/DeviceManager.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_compile_options(lewitt_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -79,7 +80,7 @@ install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwit
 if(LEWITT_BUILD_TESTS)
     enable_testing()
     find_package(GTest REQUIRED)
-    add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp tests/cpp/test_hardening.cpp)
+    add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp tests/cpp/test_hardening.cpp tests/cpp/test_write_verification.cpp)
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)

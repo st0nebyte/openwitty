@@ -112,11 +112,17 @@ reversed. No driver conflict, no claim needed, no audio disruption (card present
 the first real-hardware write on this project and confirms option C is not read-only: the same
 userspace, no-kernel-patch access path works for SET as well as GET, at least for this one field.
 
-**New finding — settling delay**: a GET issued immediately after the SET (same process, microseconds
-later) returned the pre-write value; a GET from a separate process shortly after (tens-to-hundreds of
-ms later) returned the correct post-write value. Anything built on this access path must not treat an
-immediate post-write read as authoritative — add a delay or a bounded poll instead. This is a property
-of the device's firmware, not of interface 3 specifically, but was only observed via this path.
+**Settling delay, measured more precisely 2026-10-15** (`docs/HARDWARE_TEST_RESULTS.md` §15.1): a GET
+issued immediately after the SET (same process, microseconds later) returned the pre-write value; a
+GET from a separate process ~1ms later already returned the correct post-write value — convergence is
+far faster than the original "tens-to-hundreds of ms" characterization suggested; that estimate is
+corrected here. The staleness is best explained by the near-zero gap between the write call returning
+and the very next read call in the same process, not by a genuinely slow device-side settling time.
+Anything built on this access path must still not treat an immediate same-process post-write read as
+authoritative — add even a short delay or a bounded poll (see `core/WriteVerification.hpp`'s
+`commitAndVerify()`, added 2026-10-15, default ~570ms total budget) instead of trusting it blindly.
+This is a property of the device's firmware/USB stack interaction, not of interface 3 specifically,
+but was only observed via this path.
 
 Only LED brightness (one byte, one message type) has been write-tested. This does **not** confirm SET
 works uniformly for every settings field, for `status`/`version` (read-only messages — SET isn't even

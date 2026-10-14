@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "core/Policy.hpp"
+#include "core/WriteVerification.hpp"
 #include "protocol/WriteGuard.hpp"
 #include "protocol/Messages.hpp"
 #include "transport/IDeviceTransport.hpp"
@@ -82,6 +83,13 @@ public:
     std::optional<SettingsMessage> effectiveSettings() const { return pending_ ? pending_ : current_; }
     const std::optional<SettingsMessage>& pendingSettings() const { return pending_; }
     Status commit();           // write pending settings (policy gated), then re-read
+    // Like commit(), but doesn't stop at "the USB transfer didn't error": bounded, read-only
+    // polling (see WriteVerification.hpp) confirms the expected bytes actually changed before
+    // reporting Verified. Never retries the SET itself. Safe to call with no pending edit (returns
+    // Verified immediately, no I/O). On entry, captures the exact set of offsets the edit is
+    // expected to change; any other offset changing during verification is reported as Ambiguous,
+    // not silently accepted or overwritten.
+    WriteResult commitAndVerify(PollPolicy pp = {});
     Status sendTrigger(Trigger t);
 
 private:

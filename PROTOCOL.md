@@ -404,3 +404,29 @@ re-traced on Windows).
 * Only bytes with a verified setter may differ from the last device read; all other bytes —
   including schema bytes without a UI binding and bytes 71–127 — are written back unchanged.
 * A boolean/enum byte holding an unexpected value is never "normalised".
+
+## Progressive hardware-write control policies (Phase 6D, 2026-10-15)
+
+Specification only — **none of these except LED brightness are wired to a CLI/GUI write command**.
+Preparing a policy here does not activate it; activation is a separate, explicit step (a narrowly
+scoped command plus its own hardware test) done one control at a time, same as LED brightness was in
+Phase 6C. "Hardware-verified" below means the *field offset mapping* was confirmed by physically
+operating the control and diffing reads (Phase 6A/6B) — **not** that a USB SET has been sent for it;
+LED brightness is the only field where an actual SET has been hardware-tested (Phase 6C/6D).
+
+| # | Control | Offset(s) | Encoding | Range | Required device state before writing | Risk | Readback verification | Rollback | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | LED brightness | 37 | u8, raw percent | 0–100 | none | Low (cosmetic only) | byte 37 | write original value back | **ACTIVE** — hardware-verified SET (Phase 6C/6D), only enabled CLI write command |
+| 2 | Custom LED colours | 38–52 (5× RGB triples: icons 38, mute 41, parameter 44, metering 47, gain-reduction 50) | 3× u8 per element | 0–255 per channel | none | Low (cosmetic only) | the 3 bytes for the changed element | restore original RGB | Mock-tested only (`setLedColor`); not hardware-tested; not CLI-enabled |
+| 3 | Microphone gain | 0–1 | i16 LE Q8.8 dB | 0–72 dB | none (capture-level only, no direct output) | Low | bytes 0–1 | restore original gain | Field mapping hardware-verified (Phase 6A); SET untested; not CLI-enabled |
+| 4 | Instrument gain | 10–11 | i16 LE Q8.8 dB | 0–60 dB | none | Low | bytes 10–11 | restore original gain | Field mapping hardware-verified (Phase 6B); SET untested; not CLI-enabled |
+| 5 | Speaker / headphone volume | 20–21 / 27–28 | i16 LE Q8.8 dB | −60…0 dB | confirm no audio is actively playing through the channel being changed; prefer testing while muted, as done in Phase 6A/6B | **Medium** — directly drives audible output level | the relevant offset pair | restore original volume | Field mapping hardware-verified (Phase 6A/6B); SET untested; not CLI-enabled |
+| 6 | Mute states (mic/instrument/speaker/headphone/loopback) | 2 / 12 / 22 / 29 / 19 | u8 boolean | 0/1 | confirm associated volume/monitor routing is safe before unmuting (see Phase 6B's speaker-mute-first precaution) | Low–Medium — unmuting can expose an existing volume/routing setting | the relevant offset | restore original mute state | Field mapping hardware-verified, all 4 primary channels (Phase 6B); SET untested; not CLI-enabled |
+| 7 | Monitoring mix (source + input/playback mix) | 34 (enum 0/1/2) / 35–36 (i16 Q8.8, sign-inverted) | enum + i16 | source 0–2; mix within ±1 (documented range, not independently re-verified) | output muted/safe — this changes what's audible in the monitor path | **Medium** — can introduce an unexpected monitoring/feedback path | offsets 34–36 | restore originals | **Planned only** — no hardware evidence of any kind yet (neither physical nor SET) |
+| 8 | Preamp style + input processing (preamp 6/15, denoise 7/16, compress 9/18, Clipguard 4/14, low-cut 3/13) | see offsets | mostly u8 enum/boolean | preamp 0–2 (Clean/Warm/Vivid); denoise/compress/Clipguard/low-cut 0/1 | sample rate < 96 kHz for denoise/compress (`violatesDspRestriction`, already enforced in `commit()`) | Low (signal-character change, not loudness) | relevant offset(s) | restore originals | **Preamp style has no physical control on this unit at all** (owner-confirmed, Phase 6B) — software-only, cannot be physically cross-checked here. Denoise/compress/Clipguard/low-cut: no hardware evidence yet. Not CLI-enabled. |
+
+**Explicitly out of scope for any policy above, now or later without separate authorization:**
+firmware update, factory reset (trigger `0x106`), streaming-mode switch (`0x104`/`0x105`), any
+generic/arbitrary trigger write, any settings byte without a verified setter (54–55, 58, 60–70), and
+phantom power (`kPhantom1`, offset 5) — phantom power specifically requires its own separate
+authorization and safety review before any write policy is even drafted for it, per instruction.

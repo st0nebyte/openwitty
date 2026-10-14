@@ -62,8 +62,18 @@ Result<Bytes> MockTransport::read(MessageId id) {
         if (f.value().size() > 0x100) return makeError(Errc::Malformed, "simulated oversized response");
         return makeError(Errc::ShortTransfer, "simulated short transfer");
     }
+    // Settling-delay / external-change simulation applies to any read call (settings or status),
+    // same as the real device, which answers both kinds of GET regardless of write staleness.
+    if (externalChangeAfterReads_ == 0) {
+        if (externalChangeOffset_ < settings_.size()) settings_[externalChangeOffset_] = externalChangeValue_;
+        externalChangeAfterReads_ = -1;
+    } else if (externalChangeAfterReads_ > 0) {
+        --externalChangeAfterReads_;
+    }
     switch (id) {
-        case MessageId::Settings: return settings_;
+        case MessageId::Settings:
+            if (staleReadsRemaining_ > 0) { --staleReadsRemaining_; return preWriteSettings_; }
+            return settings_;
         case MessageId::Status: {
             Bytes st = status_;
             if (agProgress_ >= 0) {  // simulated measurement
@@ -85,13 +95,20 @@ Result<Bytes> MockTransport::read(MessageId id) {
 }
 
 Status MockTransport::write(MessageId id, std::span<const std::uint8_t> data) {
+    if (writeHook_) writeHook_();
     auto f = maybeFault();
     if (!f) return f.error();
     if (!f.value().empty()) return makeError(Errc::ShortTransfer, "simulated short transfer");
     const MessageInfo* mi = messageInfo(id);
     if (!mi || !mi->writable) return makeError(Errc::NotSupported, "message is read-only");
     if (data.size() != mi->size) return makeError(Errc::InvalidArgument, "wrong size");
-    if (id == MessageId::Settings) settings_.assign(data.begin(), data.end());
+    if (id == MessageId::Settings) {
+        if (staleReadsBudget_ > 0) {
+            preWriteSettings_ = settings_;   // snapshot BEFORE applying the new value
+            staleReadsRemaining_ = staleReadsBudget_;
+        }
+        settings_.assign(data.begin(), data.end());
+    }
     if (id == MessageId::Triggers) {
         auto cmd = static_cast<std::uint16_t>(data[0] | (data[1] << 8));
         triggerLog_.push_back(cmd);

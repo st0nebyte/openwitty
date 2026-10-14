@@ -157,6 +157,28 @@ void DeviceWorker::report(const Status& s) {
     if (!s) emit errorOccurred(QString::fromStdString(s.error().message));
 }
 
+// Translates a commitAndVerify() outcome into the existing error-reporting / pending-retry UX.
+// A successful USB transfer alone (TransferCompleted/AwaitingConvergence) is never treated as
+// success here - only Verified is. Ambiguous and VerificationTimedOut are reported as errors
+// (so the existing pending/retry affordance picks them up) but are deliberately NOT retried
+// automatically by this code.
+void DeviceWorker::reportWrite(const WriteResult& r) {
+    lastWriteState_ = r.state;
+    switch (r.state) {
+        case WriteState::Verified: return;
+        case WriteState::Failed: emit errorOccurred(QString::fromStdString(r.error.message)); return;
+        case WriteState::Ambiguous:
+            emit errorOccurred("device state changed unexpectedly during the write; "
+                               "not confirmed - please re-check this setting");
+            return;
+        case WriteState::VerificationTimedOut:
+            emit errorOccurred("write sent, but the device didn't confirm it in time; "
+                               "please re-check this setting");
+            return;
+        default: return;   // Prepared/Submitted/TransferCompleted/AwaitingConvergence: transient
+    }
+}
+
 void DeviceWorker::simulateUnplug() {
     if (mock_) mock_->injectFault(MockTransport::Fault::Disconnect);
 }
@@ -227,8 +249,19 @@ void DeviceWorker::setDeviceMode(bool macos) {
 
 void DeviceWorker::retryPending() {
     if (!session_) return;
-    auto c = session_->commit();
-    if (c) pendingKeys_.clear(); else report(c);
+    // Deliberately a single publish() at the end (matching the pre-6D pattern): commitAndVerify()
+    // runs synchronously on the worker thread, so a publish() before it would emit a stateChanged
+    // ahead of the eventual errorOccurred on failure/ambiguity, reordering what callers observe
+    // first (this broke GuiBackend.DspRestrictionAt96kHz during development). verifying_ is still
+    // tracked accurately for its duration, but - because nothing else can run on this thread while
+    // commitAndVerify() blocks - it's never externally observable as true with the current
+    // synchronous wiring; "Pending verification" becoming genuinely live would need an async
+    // (QTimer-driven) PollPolicy instead of a blocking sleeper, which is future work, not done here.
+    verifying_ = true;
+    auto r = session_->commitAndVerify();
+    verifying_ = false;
+    if (r.state == WriteState::Verified) pendingKeys_.clear();
+    reportWrite(r);
     publish();
 }
 
@@ -275,6 +308,22 @@ void DeviceWorker::publish() {
                            session_ && session_->writesEnabled(), session_ && session_->isSimulated());
     v["sampleRate"] = sampleRate_;
     v["restarting"] = restarting_;
+    v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
+    v["write.verifying"] = verifying_;
+    // One label distinguishing the states the GUI needs to react to: whether there's a device at
+    // all, whether it's simulated, whether writes are actually possible, and whether a write is
+    // currently being confirmed. Writable real hardware never appears here while GUI policy keeps
+    // allowHardwareWrites off (see DeviceSession's WritePolicy) - that's intentional: this label
+    // reflects reality, it doesn't grant anything by itself.
+    QString uiStatus;
+    if (verifying_) uiStatus = "Pending verification";
+    else if (!session_ || cs == ConnectionState::Disconnected) uiStatus = "Disconnected";
+    else if (cs == ConnectionState::Connecting) uiStatus = "Connecting";
+    else if (cs == ConnectionState::Error) uiStatus = "Hardware error";
+    else if (session_->isSimulated()) uiStatus = "Mock mode";
+    else if (session_->writesEnabled()) uiStatus = "Connected with authorized controls";
+    else uiStatus = "Connected read-only";
+    v["ui.status"] = uiStatus;
     if (session_) {
         auto mode = deviceModeFromPid(session_->info().pid);
         v["device.mode"] = mode == DeviceMode::MacOSStreaming ? "MacOSStreaming"
@@ -422,11 +471,14 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     auto e = session_->edit(fn);
     if (!e) { report(e); return; }         // invalid value: nothing staged, nothing sent
     if (!session_->dirty()) { session_->discardPending(); publish(); return; }   // no-op edit
-    auto c = session_->commit();
-    if (c) {
+    // Single publish() at the end, same reasoning as retryPending() above.
+    verifying_ = true;
+    auto r = session_->commitAndVerify();
+    verifying_ = false;
+    if (r.state == WriteState::Verified) {
         pendingKeys_.remove(key);
     } else {
-        report(c);                           // keep the edit, flag it, let the user retry/discard
+        reportWrite(r);                      // keep the edit, flag it, let the user retry/discard
         pendingKeys_.insert(key);
     }
     publish();

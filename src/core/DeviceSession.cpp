@@ -1,8 +1,33 @@
 #include "DeviceSession.hpp"
 
+#include <algorithm>
 #include <cstdio>
+#include <thread>
 
 namespace lewitt {
+
+namespace {
+std::vector<std::size_t> diffOffsets(const SettingsMessage& a, const SettingsMessage& b) {
+    std::vector<std::size_t> out;
+    auto ab = a.bytes(), bb = b.bytes();
+    for (std::size_t i = 0; i < ab.size(); ++i)
+        if (ab[i] != bb[i]) out.push_back(i);
+    return out;
+}
+// Offsets outside `expected` that differ between `baseline` and `now` - i.e. something changed
+// that this write didn't intend to change (a concurrent device-side edit, or something unexpected).
+std::vector<std::size_t> unexpectedOffsets(const SettingsMessage& baseline, const SettingsMessage& now,
+                                            const std::vector<std::size_t>& expected) {
+    std::vector<std::size_t> out;
+    auto bb = baseline.bytes(), nb = now.bytes();
+    for (std::size_t i = 0; i < bb.size(); ++i) {
+        if (bb[i] == nb[i]) continue;
+        if (std::find(expected.begin(), expected.end(), i) != expected.end()) continue;
+        out.push_back(i);
+    }
+    return out;
+}
+}  // namespace
 
 DeviceSession::DeviceSession(std::unique_ptr<IDeviceTransport> t, WritePolicy p)
     : transport_(std::move(t)), policy_(p) {}
@@ -163,6 +188,69 @@ Status DeviceSession::commit() {
     if (auto s = transport_->write(MessageId::Settings, bytes); !s) { auto st = fail(s.error()); noteResult(st); return st; }
     failures_ = 0;
     return refreshSettings();
+}
+
+WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
+    WriteResult r;
+    if (!pending_) { r.state = WriteState::Verified; return r; }   // nothing to do
+    if (!writesEnabled()) {
+        r.state = WriteState::Failed;
+        r.error = makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
+        return r;
+    }
+    // Fresh snapshot immediately before writing, reusing the existing device-wins merge algorithm:
+    // any field that changed externally since the last refresh is adopted from the device; the
+    // pending edit survives for every field that didn't. If this happens to leave nothing pending
+    // (e.g. the device already has the value we wanted), there's nothing to write - report Verified.
+    if (auto rs = refreshSettings(); !rs) { r.state = WriteState::Failed; r.error = rs.error(); return r; }
+    if (!pending_) { r.state = WriteState::Verified; return r; }
+    if (!current_) {
+        r.state = WriteState::Failed;
+        r.error = makeError(Errc::InvalidArgument, "no device settings read yet; refusing to write");
+        return r;
+    }
+    const SettingsMessage before = *current_;
+    const SettingsMessage target = *pending_;
+    const auto expected = diffOffsets(before, target);
+
+    r.state = WriteState::Submitted;
+    Status s = commit();   // existing, tested: guard checks, write, one re-read
+    if (!s) {
+        r.state = WriteState::Failed;
+        r.error = s.error();
+        return r;
+    }
+    r.state = WriteState::TransferCompleted;
+    if (!current_) {   // shouldn't happen; commit() always refreshes on success
+        r.state = WriteState::Failed;
+        r.error = makeError(Errc::Internal, "commit succeeded but no settings snapshot afterward");
+        return r;
+    }
+    auto bad = unexpectedOffsets(before, *current_, expected);
+    if (!bad.empty()) { r.state = WriteState::Ambiguous; r.unexpectedOffsets = bad; return r; }
+    if (diffOffsets(*current_, target).empty()) { r.state = WriteState::Verified; return r; }
+
+    // Not yet converged: bounded, read-only polling. The SET is never resent.
+    r.state = WriteState::AwaitingConvergence;
+    auto sleep = pp.sleeper ? pp.sleeper
+                            : std::function<void(std::chrono::milliseconds)>(
+                                  [](std::chrono::milliseconds d) { std::this_thread::sleep_for(d); });
+    for (auto d : pp.delays) {
+        sleep(d);
+        ++r.pollAttempts;
+        Status rs = refreshSettings();
+        if (!rs) { r.state = WriteState::Failed; r.error = rs.error(); return r; }
+        if (!current_) {
+            r.state = WriteState::Failed;
+            r.error = makeError(Errc::Disconnected, "lost settings snapshot during verification");
+            return r;
+        }
+        bad = unexpectedOffsets(before, *current_, expected);
+        if (!bad.empty()) { r.state = WriteState::Ambiguous; r.unexpectedOffsets = bad; return r; }
+        if (diffOffsets(*current_, target).empty()) { r.state = WriteState::Verified; return r; }
+    }
+    r.state = WriteState::VerificationTimedOut;
+    return r;
 }
 
 Status DeviceSession::sendTrigger(Trigger t) {

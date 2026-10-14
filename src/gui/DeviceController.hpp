@@ -49,6 +49,7 @@ private:
     void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t);
     void refreshDeviceState();
     void report(const lewitt::Status& s);
+    void reportWrite(const lewitt::WriteResult& r);
     void startTimer(int ms);
     std::unique_ptr<lewitt::DeviceSession> session_;
     lewitt::MockTransport* mock_{nullptr};
@@ -72,6 +73,11 @@ private:
     QString autoState_{"idle"};
     bool inMeasureSession_{false};
     bool restarting_{false};  // idle | running | finished
+    // Verification state of the most recent settings write (see core/WriteVerification.hpp).
+    // `verifying_` is true only while a commitAndVerify() call is actually in flight on this
+    // (worker) thread - never on the GUI thread, so it can't freeze the UI.
+    lewitt::WriteState lastWriteState_{lewitt::WriteState::Prepared};
+    bool verifying_{false};
 };
 
 class DeviceController : public QObject {

@@ -17,10 +17,26 @@
    witnessed), via a single narrowly-scoped, explicitly-gated CLI command (`write led-brightness`,
    needs `--execute` + `LEWITT_ALLOW_HARDWARE_WRITE=1`). Found a settling delay between a SET and a
    GET reflecting it — see `docs/HARDWARE_TEST_RESULTS.md` §13, PROTOCOL.md, `docs/USB_ACCESS.md` §3c.
-6. **Next:** fix `write led-brightness`'s own post-write read-back to account for the settling delay
-   (delay or bounded poll instead of an immediate re-read) before proposing any further write targets.
-   Any additional writable field needs its own narrow, separately-reviewed command — no generic
-   field/byte write command is planned.
+6. ✔ done 2026-10-15: timing experiment pinned the settling delay down precisely — convergence
+   within ~1ms (not "tens-to-hundreds of ms" as first estimated), explained by the near-zero gap
+   between a write and the very next same-process read, not a slow device. See
+   `docs/HARDWARE_TEST_RESULTS.md` §15.1.
+7. ✔ done 2026-10-15 (software only, no hardware writes): built `DeviceSession::commitAndVerify()`
+   (`core/WriteVerification.hpp`) — a real `WriteState` machine that only reports success after a
+   read confirms it, bounded read-only polling, no automatic SET retries. 11 new mock tests. GUI
+   wired through it (`setValue`/`retryPending`) with a new composite status label. Full policy table
+   for the 8 "progressive control" fields drafted in PROTOCOL.md — **none activated except LED
+   brightness**; each remaining field still needs its own narrow, separately-reviewed command and its
+   own hardware test before it can be written to, same as LED brightness was.
+8. **Next (needs explicit per-field authorization, one at a time):** pick the next field to write-test
+   against real hardware from PROTOCOL.md's policy table. Candidates ranked by risk: mic/instrument
+   gain and mute states are Low/Medium risk and already have hardware-confirmed field mappings from
+   physical testing (Phase 6A/6B) — good next candidates. Speaker/headphone volume and monitoring mix
+   are Medium risk (directly affect audible output) and need the write-time safety precautions already
+   used in Phase 6A/6B (mute first, confirm no live audio). Preamp style cannot be physically
+   cross-checked on this unit at all (no hardware control exists) — lower priority for hardware
+   testing specifically. Phantom power needs its own separate authorization per instruction, not
+   bundled with any of the above.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).
