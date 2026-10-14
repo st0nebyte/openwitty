@@ -298,6 +298,15 @@ void DeviceWorker::simulateExternalChange(const QString& key, const QVariant& v)
     mock_->setSettingsBytes(Bytes(b.begin(), b.end()));
 }
 
+// Simulates the physical MUTE-hold gesture (confirmed on real hardware 2026-10-16). Directly
+// mutates the mock's backing settings, same as a real hardware button would - the next
+// refreshSettings()/poll() picks it up through the existing device-wins merge, same code path as
+// any other device-side change. No DeviceSession write is involved.
+void DeviceWorker::simulatePanicMute() {
+    if (!mock_) return;   // never on real hardware
+    mock_->simulatePanicMute();
+}
+
 void DeviceWorker::publish() {
     QVariantMap v;
     ConnectionState cs = session_ ? session_->state() : ConnectionState::Disconnected;
@@ -350,6 +359,11 @@ void DeviceWorker::publish() {
         v["spk.mute"] = s.speakerMute();
         v["hp.volume"] = s.headphoneVolumeDb();
         v["hp.mute"] = s.headphoneMute();
+        // Purely derived display state, not a protocol concept: real hardware has no dedicated
+        // "Panic Mute" flag (confirmed 2026-10-16, docs/HARDWARE_TEST_RESULTS.md) - holding MUTE
+        // just sets these same four fields. True exactly when all four happen to be muted, however
+        // that came about (Panic Mute or four individual presses) - this never writes anything.
+        v["mute.allFour"] = s.mute(0) && s.mute(1) && s.speakerMute() && s.headphoneMute();
         v["mon.mix"] = s.inputPlaybackMix();
         v["mon.mic"] = s.monitorMicrophone();
         v["mon.inst"] = s.monitorInstrument();
@@ -528,6 +542,7 @@ void DeviceController::injectFault(const QString& k) { QMetaObject::invokeMethod
 void DeviceController::simulateExternalChange(const QString& k, const QVariant& v) {
     QMetaObject::invokeMethod(worker_, "simulateExternalChange", Q_ARG(QString, k), Q_ARG(QVariant, v));
 }
+void DeviceController::simulatePanicMute() { QMetaObject::invokeMethod(worker_, "simulatePanicMute"); }
 void DeviceController::trigger(const QString& n) {
     QMetaObject::invokeMethod(worker_, "trigger", Q_ARG(QString, n));
 }

@@ -122,6 +122,24 @@ every pairing. **macOS streaming mode**: id `MacOSStreaming` exists but its
 offset was not located (probably device-side/driver state) — unknown.
 Everything not listed is unknown; read-modify-write preserves it.
 
+**Panic Mute (MUTE button hold)** — **[V-hw, hardware-confirmed 2026-10-16]**. The official online
+guide (verified 2026-10-16, see `docs/OFFICIAL_GUIDE.md`) states: a short MUTE press toggles the
+currently-selected channel only (matches our hardware-confirmed behaviour for mic/instrument/
+speaker/headphone — §10/§12 of `docs/HARDWARE_TEST_RESULTS.md`); holding MUTE mutes **all input and
+output channels simultaneously**; recovery requires unmuting each channel individually, not holding
+MUTE again.
+
+Hardware-confirmed (3 read-only trials, `docs/HARDWARE_TEST_RESULTS.md` §16): holding MUTE sets
+**exactly** offsets 2 (`kMute[0]`), 12 (`kMute[1]`), 22 (`kSpeakerMute`), 29 (`kHeadphoneMute`) to
+`1` simultaneously, regardless of which channel is selected (rules out "selected channel only").
+**Confirmed NOT affected**: offset 19 (`kLoopbackMute`) and offset 56 (channel-select) — both stayed
+unchanged across every trial. **No separate/dedicated Panic-Mute flag exists** anywhere in the
+128-byte struct, including the unmapped ranges (54–55, 58, 60–70) — nothing outside those four bytes
+ever moved. An unidentified but *reproducible* `status` message change (offsets 3–4, 12–13, same
+values in all 3 trials) accompanies it — not interpreted, flagged for future investigation.
+Individual-unmute recovery was not independently re-tested (would require unmuting live channels
+with nothing new to learn); no code assumes holding MUTE again undoes it.
+
 ## iface_status_t (0x40)  [V-bin offsets]
 
 Data starts at app-object offset 0x250, so status offset = disp − 0x250.

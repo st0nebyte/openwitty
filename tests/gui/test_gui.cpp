@@ -232,6 +232,39 @@ TEST(GuiSync, ExternalHardwareChangeAppearsWithoutLosingPendingEdit) {
     EXPECT_TRUE(c.values()["pending.in1.gain"].toBool());
 }
 
+// Panic Mute (MUTE hold), confirmed on real hardware 2026-10-16 (docs/HARDWARE_TEST_RESULTS.md):
+// sets exactly the four primary mute fields simultaneously, nothing else. simulatePanicMute()
+// mirrors that directly on the mock; the GUI must pick it up through the existing poll/merge path
+// like any other device-side change, and must not lose an unrelated pending edit.
+TEST(GuiSync, PanicMuteUpdatesAllFourMuteFieldsAndPreservesPendingEdit) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("hp.mute"); }));
+    // Start from fully unmuted so the transition is unambiguous.
+    c.setValue("in1.mute", false);
+    c.setValue("in2.mute", false);
+    c.setValue("spk.mute", false);
+    c.setValue("hp.mute", false);
+    ASSERT_TRUE(waitFor([&] { return c.values()["hp.mute"].toBool() == false; }));
+    ASSERT_TRUE(waitFor([&] { return c.values()["mute.allFour"].toBool() == false; }));
+
+    c.injectFault("timeout");
+    c.setValue("in1.gain", 61.0);   // fails -> stays pending, must survive what follows
+    ASSERT_TRUE(waitFor([&] { return c.values()["pending.in1.gain"].toBool(); }));
+
+    c.simulatePanicMute();
+    ASSERT_TRUE(waitFor([&] { return c.values()["mute.allFour"].toBool() == true; }, 4000));
+    EXPECT_TRUE(c.values()["in1.mute"].toBool());
+    EXPECT_TRUE(c.values()["in2.mute"].toBool());
+    EXPECT_TRUE(c.values()["spk.mute"].toBool());
+    EXPECT_TRUE(c.values()["hp.mute"].toBool());
+    EXPECT_FALSE(c.values()["loop.mute"].toBool())
+        << "loopback mute confirmed NOT affected by Panic Mute on real hardware";
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 61.0);   // pending edit survived
+    EXPECT_TRUE(c.values()["pending.in1.gain"].toBool());
+}
+
 TEST(GuiSync, IdenticalValueSendsNoCommand) {
     app();
     DeviceController c;

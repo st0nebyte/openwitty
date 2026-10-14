@@ -37,6 +37,22 @@
    cross-checked on this unit at all (no hardware control exists) — lower priority for hardware
    testing specifically. Phantom power needs its own separate authorization per instruction, not
    bundled with any of the above.
+9. **Correction, 2026-10-16:** Phase 6B's HARDWARE_TEST_RESULTS.md §12.7 overstated a negative
+   finding as "no long-press gesture exists on any front-panel button" when only preamp/Mono/
+   Clipguard cycling on the select buttons had actually been asked about. The MUTE button's hold
+   gesture ("Panic Mute") was separately already documented (`docs/OFFICIAL_GUIDE.md`, phase 5-era
+   static analysis) and is unaffected by that Phase 6B answer — now independently re-verified against
+   the manufacturer's online guide. Wording corrected in HARDWARE_TEST_RESULTS.md, FEATURES.md,
+   PROTOCOL.md, `docs/OFFICIAL_GUIDE.md`.
+10. ✔ done 2026-10-16: Panic Mute hardware-confirmed, 3 read-only trials — **exactly bytes
+    2/12/22/29** set simultaneously regardless of selected channel; loopback (19) and channel-select
+    (56) confirmed untouched; no separate flag exists. Added `MockTransport::simulatePanicMute()`,
+    read-only `mute.allFour` derived GUI state, 3 new tests (108/108 total). No software Panic Mute
+    trigger implemented, per instruction. See `docs/HARDWARE_TEST_RESULTS.md` §16, PROTOCOL.md.
+11. **Open, not yet investigated:** the reproducible but unidentified `status` message change
+    (offsets 3–4, 12–13, same values across all 3 Panic Mute trials) — not in PROTOCOL.md's
+    documented status field map. Worth a dedicated follow-up once there's a hypothesis for what it
+    might represent.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).

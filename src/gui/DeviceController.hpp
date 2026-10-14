@@ -36,6 +36,7 @@ public slots:
     void discardPending();
     void injectFault(const QString& kind);                       // simulation only
     void simulateExternalChange(const QString& key, const QVariant& v);  // simulation only
+    void simulatePanicMute();                                     // simulation only
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
@@ -111,6 +112,7 @@ public:
     Q_INVOKABLE void discardPending();
     Q_INVOKABLE void injectFault(const QString& kind);
     Q_INVOKABLE void simulateExternalChange(const QString& key, const QVariant& v);
+    Q_INVOKABLE void simulatePanicMute();
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
 signals:

@@ -43,6 +43,20 @@ public:
     void setAutoGainOutcome(std::uint8_t resultBits) { agOutcome_ = resultBits; }
     // Simulates a change made on the device itself (hardware button, other software).
     void setSettingsBytes(Bytes b) { settings_ = std::move(b); }
+    // Simulates the hardware "Panic Mute" (MUTE button hold), confirmed on real hardware
+    // 2026-10-16 (docs/HARDWARE_TEST_RESULTS.md): sets exactly the four primary per-channel mute
+    // bytes (mic, instrument, speaker, headphone) - nothing else. Loopback mute and the
+    // channel-select byte are confirmed NOT to be touched by the real device and are left alone
+    // here too. There is no dedicated "Panic Mute" flag on real hardware; this mirrors that
+    // exactly rather than introducing one.
+    void simulatePanicMute() {
+        using namespace settings_off;
+        if (settings_.size() <= kHeadphoneMute) return;
+        settings_[kMute[0]] = 1;
+        settings_[kMute[1]] = 1;
+        settings_[kSpeakerMute] = 1;
+        settings_[kHeadphoneMute] = 1;
+    }
     // Simulates the real-hardware settling delay found in Phase 6D (docs/HARDWARE_TEST_RESULTS.md
     // §"timing experiment"): the next `n` reads of Settings after any Settings write return the
     // PRE-write bytes; the (n+1)th and later reads return the real (written) value. n=0 (default)
