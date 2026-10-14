@@ -13,7 +13,7 @@ control wired to the mock backend; writes to real hardware are disabled.
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|
-| 1 | Mic / instrument gain (mic 0–72, inst 0–60 dB) | Input strips, knob | settings @0/@10 Q8.8 | core+GUI+tests | — | no |
+| 1 | Mic / instrument gain (mic 0–72, inst 0–60 dB) | Input strips, knob | settings @0/@10 Q8.8 | core+GUI+tests | — | **mic: yes** (physically confirmed 2026-10-14, exact +1.00 dB on wheel turn; instrument not yet tested) |
 | 2 | Low-cut filter | LC button | @3/@13 | core+GUI | — | no |
 | 3 | 48 V phantom (mic only) | 48V button, confirmation | @5 | core+GUI (confirm dialog) | input 2 has none in tree ✔ | no |
 | 4 | Clipguard | CG button | @4/@14 | core+GUI | — | no |
@@ -24,7 +24,7 @@ control wired to the mock backend; writes to real hardware are disabled.
 | 9 | Autogain (10 s, progress, success/fail) | Autogain button | triggers 1/2/3; status @0x24 progress, @0x23 bit5/6 result | core+GUI+mock workflow+tests | timing/limits only | no |
 | 10 | Autosetup wizard | top-left button | settings writes + autogain trigger | GUI wizard (reconstruction) | exact step→field mapping, noise/clipping error codes | no |
 | 11 | Loudspeaker volume/mute | Outputs | @20 / @22 | core+GUI | — | no |
-| 12 | Headphone volume/mute (independent) | Outputs | @27 / @29 | core+GUI | — | no |
+| 12 | Headphone volume/mute (independent) | Outputs | @27 / @29 | core+GUI | — | **volume: yes** (physically confirmed 2026-10-14, exact dB match on two separate wheel edits; mute byte observed unaffected by volume changes, confirming independence; mute *toggling* not yet tested) |
 | 13 | Loopback mute + meters | Outputs | @19, status 0x12/0x14 | core+GUI | — | no |
 | 14 | Input/playback mix | Monitoring knob | @35 sign-inverted Q8.8 | core+GUI | value range, % mapping | no |
 | 15 | Direct monitoring mic/inst/both | Mic/Inst buttons | @34 (0/1/2) | core+GUI+state-machine tests | — | no |
@@ -53,6 +53,7 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 35 | Onboarding tour (4 steps) | overlay / Settings | host-side | GUI (on demand) | first-run persistence | n/a |
 | 36 | Unsent-edit tracking (retry/discard) | footer bar | session staging | core+GUI+tests | — | n/a |
 | 37 | Measurement session bracket (words 4/5) | Autogain/Denoise/Autosetup | trigger buffer | core+mock+GUI | device-side effect | no |
-| 38 | Read-only diagnostics: `devices`, `diagnose`, classified `read` (api/version/status/settings), `probe` | CLI | sysfs + libusb GET | implemented, fixture/mock tested | needs device | no |
+| 38 | Read-only diagnostics: `devices`, `diagnose`, classified `read` (api/version/status/settings), `probe` | CLI | sysfs + libusb GET | implemented, fixture/mock tested | — | **yes** (all four read-only message types confirmed against a real CONNECT 2, 2026-10-14, via the unbound interface-3 access path; see `docs/HARDWARE_TEST_RESULTS.md`) |
 | 39 | Hot-plug discovery + auto-reconnect with backoff (USB mode) | GUI status | sysfs scan | implemented, simulated | needs device | no |
 | 40 | Backend write guard (destructive words, unknown bytes, enum preservation) | n/a | — | implemented + tests | — | n/a |
+| 41 | Touch-surface channel selection (LED-ring focus state) | front-panel LEDs (hardware), not yet surfaced in GUI | settings byte 56 (new; not in `settings_off`) | not implemented in OpenWitty | not a complete enum (mic/speaker/headphone only; instrument/mute/custom/mix unobserved) | **partial** (physically confirmed 2026-10-14 that this byte tracks selection independent of value edits; see `docs/HARDWARE_TEST_RESULTS.md` §10.5 and PROTOCOL.md) |

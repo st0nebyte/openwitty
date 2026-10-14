@@ -3,7 +3,11 @@
 **Date:** 2026-10-14
 **Machine:** CachyOS Linux (Arch-based), kernel `7.2.9-2-cachyos`, KDE Plasma (Wayland), PipeWire/PulseAudio-compat.
 **Build under test:** commit `ef6143363cdd69c25e3baa8f278068d838a6ac72` (HEAD at session start), `release` preset.
-**Device:** LEWITT CONNECT 2, serial `XXXXXXXXXXXX`, bus 6 device 4, path `/sys/bus/usb/devices/6-4.1`.
+**Device:** LEWITT CONNECT 2, serial `<redacted, see note>`, bus 6 device 4, path `/sys/bus/usb/devices/6-4.1`.
+
+*Serial numbers and other per-unit identifiers below are redacted to a fixed-length placeholder
+(`XXXXXXXXXXXX`) everywhere they appear, including inside raw hex dumps — byte lengths and offsets
+are preserved so the structural analysis stays reproducible; only the identifying content is removed.*
 
 This is the **first time** OpenWitty has been run against physical hardware. Everything below is new
 evidence; nothing was known before this session except by static analysis.
@@ -106,9 +110,11 @@ Decoded by offset (conservative reading; not a claim about field semantics beyon
   previously assumed to be zero).
 - bytes 11–18: ASCII `"00000000"`.
 - bytes 19–25: `01 02 01 38 00 00 00` — unidentified.
-- bytes 26–45: ASCII `"XXXXXXXXXXXXXXXXXXXX"` — the last 12 characters, `XXXXXXXXXXXX`, are an exact
-  match for the device's USB `iSerial` string reported by `devices`/sysfs. The leading 8 characters
-  (`XXXXXXXX`) are unidentified (hex-looking, possibly a build id/date code).
+- bytes 26–45: ASCII, 20 characters total (redacted above as `XXXXXXXXXXXXXXXXXXXX`). The last 12
+  characters were an exact match for the device's USB `iSerial` string reported by `devices`/sysfs —
+  confirmed, then redacted for this document. The leading 8 characters were unidentified (hex-looking,
+  possibly a build id/date code) — also redacted out of caution since their uniqueness per unit isn't
+  established either way.
 - byte 46 = `0x13`, byte 47 = `0x05` — unidentified.
 - bytes 48–63: all zero (padding, or genuinely unused).
 
@@ -231,3 +237,120 @@ this session, proposed as the immediate next step).
    device behaviour and doesn't require any code change or write from OpenWitty.
 6. Investigate the `version`/`api` identical-payload anomaly (§7b) before treating `iface_version_t`
    as understood — it is currently an open question, not a documented field layout.
+
+## 10. Physical control / protocol offset validation (same branch, follow-up session)
+
+Plan step 9 executed: individual hardware controls were changed by hand on the physical unit between
+`read settings --interface 3` captures, diffed byte-for-byte, and checked against
+`src/protocol/Messages.hpp`'s `settings_off` table. All reads only; no USB writes, no claims, no
+disruption — `/proc/asound/cards` checked after every capture, card present throughout.
+
+Tested device identity: API handshake `major=1 minor=0`, `bcdDevice 0121` (see §4). No separate
+firmware-version string could be read — see the `version`/`api` anomaly (§7b/§11) — so this is the
+most specific identifier available. Serial numbers redacted throughout this document (see note at
+top) per instruction; the underlying analysis does not depend on the actual serial value.
+
+### 10.1 Baseline
+
+```
+mic:        gain=27.00dB mute=1 lowcut=1 clipguard=1 preamp=2(Vivid) denoise=0 comp=1
+instrument: gain=12.00dB mute=1 lowcut=0 clipguard=0 preamp=2(Vivid) denoise=0 comp=0
+phantom=1(on)  speaker=0.00dB  headphone=-19.71dB (MUTED)  dim=0 mono=0 mix=-15.91 monitor=2(both) button=2
+```
+Stable across 3 repeated reads before any physical interaction.
+
+### 10.2 Test 1 — headphone volume wheel (down)
+
+Safety: headphone output was muted at baseline and headphones/amp were disconnected/turned down
+beforehand as a precaution before turning the wheel.
+
+| Offset | Field (`settings_off`) | Before | After | Verdict |
+|---|---|---|---|---|
+| 27–28 | `kHeadphoneVolume` (i16 LE Q8.8, −60…0 dB) | `49 ec` = −19.71 dB | `d4 e1` = −30.17 dB | **CONFIRMED** |
+| 29 | `kHeadphoneMute` | `01` | `01` (unchanged) | confirms volume and mute are independent fields; turning the wheel did not auto-unmute |
+| 56 | *unmapped in PROTOCOL.md* | `03` | `04` | correlated with this edit; see §10.5 |
+
+No other byte changed.
+
+### 10.3 Test 2 — headphone volume wheel (restore, same control)
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 27–28 | `kHeadphoneVolume` | `d4 e1` = −30.17 dB | `5f e9` = −22.63 dB | **CONFIRMED** (repeat; physical wheel has its own step granularity, landed close to but not exactly at the original −19.71 dB, as expected for an analog control) |
+| 56 | *unmapped* | `04` | `04` (unchanged) | did **not** increment again on a second real edit to the same control — rules out "increments on every settings write" as the explanation; see §10.5 |
+
+No other byte changed.
+
+### 10.4 Test 3 — microphone gain wheel (up one notch)
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 0–1 | `kGain[0]` (mic gain, i16 LE Q8.8, 0–72 dB) | `00 1b` = 27.00 dB | `00 1c` = 28.00 dB | **CONFIRMED** — exact +1.00 dB, matches "a tiny notch" |
+| 56 | *unmapped* | `04` | `01` | changed again, to a *different* value than either prior state — see §10.5 |
+
+No other byte changed.
+
+### 10.5 Test 4 & 5 — channel-select only (no value edit, isolating byte 56)
+
+Motivated by the user's own observation that the device's LED ring changes meaning based on which
+channel (mic/instrument/speaker/headphone) is currently selected — i.e. the firmware already tracks a
+"currently focused channel" concept independent of any value change. Two select-only presses (no wheel
+turn) were captured to test whether byte 56 reflects that focus state:
+
+| Action | Byte 56 | Everything else |
+|---|---|---|
+| speaker-select button only | `01` → `03` | **zero other bytes changed** — decoded settings output byte-for-byte identical otherwise |
+| (several more select presses: headphone, speaker, speaker again) then mic-select only | `03` → `01` | **zero other bytes changed**, intermediate presses left no trace — only the final selection is reflected |
+
+This is a clean isolation: selecting a channel with **no value change at all** still moves byte 56,
+and moves it to the *same* value (`01`) both times mic was selected, and to `03` both times speaker
+was the end state (baseline *and* this explicit test). Combined with Tests 1–3 (`04` for headphone,
+stable across repeated edits to the same channel), this converges on:
+
+| Byte 56 value | Channel |
+|---|---|
+| `0x01` | microphone |
+| `0x03` | speaker |
+| `0x04` | headphone |
+
+**Classification: partially confirmed.** The mic/speaker/headphone mapping above is well-supported —
+multiple independent, repeatable observations, including two that isolate selection from any value
+edit — but instrument, mute, custom-button, and mix/monitor selection states were not observed, so
+this is not a complete enum. This byte is listed in PROTOCOL.md's "fields known to the schema but with
+no UI id yet" (bytes 54–56) and was previously guessed (unverified) to relate to custom-button
+long-press configuration; that guess is now **contradicted** by this evidence — the correlation here
+is clearly with channel selection, not with the custom-button group. PROTOCOL.md updated accordingly
+(§11).
+
+**What it is *not*, based on this evidence:** a simple "number of edits" or "settings revision"
+counter — it held constant (`04`→`04`) across a second real edit to the same channel (Test 2), and
+changed to a *lower* value (`04`→`01`) on a later edit (Test 3), which a monotonic counter cannot
+explain. Distinguishing a genuine "last selected channel" status byte from a coincidental sync/UI
+artifact would benefit from one more data point (e.g. instrument-select) in a future session.
+
+### 10.6 Summary table
+
+| # | Control tested | Offset(s) | Field | Result |
+|---|---|---|---|---|
+| 1 | Headphone volume wheel (down) | 27–28 | `kHeadphoneVolume` | **CONFIRMED** |
+| 2 | Headphone volume wheel (restore) | 27–28 | `kHeadphoneVolume` | **CONFIRMED** (repeat) |
+| 3 | Microphone gain wheel (+1 notch) | 0–1 | `kGain[0]` | **CONFIRMED** |
+| 4 | Speaker-select (no edit) | 56 | *(new: selected-channel indicator)* | **PARTIALLY CONFIRMED** |
+| 5 | Mic-select (no edit, after intervening presses) | 56 | *(new: selected-channel indicator)* | **PARTIALLY CONFIRMED** (repeat, predicted in advance and matched exactly) |
+
+No unexpected changes: in every test, only the bytes listed above moved; every other byte in the
+128-byte struct (including all LED colour bytes, custom-button byte 53, external-gain-lock, etc.)
+stayed constant across all five tests. `/proc/asound/cards` showed the card present and unchanged
+after every single read in this session; no writes, claims, detaches, resets, or firmware operations
+were performed at any point.
+
+## 11. Open items after this session
+
+* Byte 56 ("selected channel" status, see §10.5) needs one more confirming data point (instrument,
+  mute, or custom-button selection) before being treated as fully understood; still not given a name
+  in `settings_off` pending that.
+* The `version`/`api` identical-payload anomaly (§7b) remains uninvestigated, as instructed —
+  deliberately not explained without further evidence.
+* Instrument gain, mute toggles, Dim (not present on this unit's front panel — see FEATURES.md),
+  Mono, speaker mute, Clipguard, and preamp style have not yet been physically tested.
+* No write test has been proposed or executed. This session stayed entirely within plan step 9.

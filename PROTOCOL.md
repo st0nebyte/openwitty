@@ -48,7 +48,7 @@ Also: *"Device must be opened in APP mode."* when the device-info DFU flag
 0x100003c70 / 0x100005d50), vtable of `PackedStructMessage<lewitt_api_t,…>`
 at 0x10084fc98 (slot 0 `mov eax,0xa`; slot 3 `xor eax,eax`; slot 4 `0x40`).
 Byte 0 = major, byte 1 = minor is read from a `pmovzxbw` of two bytes (medium
-confidence, now **hardware-confirmed**: real CONNECT 2, serial `XXXXXXXXXXXX`,
+confidence, now **hardware-confirmed**: a real CONNECT 2 (serial redacted)
 returned byte0=`0x01`/byte1=`0x00` for this GET — see
 `docs/HARDWARE_TEST_RESULTS.md` §4); bytes 2..63 are **not unknown-and-presumed-zero
 any more** — the real device returned non-zero, partially-ASCII data there
@@ -177,6 +177,21 @@ is written back, so they must round-trip). Field list (offset:length):
 Fields known to the schema but with no UI id yet: 8, 17, 25, 26, 30, 54–56,
 58, 60–62, 63–66 (u32?), 68–69, 70.
 
+**Hardware-confirmed 2026-10-14** (`docs/HARDWARE_TEST_RESULTS.md` §10): physically turning the mic
+gain wheel and the headphone volume wheel on a real CONNECT 2 and diffing `read settings --interface
+3` before/after confirms offsets 0–1 (`kGain[0]`, mic gain) and 27–28 (`kHeadphoneVolume`) exactly —
+the predicted field, and only that field (plus byte 56, see next paragraph), changed, by the exact
+dB amount expected. First real (non-tautological) validation of any settings offset on this project.
+
+**Byte 56 — partially identified, hardware-confirmed 2026-10-14** (`docs/HARDWARE_TEST_RESULTS.md`
+§10.5): repeatedly and predictably changes to reflect which channel is currently *selected* on the
+touch surface (`0x01`=microphone, `0x03`=speaker, `0x04`=headphone observed so far), **independent of
+any value edit** — confirmed by pressing a select button alone, with no wheel turn, and seeing only
+this byte move. This **contradicts** the unverified guess below (§"CustomButton (byte 53)") that
+bytes 54–56 relate to custom-button long-press configuration; that guess should be treated as
+superseded for byte 56 specifically (54–55 remain unmapped). Not yet a complete enum (instrument,
+mute, custom-button and mix/monitor selection states unobserved).
+
 Sync loop (every tick; `LewittDevice::tick`): snapshot ← current;
 `readStatus()`; optionally `readSettings()`; then for each schema field, if
 `pending != snapshot` **or** (the device's current value differs from the
@@ -206,7 +221,9 @@ radio at member offset *k* belongs to the label at `k − 0x4F` qwords):
 
 Values 3–7, 10, 11 are not offered. "…ShortPress" implies a long-press
 setting; the neighbouring bytes 54–56 are in the schema but unmapped
-(unverified guess). macOS ctor call sites were not found (no direct calls).
+(unverified guess — **superseded for byte 56 by hardware evidence 2026-10-14**: byte 56 tracks
+touch-surface channel selection, not custom-button configuration; see the note above the schema field
+list). macOS ctor call sites were not found (no direct calls).
 
 ### MixToSpeakers / OutputSource (byte 23)  [V-bin, medium]
 The Settings UI binds this value to a `CapsuleToggleButton` via
@@ -307,7 +324,8 @@ real CONNECT 2 on 2026-10-14 (`docs/HARDWARE_TEST_RESULTS.md`). Everything else 
 static-analysis-only.
 
 ### Not found / still open
-* `OutputSource` enumerator names; bytes 54–56, 58, 60–70 semantics.
+* `OutputSource` enumerator names; bytes 54–55, 58, 60–70 semantics (byte 56 partially identified,
+  see the hardware-confirmed note earlier in this file — not a complete enum yet).
 * Authoritative range for the input/playback mix value (Q8.8 sign-inverted).
 * `iface_version_t` layout (no consumer).
 * Windows has not been re-traced for the above (same codebase; cross-check of

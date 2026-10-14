@@ -78,7 +78,7 @@ needs the device. Nothing here is hardware-verified.
 
 First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what changed:
 
-* **Option C is no longer hypothetical.** The CONNECT 2 (serial `XXXXXXXXXXXX`, bcdDevice `0121`)
+* **Option C is no longer hypothetical.** The CONNECT 2 (serial redacted, bcdDevice `0121`)
   exposes interface 3, class `ff/f0/00` (vendor-specific, 0 endpoints), unbound to any driver. A
   read-only GET (`req=0x03`, `wValue=0x000A`, `wIndex=0x3303`) addressed to it succeeded: 64 bytes
   back, byte0/1 matching the documented API-handshake shape (major=1), with additional structured
