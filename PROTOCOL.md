@@ -47,48 +47,48 @@ written back; setters edit this one). Writes therefore send the **entire**
 
 ## iface_settings_t field map  [V-bin offsets, ? semantics]
 
-Offsets exact (from getter/setter lambdas in `buildConnect2Tree`). Labels are
-the app's own `juce::Identifier` names; the group a field belongs to is
-inferred from build order and may be shifted by one in places.
+Authoritative copy lives in `src/protocol/Messages.hpp` (`settings_off`).
+Input N fields (N=1 / N=2): gain i16 Q8.8 @0/10 (setter clamps 0…0x5500 =
+0…85 dB), mute @2/12, high-pass @3/13, Clipguard @4/14, preamp type @6/15
+(0 Clean, 1 Warm, 2 Vivid), denoise @7/16, compress @9/18; phantom power @5
+(input 1 only; input 2 not located). Output-side: mute @19, volume i16 @20,
+mute @22, OutputSource @23, bool @24, volume i16 @27 (setter clamp
+-60…0 dB), mute @29, bool @31, dim @32, mono @33, flag @34, balance i16 @35
+(sign inverted), custom-button action @53, native-volume mapping @59.
+Group semantics for 19–35 are provisional. Anything not listed is unknown;
+read-modify-write preserves it.
 
-| off | type | name / meaning | encoding |
-|-----|------|----------------|----------|
-| 0   | i16  | Input 1 gain   | Q8.8 dB; setter clamps 0…0x5500 (0…85 dB) |
-| 2   | u8   | Input 1 mute   | bool |
-| 3   | u8   | Input 1 high-pass filter | bool |
-| 4   | u8   | Input 1 Clipguard | bool |
-| 5   | u8   | Input 1 phantom power | bool (**safety relevant**) |
-| 6   | u8   | Input 1 preamp type | 0 Clean, 1 Warm, 2 Vivid |
-| 7   | u8   | Input 1 denoise | bool |
-| 9   | u8   | Input 1 compress | bool |
-| 10  | i16  | Input 2 gain   | Q8.8 dB |
-| 12  | u8   | Input 2 mute |
-| 13  | u8   | Input 2 high-pass |
-| 14  | u8   | Input 2 Clipguard |
-| 15  | u8   | Input 2 preamp type | as 6 |
-| 16  | u8   | Input 2 denoise |
-| 18  | u8   | Input 2 compress |
-| 19  | u8   | mute (output group, ?) |
-| 20  | i16  | volume (output group, ?) | Q8.8 |
-| 22  | u8   | mute (?) |
-| 23  | u8   | OutputSource enum |
-| 24  | u8   | "HighVolumeSpeaker" bool |
-| 27  | i16  | volume (?) | Q8.8, setter clamps ≤ 0xC400 as shown |
-| 29  | u8   | mute (?) |
-| 31  | u8   | bool (paired with OutputSource, ?) |
-| 32  | u8   | Dim | bool |
-| 33  | u8   | Mono | bool |
-| 34  | u8   | Monitor microphone / instrument (shared flag, ?) |
-| 35  | i16  | Balance | Q8.8, sign inverted |
-| 37  | u8   | LED brightness (?) |
-| 38,40 | u8,u8 | "Icons" (two bytes combined, ?) |
-| 41,43 / 44,46 / 47,49 / 50,52 | | "Mute"/"Parameter"/"Metering"/"GainReduction" byte pairs (DSP/UI related, ?) |
-| 53  | u8   | CustomButtonShortPress enum (hardware button action) |
-| 57  | u8   | bool (ExternalGainControl related, ?) |
-| 59  | u8   | NativeVolumeControlMapping enum |
-| 67  | u8   | "MobileStreaming" bool (? — name likely belongs to a neighbour) |
+## iface_status_t (0x40)  [V-bin offsets]
 
-Anything not listed is unknown. Do not write unknown bytes.
+Data starts at app-object offset 0x250, so status offset = disp − 0x250.
+
+| off | type | meaning |
+|-----|------|---------|
+| 0x00 | i16 Q8.8 | input 1 level; app clamps to [-60, 0] dB |
+| 0x02 | u8 | input 1 "Gain" (auto-gain result, integer dB?) |
+| 0x09 | i16 Q8.8 | input 2 level |
+| 0x0B | u8 | input 2 "Gain" |
+| 0x12,0x14,0x16,0x18,0x1A,0x1C | i16 Q8.8 | further L/R level pairs (output/mix meters, assignment ?) |
+| 0x23 | u8 | auto-setup result bits: bit6 ⇒ result 0; else bit5 ? 2 : 1 |
+| 0x24 | u8 | auto-setup progress |
+| 0x2E,0x30 | u16 | clip flags, compared against previous snapshot |
+
+## iface_triggers_t (0x40, write-only)  [V-bin values, ? meaning]
+
+The app writes a u16 at offset 0 of the trigger buffer from UI callbacks.
+Values: 1, 2, 3 (auto-gain input 1 / input 2 / both), 6, 7, 8 (denoise
+measurement 1 / 2 / both), 0x103 and 0x106 (attached to "ResetLedColors"
+callbacks — treated as unknown, **never sent**). Assignment is inferred from
+callback order and is unverified.
+
+## iface_version_t (0x40)  [?]
+
+Layout not recovered. `getCurrentMode()` maps USB PID 0x0004 → one mode and
+0x0002 → the other (anything else throws), so PIDs 0x0002/0x0004 are the two
+operating modes; 0x000A is probably DFU/bootloader. The request variant flag
+(0x85/0x05 vs 3) is set in `Connect2Device::open()` when a u16 in the base
+device object at +0x56 is ≥ 0x0b (likely a firmware/version number) —
+replacing the earlier "bcdADC" guess.
 
 ## Device identity  [V-bin]
 
@@ -98,20 +98,9 @@ Static initializer `Connect2.cpp` builds device configs with VID **0x29C2**
 uses PID 0xFFFF. Which of the three Connect 2 PIDs is normal mode vs.
 DFU/bootloader/variant is **unknown** [?].
 
-## Linux access problem (important)  [?→ needs hardware]
+## Linux access problem
 
-usbfs only permits interface-recipient control requests on an interface the
-caller has **claimed**. The AudioControl interface is bound to
-`snd-usb-audio`, so a naive userspace tool must detach it, which removes the
-whole sound card for the duration. That conflicts with the
-"don't interfere with audio" requirement. Options to evaluate with hardware:
-
-1. Accept brief detach/reattach (current `transport.py`, gated behind `--allow-detach`).
-2. Check whether the firmware routes purely on unit ID `0x33` and ignores
-   the interface byte → a different, unbound interface might work. Pure guess.
-3. A small kernel-side quirk/helper (hard; distribution-hostile).
-4. Does the Linux snd-usb-audio already expose unit 0x33 as extension-unit
-   controls in ALSA (`amixer -c N contents`)? Worth dumping first.
+See `docs/USB_ACCESS.md` (kernel-source-verified analysis and probe plan).
 
 ## Not yet examined
 

@@ -1,9 +1,18 @@
 # TODO
 
-1. **Needs hardware**: plug in CONNECT 2, run `lewitt-connect2 list`, record real VID/PID and interface list; `amixer -c N contents`; confirm UAC1/UAC2 request variant.
-2. **Needs user**: `sudo apt install innoextract`, then extract the Windows installer (`research/win`) to cross-check the protocol and pull UI assets.
-3. Disassemble: write path / tick cadence, `iface_status_t`, `iface_version_t`, `iface_triggers_t`.
-4. Resolve Linux access problem (see PROTOCOL.md).
-5. Decide GUI stack (Qt 6/QML preferred; `qmake6` not installed here).
-6. Preset import/export (`.preset` JSON) once settings semantics are confirmed.
-7. Packaging (deb, PKGBUILD) once there is something to package.
+## Needs the device (do in this order, read-only first)
+1. `lewitt-cli list`; record VID/PID + descriptors (`lsusb -v`), `amixer -c N contents`.
+2. `lewitt-cli probe` (dry run), then `probe --execute` (GETs only) — decides the access method.
+3. Version → status → settings reads; compare with the official app / front panel.
+4. Propose one low-risk write test (e.g. mute toggle) for explicit approval.
+
+## Needs the user
+* `sudo apt install innoextract` → extract Windows installer, cross-check protocol & assets.
+
+## Engineering
+* Recover `iface_version_t` layout; identify which settings groups are headphone/speaker.
+* Disassemble the write path & tick cadence (`Connect2Device::tick`).
+* Preset import/export (`.preset` JSON as shipped by the app).
+* Visual fidelity: extract/inspect UI assets from the app (not yet done; current QML is an independent layout).
+* Packaging (deb/PKGBUILD/AppImage), udev rule in `packaging/udev`.
+* Kernel hwdep patch only if probe fails (docs/USB_ACCESS.md).
