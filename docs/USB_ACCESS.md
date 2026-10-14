@@ -34,6 +34,20 @@ master, fetched during this session), **[bin]** macOS app disassembly,
    controls — the accepted in-tree pattern for "vendor protocol on a class
    audio interface".
 
+## Three separate problems (do not conflate)
+| Problem | Error seen | Cause | Fixable without root? |
+|---|---|---|---|
+| File permission on `/dev/bus/usb/BBB/DDD` | `EACCES` / `LIBUSB_ERROR_ACCESS` at *open* | node owned by root:root 0664 without a uaccess/udev rule | **No** — needs a system udev rule (or the desktop's `uaccess` tag). Check with `ls -l` first |
+| Interface owned by `snd-usb-audio` | `EBUSY` / `LIBUSB_ERROR_BUSY` at *transfer* | kernel driver binding; usbfs claim refused (verified in devio.c) | Not by permissions. Only device-recipient/unbound-interface variants (untested) or a kernel change |
+| Device rejects the request | `EPIPE` / `LIBUSB_ERROR_PIPE` (stall) | wrong bRequest/recipient/wValue for this firmware | Yes — it is a protocol question |
+
+`UsbTransport` maps these to `Errc::AccessDenied`, `Errc::Busy` and
+`Errc::Stall` respectively (unit-tested). Without root, only the *second* and
+*third* rows can be investigated; if the first applies the user needs a udev
+rule from an administrator (`packaging/udev/99-lewitt-connect2.rules`).
+On Windows none of this arises because Thesycon's driver exposes the control
+requests in its own API.
+
 ## What is *not* known  [hw]
 * Whether the firmware accepts the same request with *device* recipient, or
   with a different interface number in wIndex's low byte (it may route purely

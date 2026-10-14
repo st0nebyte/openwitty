@@ -140,3 +140,32 @@ TEST(Trigger, Encoding) {
     auto u = TriggerMessage(Trigger::Unknown0x103).bytes();
     EXPECT_EQ(u[0], 0x03); EXPECT_EQ(u[1], 0x01);
 }
+
+TEST(Settings, UnknownEnumValuesSurviveRoundTrip) {
+    auto b = blob(0x80);
+    b[6] = 7;       // preamp byte outside 0..2: unknown firmware value
+    b[53] = 0xEE;   // custom button action: unknown enum
+    auto s = SettingsMessage::fromBytes(b).value();
+    EXPECT_EQ(s.preampRaw(0), 7);
+    EXPECT_EQ(s.customButton(), 0xEE);
+    EXPECT_EQ(s.bytes()[6], 7);
+    EXPECT_FALSE(s.setPreamp(0, static_cast<PreampType>(9)).ok());
+    EXPECT_EQ(s.preampRaw(0), 7);  // rejected write left byte untouched
+}
+
+TEST(Settings, OffsetsAreDisjoint) {
+    // Setting each known field must change only its own byte(s).
+    auto base = blob(0x80);
+    auto count = [&](auto&& mut) {
+        auto s = SettingsMessage::fromBytes(base).value();
+        mut(s);
+        int n = 0;
+        for (std::size_t i = 0; i < 0x80; ++i) n += s.bytes()[i] != base[i];
+        return n;
+    };
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setMute(0, true); }), 1);
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setHighPass(1, true); }), 1);
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setPhantom1(true); }), 1);
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setCompress(1, true); }), 1);
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setGainDb(1, 85.0); }), 1);  // 0x5500 LE = 00 55
+}

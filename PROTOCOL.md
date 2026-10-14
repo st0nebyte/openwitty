@@ -81,13 +81,17 @@ measurement 1 / 2 / both), 0x103 and 0x106 (attached to "ResetLedColors"
 callbacks — treated as unknown, **never sent**). Assignment is inferred from
 callback order and is unverified.
 
-## iface_version_t (0x40)  [?]
+## iface_version_t (0x40)  [V-bin: no typed consumer]
 
-Layout not recovered. `getCurrentMode()` maps USB PID 0x0004 → one mode and
+Layout not recovered, and probably not recoverable from the app: the message
+object's vtable is referenced in exactly one place (the `Connect2Device`
+constructor inside `LewittDeviceManager::refresh`, which zero-initialises it);
+no code decodes its fields. Treat as opaque; capture it from hardware.
+ `getCurrentMode()` maps USB PID 0x0004 → one mode and
 0x0002 → the other (anything else throws), so PIDs 0x0002/0x0004 are the two
 operating modes; 0x000A is probably DFU/bootloader. The request variant flag
 (0x85/0x05 vs 3) is set in `Connect2Device::open()` when a u16 in the base
-device object at +0x56 is ≥ 0x0b (likely a firmware/version number) —
+device object at +0x56 is ≥ 0x0b (inside the device-info block: +0x50 VID, +0x52 PID as used by `getCurrentMode`, +0x56 probably the USB `bcdDevice`/firmware version — unverified) —
 replacing the earlier "bcdADC" guess.
 
 ## Device identity  [V-bin]
@@ -109,3 +113,11 @@ See `docs/USB_ACCESS.md` (kernel-source-verified analysis and probe plan).
 * Write path (`Connect2Device::writeSettings`-equivalent), tick cadence.
 * Firmware download (DFU) — **will not be implemented without explicit permission**.
 * Windows build (Inno Setup, needs `innoextract`) — expected to share the protocol.
+
+## Windows build cross-check  [V-bin, partial]
+Same C++ codebase (identical `LWT::Connect2::APIv1`, `buildConnect2Tree`,
+`doAsyncFWDownload` RTTI). Transport on Windows is Thesycon's user API
+(`TUSBAUDIO_AudioControlRequestGet/Set`, `ClassVendorRequestIn/Out`), i.e. the
+driver issues the requests; byte-level equivalence with the macOS
+`0xA1/0x21` + MEM requests has NOT been checked in the (stripped) Windows
+binary. Windows function-level verification is still open.

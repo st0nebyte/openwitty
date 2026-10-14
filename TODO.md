@@ -7,9 +7,12 @@
 4. Propose one low-risk write test (e.g. mute toggle) for explicit approval.
 
 ## Needs the user
-* `sudo apt install innoextract` → extract Windows installer, cross-check protocol & assets.
+* Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).
+* If `ls -l /dev/bus/usb/...` shows no write access for the user, an admin must add the udev rule (not fixable without root).
 
 ## Engineering
+* Windows binary: recover `AudioControlRequestGet/Set` call sites with REA/Ghidra and confirm bmRequestType/bRequest/wValue/wIndex match macOS.
+* Use REA MCP session for iterative function/xref work (CLI re-imports each call, ~2 min).
 * Recover `iface_version_t` layout; identify which settings groups are headphone/speaker.
 * Disassemble the write path & tick cadence (`Connect2Device::tick`).
 * Preset import/export (`.preset` JSON as shipped by the app).

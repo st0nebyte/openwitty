@@ -1,14 +1,16 @@
 # Development
 
-## Dependencies
-Ubuntu/Debian:
-`sudo apt install build-essential cmake ninja-build pkg-config libusb-1.0-0-dev libgtest-dev qt6-base-dev qt6-declarative-dev qml6-module-qtquick qml6-module-qtquick-window libasound2-dev`
-Arch/CachyOS: `sudo pacman -S base-devel cmake ninja libusb gtest qt6-base qt6-declarative alsa-lib`
+## Dependencies (no root required)
+`tools/setup-sysroot.sh` downloads the needed Ubuntu `.deb`s and unpacks them
+into `./.sysroot` (git-ignored), reusing system runtime libs. The script
+prints the environment variables to export. Reverse-engineering tools
+(Node 24, JDK 21, Ghidra, innoextract, REA) are bootstrapped by
+`tools/setup-rootless.sh` into `./.tools`; see
+`docs/REVERSE_ENGINEERING_TOOLS.md`.
 
-Without root (what this repo's author did): `apt-get download` the packages
-and `dpkg -x` them into `./.sysroot` (git-ignored), then set
-`PKG_CONFIG_PATH`, `PKG_CONFIG_SYSROOT_DIR`, `CMAKE_PREFIX_PATH`,
-`LD_LIBRARY_PATH`, `QML_IMPORT_PATH` accordingly.
+With root, the equivalent system packages are:
+Ubuntu/Debian `build-essential cmake ninja-build pkg-config libusb-1.0-0-dev libgtest-dev qt6-base-dev qt6-declarative-dev qml6-module-qtquick qml6-module-qtquick-window libasound2-dev`;
+Arch/CachyOS `base-devel cmake ninja libusb gtest qt6-base qt6-declarative alsa-lib`.
 
 ## Build / test
 ```

@@ -6,6 +6,10 @@ struct libusb_device_handle;
 
 namespace lewitt {
 
+// Maps a libusb error code to our taxonomy. EACCES (file permission), EBUSY
+// (claimed by another driver) and EPIPE (device stall) are deliberately distinct.
+Error mapLibusbError(int libusbErrorCode, const char* what);
+
 // Which control-request variant to use. Which one the device wants is
 // unverified; Uac2Mem is what the macOS app uses for older/default firmware,
 // Uac1Mem is selected there when a version-like field is >= 0x0b.

@@ -110,3 +110,75 @@ TEST(UsbTransport, WritesRefusedByDefault) {
     ASSERT_FALSE(s.ok());
     EXPECT_EQ(s.error().code, Errc::WritesDisabled);
 }
+
+// --- error taxonomy: permission vs. claimed interface vs. stall ---------
+#include <libusb.h>
+TEST(UsbErrors, PermissionBusyStallAreDistinct) {
+    auto acc = mapLibusbError(LIBUSB_ERROR_ACCESS, "open");
+    auto busy = mapLibusbError(LIBUSB_ERROR_BUSY, "ctrl");
+    auto pipe = mapLibusbError(LIBUSB_ERROR_PIPE, "ctrl");
+    auto nodev = mapLibusbError(LIBUSB_ERROR_NO_DEVICE, "ctrl");
+    auto tmo = mapLibusbError(LIBUSB_ERROR_TIMEOUT, "ctrl");
+    EXPECT_EQ(acc.code, Errc::AccessDenied);
+    EXPECT_EQ(busy.code, Errc::Busy);
+    EXPECT_EQ(pipe.code, Errc::Stall);
+    EXPECT_EQ(nodev.code, Errc::Disconnected);
+    EXPECT_EQ(tmo.code, Errc::Timeout);
+    EXPECT_NE(acc.message.find("udev"), std::string::npos);
+    EXPECT_NE(busy.message.find("ownership"), std::string::npos);
+}
+
+TEST(Session, StallKeepsConnection) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->injectFault(MockTransport::Fault::Stall);
+    EXPECT_EQ(f.session->refreshStatus().error().code, Errc::Stall);
+    EXPECT_EQ(f.session->state(), ConnectionState::Connected);  // a stall is not a disconnect
+    EXPECT_TRUE(f.session->refreshStatus().ok());
+}
+
+TEST(Session, FailedCommitKeepsPendingAndSettings) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setMute(0, true); }).ok());
+    f.mock->injectFault(MockTransport::Fault::Timeout);
+    EXPECT_EQ(f.session->commit().error().code, Errc::Timeout);
+    EXPECT_FALSE(f.session->settings()->mute(0));  // device state unchanged
+    EXPECT_TRUE(f.session->dirty());               // edit not lost
+    EXPECT_TRUE(f.session->commit().ok());         // retry succeeds
+    EXPECT_TRUE(f.session->settings()->mute(0));
+}
+
+TEST(Session, WritesDisabledForRealPolicy) {
+    // A non-simulated transport + default policy must refuse commit and triggers.
+    struct Fake final : IDeviceTransport {
+        std::string name() const override { return "fake-hw"; }
+        Status open() override { open_ = true; return okStatus(); }
+        void close() override { open_ = false; }
+        bool isOpen() const override { return open_; }
+        DeviceInfo info() const override { return {}; }
+        Result<Bytes> read(MessageId id) override {
+            return Bytes(messageInfo(id)->size, 0);
+        }
+        Status write(MessageId, std::span<const std::uint8_t>) override { ++writes; return okStatus(); }
+        bool open_{false}; int writes{0};
+    };
+    auto t = std::make_unique<Fake>();
+    Fake* raw = t.get();
+    DeviceSession s(std::move(t));
+    ASSERT_TRUE(s.connect().ok());
+    EXPECT_FALSE(s.writesEnabled());
+    ASSERT_TRUE(s.edit([](SettingsMessage& m) { return m.setDim(true); }).ok());
+    EXPECT_EQ(s.commit().error().code, Errc::WritesDisabled);
+    EXPECT_EQ(s.sendTrigger(Trigger::AutoGainBoth).error().code, Errc::WritesDisabled);
+    EXPECT_EQ(raw->writes, 0);
+}
+
+TEST(Session, DisconnectClearsState) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.session->disconnect();
+    EXPECT_FALSE(f.session->settings().has_value());
+    EXPECT_FALSE(f.session->status().has_value());
+    EXPECT_EQ(f.session->state(), ConnectionState::Disconnected);
+}
