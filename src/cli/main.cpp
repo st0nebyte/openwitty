@@ -1,4 +1,4 @@
-// openwitty-cli: read-only diagnostic tool. There is NO write command.
+// openwitty-cli: read-only diagnostic tool, plus ONE narrowly-scoped experimental write command.
 //
 //   devices                 enumerate LEWITT devices from sysfs: descriptors, interfaces,
 //                           endpoints, bound kernel drivers, usbfs node permissions (no USB I/O)
@@ -7,6 +7,13 @@
 //                           one read-only control transfer; errors are classified
 //   probe [--execute]       dry-run (default) or run a small matrix of GET-only experiments
 //   list                    quick libusb enumeration (VID/PID only)
+//   write led-brightness <0-100> [--execute] [--interface N] [--mock]
+//                           EXPERIMENTAL, gated real write (settings byte 37 only; see
+//                           cmdWriteLedBrightness below for the full safety rationale). Without
+//                           --execute this only computes and prints a dry-run proposal; no USB
+//                           write is ever sent. With --execute against real hardware it additionally
+//                           requires LEWITT_ALLOW_HARDWARE_WRITE=1. There is no other write command,
+//                           no generic field/byte setter, and no trigger-message write here.
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
 //           LEWITT_ALLOW_DISRUPTIVE=1 as well).  Requests: uac2 (default) | uac1.
@@ -191,6 +198,142 @@ int cmdRead(const ReadArgs& a) {
     return 0;
 }
 
+// Experimental, narrowly-scoped write path. The ONLY thing this can ever write is LED
+// brightness (settings byte 37 / settings_off::kLedBrightness) via SettingsMessage::setLedBrightness,
+// which clamps to 0..100 and touches no other byte. There is no generic "set any field" or
+// "set any byte" command, and no trigger-message write command, on this CLI.
+//
+// Safety, all enforced below or by already-reviewed/tested DeviceSession/WriteGuard code it calls
+// into (nothing here bypasses that machinery):
+//   - handshake() (inside session.connect()) already verifies API major==1 and that the USB PID is
+//     a recognized CONNECT 2 APP mode before any settings I/O happens.
+//   - session.connect() performs a fresh settings read (refreshSettings()) immediately before any
+//     edit is computed; nothing is cached across CLI invocations (each run is a fresh process).
+//   - edit() copies the just-read full 128-byte struct and changes only byte 37; every other byte,
+//     known or reserved, is preserved verbatim.
+//   - Before even attempting a write, this command independently recomputes the before/after byte
+//     diff and refuses (even with --execute) unless EXACTLY byte 37 differs — stricter than, and in
+//     addition to, WriteGuard's generic verifyOnlyKnownFieldsChanged allowlist that commit() already
+//     runs.
+//   - commit() (existing, tested code) re-checks size/permission, refuses routing/trigger/mode-switch
+//     writes, performs the one write, then re-reads settings to report the real post-write state.
+//   - Real-hardware writes need BOTH `--execute` AND LEWITT_ALLOW_DISRUPTIVE-style explicit opt-in
+//     (LEWITT_ALLOW_HARDWARE_WRITE=1) and a transport with allowWrites set only for this invocation;
+//     without --execute this only ever reads and prints a dry-run proposal, no write is sent.
+//   - Always interface 3 by default (the only interface confirmed to answer this device's protocol
+//     without disturbing snd-usb-audio); never interface 4 (DFU) or interface 0 (kernel-owned, and
+//     writes there aren't attempted by this command regardless).
+//   - No detach, no claim beyond what UsbTransport's InterfaceRecipient path already does for reads
+//     (none), no reset, no mode switch, no trigger words, no DFU.
+#ifdef LEWITT_HAVE_USB
+struct WriteLedArgs {
+    int percent{-1};
+    bool execute{false};
+    int interfaceNumber{3};   // the only hardware-confirmed working interface for this device
+    bool mock{false};
+    bool bad{false};
+};
+
+WriteLedArgs parseWriteLed(int argc, char** argv, int first) {
+    WriteLedArgs a;
+    if (first < argc) a.percent = std::atoi(argv[first]);
+    for (int i = first + 1; i < argc; ++i) {
+        if (!std::strcmp(argv[i], "--execute")) a.execute = true;
+        else if (!std::strcmp(argv[i], "--mock")) a.mock = true;
+        else if (!std::strcmp(argv[i], "--interface") && i + 1 < argc) a.interfaceNumber = std::atoi(argv[++i]);
+        else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); a.bad = true; }
+    }
+    return a;
+}
+
+const char* modeName(DeviceMode m) {
+    switch (m) {
+        case DeviceMode::Normal: return "normal (APP, PID 0x0004)";
+        case DeviceMode::MacOSStreaming: return "macOS streaming (APP, PID 0x0002)";
+        default: return "unknown / not a recognized CONNECT 2 APP mode";
+    }
+}
+
+int cmdWriteLedBrightness(const WriteLedArgs& a) {
+    if (a.percent < 0 || a.percent > 100) {
+        std::fprintf(stderr, "led-brightness must be 0..100\n");
+        return 64;
+    }
+    if (a.execute && !a.mock && !std::getenv("LEWITT_ALLOW_HARDWARE_WRITE")) {
+        std::fprintf(stderr,
+                     "refused: --execute against real hardware needs LEWITT_ALLOW_HARDWARE_WRITE=1 "
+                     "(this sends a real MEM SET to the device; without it, nothing is written)\n");
+        return 2;
+    }
+    std::unique_ptr<IDeviceTransport> t;
+    WritePolicy pol;
+    if (a.mock) {
+        t = std::make_unique<MockTransport>();
+    } else {
+        for (const auto& r : scanSysfs(kLewittVendorId))
+            if (!r.nodeWritable)
+                std::fprintf(stderr, "note: %s is not writable for this user; opening will fail with EACCES\n",
+                             r.usbfsNode.c_str());
+        UsbOptions o;
+        o.method = AccessMethod::InterfaceRecipient;
+        o.request = MemRequest::Uac2Mem;
+        o.interfaceNumber = a.interfaceNumber;
+        o.allowWrites = a.execute;   // transport-level: no write ioctl is even attempted on a dry run
+        t = std::make_unique<UsbTransport>(o);
+    }
+    pol.allowHardwareWrites = a.execute;   // session-level gate; irrelevant for mock (always writable)
+    DeviceSession session(std::move(t), pol);
+    if (auto s = session.connect(); !s) { printError(s.error(), "connect"); return exitCodeFor(s.error().code); }
+    std::printf("device: pid=0x%04x mode=%s api=%u.%u%s\n", session.info().pid, modeName(session.capabilities().mode),
+                session.capabilities().apiMajor, session.capabilities().apiMinor,
+                session.isSimulated() ? "  [SIMULATED]" : "");
+    if (!session.settings()) { std::fprintf(stderr, "no settings available after connect\n"); return 1; }
+    SettingsMessage before = *session.settings();
+    int beforeBrightness = before.ledBrightness();
+    if (auto s = session.edit([&a](SettingsMessage& m) { return m.setLedBrightness(a.percent); }); !s) {
+        printError(s.error(), "edit");
+        return exitCodeFor(s.error().code);
+    }
+    SettingsMessage proposed = *session.pendingSettings();
+    auto bb = before.bytes();
+    auto pb = proposed.bytes();
+    std::vector<std::size_t> diffs;
+    for (std::size_t i = 0; i < bb.size(); ++i)
+        if (bb[i] != pb[i]) diffs.push_back(i);
+    std::printf("request (if sent): bm=0x21 req=0x03 wValue=0x%04x wIndex=0x%04x wLength=0x%02zx timeout=500ms\n",
+                wValueFor(MessageId::Settings), wIndexFor(static_cast<std::uint8_t>(a.interfaceNumber)), bb.size());
+    std::printf("original LED brightness: %d\n", beforeBrightness);
+    std::printf("proposed LED brightness: %d\n", a.percent);
+    std::printf("changed byte offsets: ");
+    for (auto i : diffs) std::printf("%zu ", i);
+    std::puts(diffs.empty() ? "(none; already at this value)" : "");
+    std::printf("byte 37: original=0x%02x proposed=0x%02x\n", bb[37], pb[37]);
+    std::printf("original raw="); hex(bb);
+    std::printf("proposed raw="); hex(pb);
+    // Independent, stricter-than-WriteGuard safety check: refuse to even attempt the write unless
+    // the diff is exactly the one byte we intend to change.
+    if (!diffs.empty() && (diffs.size() != 1 || diffs[0] != 37)) {
+        std::fprintf(stderr, "abort: unexpected byte diff shape (expected only offset 37); refusing to write\n");
+        return 1;
+    }
+    if (!a.execute) {
+        std::puts("dry run only; no USB write was sent. Pass --execute (and, on real hardware, set "
+                  "LEWITT_ALLOW_HARDWARE_WRITE=1) to actually send this write.");
+        return 0;
+    }
+    if (diffs.empty()) {
+        std::puts("nothing to write: proposed value equals the current device value");
+        return 0;
+    }
+    if (auto s = session.commit(); !s) { printError(s.error(), "commit"); return exitCodeFor(s.error().code); }
+    if (!session.settings()) { std::fprintf(stderr, "commit succeeded but post-write read is missing\n"); return 1; }
+    const SettingsMessage& after = *session.settings();
+    std::printf("post-write read-back LED brightness: %d\n", after.ledBrightness());
+    std::printf("post-write raw="); hex(after.bytes());
+    return 0;
+}
+#endif  // LEWITT_HAVE_USB
+
 #ifndef LEWITT_HAVE_USB
 int cmdProbe(bool) {
     std::puts("this build has no USB support (mock-only build); nothing to probe");
@@ -276,8 +419,12 @@ int main(int argc, char** argv) {
                      "usage: openwitty-cli devices | diagnose | list | probe [--execute] |\n"
                      "                  read <api|version|status|settings> [--method interface|device-recipient|detach]\n"
                      "                       [--request uac2|uac1] [--interface N] [--mock]\n"
-                     "read-only tool: it never writes to the device. --method detach is disruptive and also\n"
-                     "needs LEWITT_ALLOW_DISRUPTIVE=1.\n");
+                     "                  write led-brightness <0-100> [--execute] [--interface N] [--mock]\n"
+                     "this tool is read-only by default. --method detach is disruptive and needs\n"
+                     "LEWITT_ALLOW_DISRUPTIVE=1. 'write led-brightness' is the ONE narrowly-scoped experimental\n"
+                     "write command (nothing else can be written); without --execute it only prints a dry-run\n"
+                     "proposal and sends no USB write; with --execute on real hardware it additionally needs\n"
+                     "LEWITT_ALLOW_HARDWARE_WRITE=1.\n");
         return 64;
     }
     std::string cmd = argv[1];
@@ -303,6 +450,17 @@ int main(int argc, char** argv) {
         if (a.bad || a.what.empty()) return 64;
         return cmdRead(a);
     }
+#ifdef LEWITT_HAVE_USB
+    if (cmd == "write") {
+        if (argc < 3 || std::string(argv[2]) != "led-brightness") {
+            std::fprintf(stderr, "write what? only 'led-brightness <0-100>' is implemented\n");
+            return 64;
+        }
+        auto a = parseWriteLed(argc, argv, 3);
+        if (a.bad || a.percent < 0) return 64;
+        return cmdWriteLedBrightness(a);
+    }
+#endif
     std::fprintf(stderr, "unknown command %s\n", cmd.c_str());
     return 64;
 }
