@@ -1,63 +1,71 @@
 # OpenWitty
 
-**Open control. Clever sound.**
+**Your interface. Your Linux. Your control.**
 
-OpenWitty is a free and open-source alternative to **LEWITT CONTROL CENTER**, aiming to provide independent control of LEWITT CONNECT audio interfaces.
+OpenWitty is an independent, open-source project bringing native Linux control to **LEWITT CONNECT audio interfaces**.
 
-The project is driven by curiosity, open development, and the belief that users should have the freedom to control their own hardware.
+The project aims to provide an alternative to the proprietary LEWITT CONTROL CENTER software, allowing Linux users to configure and control their audio interfaces without relying on Windows, macOS, or virtual machines.
+
+## Why OpenWitty?
+
+LEWITT makes great audio hardware. Unfortunately, its CONTROL CENTER software is currently only available for Windows and macOS.
+
+While CONNECT interfaces can retain their settings when moved between operating systems, Linux users currently need access to Windows or macOS for software-based configuration.
+
+**OpenWitty aims to change that.**
+
+By reverse engineering the communication protocol used by LEWITT CONTROL CENTER, this project aims to implement the necessary device controls natively on Linux.
+
+This project is not about criticizing LEWITT or its software. It's about making great hardware more accessible to users of an operating system that isn't officially supported.
 
 ## Project Status
 
-🚧 **Early development — Reverse engineering in progress**
+**Early development — Reverse engineering in progress**
 
-OpenWitty is currently in its early development stage.
+The initial development target is the **LEWITT CONNECT 2**, with planned support for **CONNECT 6**.
 
-The initial focus is on understanding and implementing the communication protocol used by LEWITT CONTROL CENTER to interact with the **LEWITT CONNECT 2** audio interface.
+The long-term goal is to provide the same device configuration and control capabilities available through the official CONTROL CENTER, directly on Linux.
 
-Support for **CONNECT 6** is planned for the future.
-
-At this stage, OpenWitty is an experimental project and not yet a functional replacement for LEWITT CONTROL CENTER.
+OpenWitty is not yet a functional replacement for CONTROL CENTER.
 
 ## Device Support
 
 | Device | Status |
 |---|---|
-| LEWITT CONNECT 2 | 🔬 Reverse engineering |
-| LEWITT CONNECT 6 | 📋 Planned |
-
-Additional devices may be considered in the future.
+| LEWITT CONNECT 2 | Reverse engineering in progress |
+| LEWITT CONNECT 6 | Planned |
 
 ## Goals
 
-- Provide an open-source alternative to LEWITT CONTROL CENTER.
-- Understand and document the communication protocol used by LEWITT CONNECT interfaces.
-- Implement device configuration and control without depending on proprietary control software.
-- Support multiple CONNECT devices through a shared, extensible architecture.
+- Provide native Linux control for LEWITT CONNECT audio interfaces.
+- Understand and document the communication protocol used by LEWITT CONTROL CENTER.
+- Enable device configuration without requiring Windows, macOS, or virtual machines.
+- Support multiple CONNECT devices through an extensible architecture.
 - Encourage community contributions and knowledge sharing.
 - Keep the project free, transparent, and accessible.
 
 ## Planned Features
 
-The following features are potential development targets, subject to what the hardware and communication protocols support:
+The following features are potential development targets, depending on hardware capabilities and reverse engineering progress:
 
 - Device discovery and connection
 - Input gain control
 - Audio routing and monitoring
 - Device settings and configuration
 - Access to device-specific features
-- Cross-platform support where technically feasible
+- Native Linux integration
 
-The scope and implementation details will evolve as reverse engineering progresses.
+## Philosophy
 
-## Why OpenWitty?
+We believe choosing Linux shouldn't mean giving up control over your hardware.
 
-Great audio hardware deserves software that users can understand, customize, and improve.
+OpenWitty is built around three simple ideas:
 
-OpenWitty combines **"Open"**, representing open-source software and freedom, with **"Witty"**, meaning clever or inventive — and a subtle nod to LEWITT.
+- **Freedom:** Use your hardware on the operating system of your choice.
+- **Openness:** Share knowledge, document discoveries, and develop in public.
+- **Community:** Build solutions together where official support is unavailable.
 
-The goal is simple:
-
-**Your hardware. Your sound. Your control.**
+**Made for Linux. Open for everyone.**
 
 ## Contributing
 
@@ -65,13 +73,11 @@ Contributions, ideas, protocol discoveries, testing, and documentation are welco
 
 Whether you're experienced in reverse engineering, audio programming, USB communication, or simply interested in helping, your involvement is appreciated.
 
-As the project evolves, more detailed contribution guidelines will be added.
+More detailed contribution guidelines will be added as the project evolves.
 
 ## License
 
 OpenWitty is released under the **MIT License**.
-
-You are free to use, modify, distribute, and integrate the software into your own projects, including commercial applications, subject to the license terms.
 
 See [LICENSE](LICENSE) for details.
 
@@ -89,4 +95,4 @@ OpenWitty does not distribute proprietary LEWITT software or firmware.
 
 ---
 
-*Made for curiosity. Built for freedom.*
+*Made for Linux. Open for everyone.*
