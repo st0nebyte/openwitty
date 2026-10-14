@@ -486,3 +486,82 @@ different channel was selected as part of the same action) moved; every other by
 struct stayed constant throughout. Card present and unchanged after every read. No USB writes, driver
 detachment, resets, firmware operations, factory reset, streaming-mode changes, or phantom-power
 changes were performed at any point in this session.
+
+## 13. Phase 6C — first real hardware write (LED brightness)
+
+First USB write of any kind ever sent to a real CONNECT 2 by this project, after a separate explicit
+authorization for exactly this operation (full proposal reviewed and approved by the owner before
+execution). Implementation: `openwitty-cli write led-brightness <0-100> [--execute]` — a single,
+narrowly-scoped command (settings byte 37 / `kLedBrightness` only; see the code comment above
+`cmdWriteLedBrightness` in `src/cli/main.cpp` for the full safety rationale), gated by
+`--execute` **and** `LEWITT_ALLOW_HARDWARE_WRITE=1` for real hardware, built entirely on
+`DeviceSession`'s existing, already-tested `edit()`/`commit()` path and `WriteGuard`'s allowlist — no
+new USB call site, no generic field/byte setter, no trigger write.
+
+### 13.1 Request sent
+
+```
+bmRequestType = 0x21   (host->device, class, interface recipient)
+bRequest      = 0x03   (UAC2 MEM SET)
+wValue        = 0x0100 (apiMajor=1, messageId=0 / Settings)
+wIndex        = 0x3303 (unit 0x33, interface 3)
+wLength       = 0x80   (128 bytes, full settings struct, only byte 37 different from the
+                         immediately-preceding read)
+timeout       = 500 ms
+```
+
+### 13.2 Write 1: 100 -> 60
+
+| | |
+|---|---|
+| USB transfer result | success, no error (exit 0, no stall/timeout/IO-error) |
+| Byte 37 | `0x64` (100) -> `0x3c` (60), confirmed as the **only** byte that differed in the proposed payload |
+| Command's own immediate post-write read-back | **still showed `0x64` (100)** — see §13.4 |
+| Separate `read settings --interface 3` moments later (new process) | `0x3c` (60) — matches the intended write exactly, all other 127 bytes unchanged |
+| Visual confirmation | inconclusive — owner was not watching the device at the moment of the switch |
+
+### 13.3 Write 2: 60 -> 100 (rollback, same guarded mechanism, same authorization)
+
+| | |
+|---|---|
+| USB transfer result | success, no error |
+| Byte 37 | `0x3c` (60) -> `0x64` (100), only byte that differed |
+| Command's own immediate post-write read-back | again showed the pre-write value (`0x3c`) — same pattern as §13.2 |
+| Separate `read settings --interface 3` moments later | `0x64` (100) — exact match to the original pre-write-1 value; **rollback confirmed exactly** |
+| Visual confirmation | **owner directly observed the LED getting brighter at that moment** — real, witnessed physical effect |
+
+### 13.4 Finding: a GET immediately after a SET does not reflect the new value
+
+Both writes showed the identical pattern: the write command's own internal re-read (performed by
+`DeviceSession::commit()` -> `refreshSettings()`, microseconds after the SET control transfer
+completes, same process) still returned the **pre-write** value, while a **separate** CLI invocation
+(new process: libusb init, device open, handshake, settings read — naturally tens to a few hundred ms
+of overhead) performed shortly after **did** show the new value.
+
+This is a genuine protocol-level finding, not a write failure: the device appears to need a short
+settling/propagation delay after accepting a SET before a subsequent GET reflects it. Practical
+consequence for anyone building on this: **a blind immediate re-read after a settings write cannot be
+trusted** to report success or failure; either add a short delay before the confirmation read, or
+poll (bounded, not unbounded) until the expected byte matches or a timeout is reached. This CLI
+command's own built-in read-back is therefore unreliable as currently written — flagging as a known
+limitation (see §14), not fixed in this session since doing so wasn't part of the authorized scope.
+
+### 13.5 Safety / coexistence
+
+Card present and unchanged (`/proc/asound/cards`) before, between, and after every step. No stalls,
+timeouts, unexpected byte changes, or anything resembling a disconnect/reset at any point. No retry
+was performed on the ambiguous immediate-read-back result — per instruction, exactly one additional
+**read** (not a write) was used to resolve the ambiguity, and it resolved cleanly.
+
+### 13.6 Persistence across power cycles
+
+**Not tested.** The brightness was restored to its original value before the end of the session, so
+whether a SET to this field persists across a power cycle remains unverified either way.
+
+## 14. Known limitation introduced this session
+
+* `openwitty-cli write led-brightness`'s own printed "post-write read-back" line is unreliable (see
+  §13.4) — it reflects the pre-write value due to the device's settling delay, not a confirmed
+  post-write state. The *separate* read performed immediately afterward in this session is what
+  actually confirmed each write. A future session should fix the command to delay or poll before
+  reporting its own read-back, rather than relying on a manual follow-up read as was done here.

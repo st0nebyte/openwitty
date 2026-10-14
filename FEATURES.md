@@ -1,12 +1,17 @@
 # Feature inventory / parity matrix (CONNECT 2)
 
 Sources: official online guide (documented behaviour, screenshots), macOS and
-Windows Control Center 5.2.2 (protocol). **HW** column: no individual feature
-below is verified on a real device yet. A first hardware session (2026-10-14,
-`docs/HARDWARE_TEST_RESULTS.md`) confirmed the transport-level API handshake
-(message 0x0A) over a newly-discovered unbound vendor interface, which is a
-prerequisite for testing any feature below but does not by itself validate any
-specific setting/control. "RE" = what reverse engineering still has to
+Windows Control Center 5.2.2 (protocol). **HW** column: see each row; most
+controls are still read-only or untested on hardware. A first hardware
+session (2026-10-14, `docs/HARDWARE_TEST_RESULTS.md`) confirmed the
+transport-level API handshake (message 0x0A) over a newly-discovered unbound
+vendor interface; follow-up sessions (2026-10-14/15, same doc §§10, 12, 13)
+physically confirmed several individual read controls and, as of 2026-10-15,
+the project's first real hardware **write** (LED brightness, via a single
+narrowly-scoped, explicitly-gated CLI command — see `src/cli/main.cpp`'s
+`cmdWriteLedBrightness`). This does not mean writes are broadly enabled:
+every other control remains read-only by design pending its own review.
+"RE" = what reverse engineering still has to
 establish.
 Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML
 control wired to the mock backend; writes to real hardware are disabled.
@@ -37,7 +42,7 @@ control wired to the mock backend; writes to real hardware are disabled.
 | 22 | High-volume speaker mode | Settings▸Audio | @24 | core+GUI (confirm) | — | no |
 | 23 | Mobile streaming mode (routing change) | Settings▸Audio | @67 | core (gated, read) | routing semantics; disruptive | no |
 | 24 | macOS streaming mode (restarts device) | Settings▸Audio | trigger 0x104 (on) / 0x105 (off); PID 0x0002 vs 0x0004 | simulation only (confirm dialog, restart sim); **refused on real hardware** | device-side effect; disruptive | no |
-| 25 | LED brightness | Settings▸LEDs | @37 (0–100) | core+GUI | — | no |
+| 25 | LED brightness | Settings▸LEDs | @37 (0–100) | core+GUI; CLI `write led-brightness` (experimental, gated) | — | **yes — read AND write** (first real hardware write on this project, 2026-10-15: 100→60→100, one visually witnessed; see `docs/HARDWARE_TEST_RESULTS.md` §13) |
 | 26 | LED colours (icons/mute/parameter/metering/gain reduction) | Settings▸LEDs | @38–52 RGB; reset = trigger 0x103 | core+GUI+tests (reset gated) | — | no |
 | 27 | Custom button function (8 options) | Settings▸Custom button | @53: 0,1,2,8,9,0xC,0xD,0xE | core+GUI+tests | long-press config (bytes 54–56?) | no |
 | 28 | Panic mute / showcase mode | hardware only | device-side | not applicable | showcase key-combo is hardware | n/a |

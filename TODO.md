@@ -9,9 +9,18 @@
    `settings` decodes cleanly into plausible real values (mic gain 27 dB, phantom on, headphone
    -19.71 dB muted, etc.) — see `docs/HARDWARE_TEST_RESULTS.md` §7b. `version`/`api` return an
    unexplained byte-identical payload despite different `wValue` — open question, not yet resolved.
-4. **Next:** plan step 9 — change one setting on the hardware itself, re-read settings, diff the raw
-   hex against PROTOCOL.md's field table. Needs the user present at the device; no code change needed.
-5. Propose one low-risk write test (e.g. mute toggle) for explicit approval — still blocked on 4.
+4. ✔ done 2026-10-14/15: plan step 9 — physically confirmed mic/instrument gain, all four
+   channels' volume/mute, and the channel-select byte (56) against real hardware. Mono, Clipguard,
+   preamp style have no physical control on this unit (software/CONTROL-CENTER-only, owner-confirmed)
+   — documented as a hardware-access limitation. See `docs/HARDWARE_TEST_RESULTS.md` §§10, 12.
+5. ✔ done 2026-10-15: first real hardware write, LED brightness (100→60→100, one transition visually
+   witnessed), via a single narrowly-scoped, explicitly-gated CLI command (`write led-brightness`,
+   needs `--execute` + `LEWITT_ALLOW_HARDWARE_WRITE=1`). Found a settling delay between a SET and a
+   GET reflecting it — see `docs/HARDWARE_TEST_RESULTS.md` §13, PROTOCOL.md, `docs/USB_ACCESS.md` §3c.
+6. **Next:** fix `write led-brightness`'s own post-write read-back to account for the settling delay
+   (delay or bounded poll instead of an immediate re-read) before proposing any further write targets.
+   Any additional writable field needs its own narrow, separately-reviewed command — no generic
+   field/byte write command is planned.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).

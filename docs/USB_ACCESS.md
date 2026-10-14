@@ -103,6 +103,26 @@ First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what c
   default next step.** Option C works today, from userspace, with no kernel patch. Revisit E only if
   C turns out insufficient (e.g. if settings/status reads over interface 3 misbehave).
 
+### 3c. Hardware session 2026-10-15 — option C confirmed for writes too
+
+`docs/HARDWARE_TEST_RESULTS.md` §13. A real `bm=0x21 req=0x03` MEM SET (the write counterpart of the
+already-verified GET) against interface 3, changing exactly one byte of the full 128-byte settings
+struct (LED brightness), was accepted by the device and produced a visible, confirmed effect — then
+reversed. No driver conflict, no claim needed, no audio disruption (card present throughout). This is
+the first real-hardware write on this project and confirms option C is not read-only: the same
+userspace, no-kernel-patch access path works for SET as well as GET, at least for this one field.
+
+**New finding — settling delay**: a GET issued immediately after the SET (same process, microseconds
+later) returned the pre-write value; a GET from a separate process shortly after (tens-to-hundreds of
+ms later) returned the correct post-write value. Anything built on this access path must not treat an
+immediate post-write read as authoritative — add a delay or a bounded poll instead. This is a property
+of the device's firmware, not of interface 3 specifically, but was only observed via this path.
+
+Only LED brightness (one byte, one message type) has been write-tested. This does **not** confirm SET
+works uniformly for every settings field, for `status`/`version` (read-only messages — SET isn't even
+meaningful there), or for `triggers` (write-only; still untested and still gated by the full guard
+stack in `WriteGuard.cpp`/`DeviceSession.cpp`, which refuses factory reset and mode-switch regardless).
+
 ## 4. What stays unknown until hardware exists
 * The product id/mode of the attached device and its interface list (F9/F10 give the
   tooling to find out safely).

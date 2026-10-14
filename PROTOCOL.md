@@ -24,6 +24,20 @@ uses `LewittDeviceThesyconMacBackend::{ACMemGet,ACMemSet}`).
   derived from `bcdADC` in the AC header descriptor (`parseConfigDescriptor`) [?].
 * Unit ID `0x33` is hard-coded in the high byte of wIndex [V-bin].
 
+**[V-hw] 2026-10-15 — MEM SET hardware-confirmed** (`docs/HARDWARE_TEST_RESULTS.md` §13): a real
+`bm=0x21 req=0x03 wValue=0x0100 wIndex=0x3303` SET of the full 128-byte settings struct (one byte
+changed: offset 37, LED brightness) against interface 3 — the same unbound interface already
+confirmed for GET — was accepted by a real CONNECT 2 and visibly changed device state (LED
+brightness; one transition directly witnessed by the owner), then reversed with a second SET,
+confirmed back to the original byte value. This is the first real-hardware write of any kind on this
+project. **Finding:** a GET sent immediately after a SET completes (same process, microseconds later)
+returned the *pre-write* value; a GET from a separate process moments later (tens-to-hundreds of ms
+later) returned the correct post-write value. The device appears to need a short settling delay
+between accepting a SET and a subsequent GET reflecting it — **do not treat an immediate blind
+re-read after a write as authoritative**; delay or poll instead. Only this single field (LED
+brightness) and this single interface/request shape have been write-tested; this does not confirm SET
+works for every message type, every field, or via interface 0/4.
+
 ## Messages  [V-bin]
 
 `PackedStructMessage<T>`: `serialize()`/`deserialize()` are empty, `data()`
@@ -334,7 +348,7 @@ restart it, so the word goes out in the next tick's trigger write.
 ### Cross-validation summary (phase 5B)
 | Finding | macOS | Windows | Status |
 |---|---|---|---|
-| Transport: MEM GET/SET, entity 0x33, req 3/0x85/0x05, 500 ms | ✔ | ✔ | high |
+| Transport: MEM GET/SET, entity 0x33, req 3/0x85/0x05, 500 ms | ✔ | ✔ | high; **GET hardware-verified 2026-10-14, SET hardware-verified 2026-10-15 (LED brightness only, via interface 3 — see note above)** |
 | Custom-button values 0,0xC,0xD,1,2,8,9,0xE | ✔ (CustomSettingsComponent ctor, rdx imm) | ✔ (EnumCircleRadioButton ctor, r8b imm) | values high; label↔value mapping medium-high (Windows member/label offset rule, same order on macOS) |
 | Trigger words 1,2,3,6,7,8 | ✔ lambdas | ✔ stores to +0x300 | high |
 | 0x103 / 0x106 | ✔ | ✔ | high |
