@@ -147,7 +147,7 @@ void DeviceWorker::publish() {
         v["out.dim"] = s.dim();
         v["out.mono"] = s.mono();
         v["set.gainLock"] = s.externalGainLock();
-        v["set.mixToSpeakers"] = s.mixToSpeakersRaw() != 0;   // enum value set unverified
+        v["set.mixToSpeakers"] = s.mixToSpeakers();
         v["set.highImpedance"] = s.highImpedanceHeadphone();
         v["set.highVolume"] = s.highVolumeSpeaker();
         v["set.mobileStreaming"] = s.mobileStreaming();
@@ -158,6 +158,7 @@ void DeviceWorker::publish() {
         v["set.led.metering"] = hex(s.ledColor(LedElement::Metering));
         v["set.led.gainReduction"] = hex(s.ledColor(LedElement::GainReduction));
         v["set.customButton"] = int(s.customButton());
+        v["set.customButtonKnown"] = s.customButtonFunction().has_value();
     }
     if (session_ && session_->status()) {
         const auto& st = *session_->status();
@@ -189,7 +190,7 @@ void DeviceWorker::publish() {
 void DeviceWorker::trigger(const QString& name) {
     if (!session_) return;
     static const QMap<QString, Trigger> map{
-        {"autogain1", Trigger::AutoGainInput1}, {"autogain2", Trigger::AutoGainInput2},
+        {"autogain1", Trigger::AutoGainMicrophone}, {"autogain2", Trigger::AutoGainInstrument},
         {"autogainBoth", Trigger::AutoGainBoth}};
     if (!map.contains(name)) return;
     auto s = session_->sendTrigger(map[name]);
@@ -229,6 +230,13 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
             if (f == "mono") return s.setMono(v.toBool());
         } else if (g == "set") {
             if (f == "gainLock") return s.setExternalGainLock(v.toBool());
+            if (f == "mixToSpeakers") return s.setMixToSpeakers(v.toBool());
+            if (f == "customButton") {
+                int n = v.toInt();
+                if (!isKnownCustomButton(static_cast<std::uint8_t>(n)))
+                    return makeError(Errc::InvalidArgument, "unknown custom button function");
+                return s.setCustomButtonFunction(static_cast<CustomButtonFunction>(n));
+            }
             if (f == "highImpedance") return s.setHighImpedanceHeadphone(v.toBool());
             if (f == "highVolume") return s.setHighVolumeSpeaker(v.toBool());
             if (f == "ledBrightness") return s.setLedBrightness(v.toInt());

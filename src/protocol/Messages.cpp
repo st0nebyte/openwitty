@@ -41,6 +41,28 @@ bool SettingsMessage::compress(int i) const { return raw_[settings_off::kCompres
 bool SettingsMessage::dim() const { return raw_[settings_off::kDim] != 0; }
 bool SettingsMessage::mono() const { return raw_[settings_off::kMono] != 0; }
 std::uint8_t SettingsMessage::customButton() const { return raw_[settings_off::kCustomButton]; }
+std::optional<CustomButtonFunction> SettingsMessage::customButtonFunction() const {
+    auto v = raw_[settings_off::kCustomButton];
+    if (!isKnownCustomButton(v)) return std::nullopt;
+    return static_cast<CustomButtonFunction>(v);
+}
+Status SettingsMessage::setMixToSpeakers(bool v) {
+    raw_[settings_off::kMixToSpeakers] = v ? 1 : 0;
+    return okStatus();
+}
+Status SettingsMessage::setCustomButtonFunction(CustomButtonFunction f) {
+    raw_[settings_off::kCustomButton] = static_cast<std::uint8_t>(f);
+    return okStatus();
+}
+void SettingsMessage::mergeExternalChanges(const SettingsMessage& snap, const SettingsMessage& dev) {
+    for (const auto& f : kSettingsSchema) {
+        bool changed = false;
+        for (unsigned i = 0; i < f.length; ++i)
+            changed = changed || snap.raw_[f.offset + i] != dev.raw_[f.offset + i];
+        if (changed)
+            for (unsigned i = 0; i < f.length; ++i) raw_[f.offset + i] = dev.raw_[f.offset + i];
+    }
+}
 std::uint8_t SettingsMessage::nativeVolumeMapping() const { return raw_[settings_off::kNativeVolumeMapping]; }
 
 Status SettingsMessage::setGainDb(int i, double db) {
@@ -178,6 +200,13 @@ std::uint8_t StatusMessage::autosetupResultRaw() const {
     std::uint8_t b = raw_[0x23];
     if (b & 0x40) return 0;
     return (b & 0x20) ? 2 : 1;
+}
+
+Result<ApiVersionMessage> ApiVersionMessage::fromBytes(std::span<const std::uint8_t> b) {
+    if (auto s = checkSize(b, kSize, "api version"); !s) return s.error();
+    ApiVersionMessage m;
+    std::copy(b.begin(), b.end(), m.raw_.begin());
+    return m;
 }
 
 Result<VersionMessage> VersionMessage::fromBytes(std::span<const std::uint8_t> b) {

@@ -36,8 +36,20 @@ no checksum**.
 | 2  | iface_status_t   | 0x40 | ✔ |   |
 | 3  | iface_version_t  | 0x40 | ✔ |   |
 | 4  | iface_triggers_t | 0x40 |   | ✔ |
+| 0x0A | lewitt_api_t   | 0x40 | ✔ |   |
 
-(id 1 is unused by Connect2; Connect 6 has additional levels/mixer/dsp messages.)
+`lewitt_api_t` (id 0x0A, **apiMajor 0**, so wValue = `0x000A`) is the version
+handshake, [V-bin, mac+function level]: `LewittDevice::open` reads it through
+backend slot 0 and stores byte 0 / byte 1 as 16-bit API major / minor;
+`LewittDevice::read/write` then throw *"Message API version not supported by
+the device."* if `message.apiMajorVersion != device major` (`cmp word [dev+0x5a]`).
+Also: *"Device must be opened in APP mode."* when the device-info DFU flag
+(`[dev+0x5e]`) is set. Evidence: `LWT::LewittDevice::open/read` (macOS
+0x100003c70 / 0x100005d50), vtable of `PackedStructMessage<lewitt_api_t,…>`
+at 0x10084fc98 (slot 0 `mov eax,0xa`; slot 3 `xor eax,eax`; slot 4 `0x40`).
+Byte 0 = major, byte 1 = minor is read from a `pmovzxbw` of two bytes (medium
+confidence); bytes 2..63 unknown. (id 1 is unused by Connect2; Connect 6 has
+additional levels/mixer/dsp messages.)
 
 The app keeps three copies of the settings struct: *current* (last read),
 *snapshot* (previous tick, for change detection) and *pending* (what gets
@@ -144,6 +156,108 @@ See `docs/USB_ACCESS.md` (kernel-source-verified analysis and probe plan).
 * Write path (`Connect2Device::writeSettings`-equivalent), tick cadence.
 * Firmware download (DFU) — **will not be implemented without explicit permission**.
 * Windows build (Inno Setup, needs `innoextract`) — expected to share the protocol.
+
+## Phase 5A findings (binary evidence; confidence per item)
+
+### Settings schema and sync algorithm  [V-bin, high]
+`Connect2Device::tick` walks a 62-record table at macOS 0x100846f50 (stride
+0x28; `u16 offset`, `u16 length` at record+0x10/+0x12). Together the records
+cover **bytes 0…70 exactly once**; **bytes 71…127 are never read, merged or
+written individually** by the app (reserved/unknown, but the whole 0x80 struct
+is written back, so they must round-trip). Field list (offset:length):
+0:2, 2–9:1 each, 10:2, 12–19:1 each, 20:2, 22–26:1 each, 27:2, 29–34:1 each,
+35:2, 37–62:1 each, 63:4, 67:1, 68:2, 70:1.
+Fields known to the schema but with no UI id yet: 8, 17, 25, 26, 30, 54–56,
+58, 60–62, 63–66 (u32?), 68–69, 70.
+
+Sync loop (every tick; `LewittDevice::tick`): snapshot ← current;
+`readStatus()`; optionally `readSettings()`; then for each schema field, if
+`pending != snapshot` **or** (the device's current value differs from the
+snapshot) the app copies the *device's* value into the outgoing buffer —
+i.e. **device-side changes win, untouched user edits stay**; if anything
+differs (or a force flag `[dev+0x388]==1`) the **entire 0x80-byte settings
+struct is written** via MEM SET; sample-rate/buffer-size changes go through
+the audio driver (not the control protocol); finally, if any byte of the
+trigger buffer is non-zero it is written (message 4) and then cleared.
+Implemented as `SettingsMessage::mergeExternalChanges` + `DeviceSession`.
+
+### Custom button (settings byte 53)  [V-bin Windows, medium-high]
+Radio buttons are `EnumCircleRadioButton<CustomButtonShortPress>`
+constructed with an immediate enum value (Windows `FUN_140252390`; each
+radio at member offset *k* belongs to the label at `k − 0x4F` qwords):
+
+| value | function | evidence |
+|---|---|---|
+| 0 | Show CONTROL CENTER | ctor imm 0 at 0x140252450 |
+| 1 | Toggle mute: headphone / speakers | imm 1 |
+| 2 | Toggle mute: headphone+mic / speakers | imm 2 |
+| 8 | Dim outputs | imm 8 |
+| 9 | Mono/stereo outputs | imm 9 |
+| 0x0C | Toggle mic preamp styles | imm 0xC |
+| 0x0D | Toggle instrument preamp styles | imm 0xD |
+| 0x0E | Toggle brightness settings | imm 0xE |
+
+Values 3–7, 10, 11 are not offered. "…ShortPress" implies a long-press
+setting; the neighbouring bytes 54–56 are in the schema but unmapped
+(unverified guess). macOS ctor call sites were not found (no direct calls).
+
+### MixToSpeakers / OutputSource (byte 23)  [V-bin, medium]
+The Settings UI binds this value to a `CapsuleToggleButton` via
+`ref::Paths(MixToSpeakers)` (macOS `AudioSettingsComponent` ctor
+0x1000bb331); `dev::Value<OutputSource,true>::setValue` forwards the
+bool-convertible `juce::var` as a byte. Therefore the UI only ever writes
+**0 (off, default) and 1 (on)**; no other enumerators are reachable. Enumerator
+*names* are not present in the binary.
+
+### macOS streaming mode and device mode  [V-bin, medium]
+* `MacOSStreaming` is an identifier that is **defined but never read or
+  written by code** — it is not a settings property.
+* `AudioSettingsComponent::onMacOSStreamingClicked` (0x1000bd210) reads the
+  current mode (`Connect2Device::getCurrentMode`, from the **USB PID**:
+  0x0004 → mode 0 = normal, 0x0002 → mode 1 = macOS streaming; other PIDs
+  throw) and opens `PowerCycleWindow(DeviceRoot, Mode, text)` with Mode 1
+  (turning on) or 0 (off). The window only shows instructions/progress
+  ("do not unplug…"); `PowerCycleComponent::timerCallback` is a progress
+  animation. **The command that makes the firmware switch mode was not found**
+  (not in the tree builder, not in the window). PID 0x000A is not a mode the
+  app accepts (probably bootloader/DFU). Treat mode switching as unknown and
+  disruptive; not implemented.
+* `MobileStreaming` (byte 67) *is* a normal settings bool.
+
+### Triggers  [V-bin, high for assignment; meaning of effects medium]
+Each trigger lambda is constructed immediately before the identifier it
+serves (see tree order), so the pairing is exact:
+
+| word | id (group) | note |
+|---|---|---|
+| 1 | AutoGain (Microphone) | |
+| 2 | AutoGain (Instrument) | |
+| 3 | AutoGainMicPlusInst | |
+| 6 | DenoiseMeasurement (Microphone) | |
+| 7 | DenoiseMeasurement (Instrument) | |
+| 8 | DenoiseMicPlusInst | |
+| 0x103 | **ResetLedColors** | persistent LED colour change |
+| 0x106 | **FactoryReset** | destructive; never sent by this project |
+
+### Measurement status  [V-bin, medium]
+Shared by both inputs: progress `u8 @0x24` (0…100; 100 = finished; the UI
+treats ≥22 as "signal expected"), result bits `@0x23`: bit 6 set ⇒ idle/in
+progress (0); else bit 5 clear ⇒ **failed (1)**, set ⇒ **succeeded (2)**.
+On finish (progress 100) with result 1 and no clip-counter change the app shows
+"No signal detected! Please repeat measurement."; a clip-counter change gives
+"Clipping detected! …"; "No calibration response received" is shown when the
+status bit `(@0x…4a0 & 2)` was never set (Connect 6/shared panel). Clip
+counters: `u16 @0x2E` (input 1) and `@0x30` (input 2), compared with the
+previous snapshot. Auto-gain result `u8 @0x02`/`@0x0B` = measured gain.
+Denoise measurement shares the same progress/result bytes.
+
+### Not found / still open
+* The command that switches macOS-streaming (PID) mode.
+* `OutputSource` enumerator names; bytes 54–56, 58, 60–70 semantics.
+* Authoritative range for the input/playback mix value (Q8.8 sign-inverted).
+* `iface_version_t` layout (no consumer).
+* Windows has not been re-traced for the above (same codebase; cross-check of
+  the transport only).
 
 ## Windows build cross-check  [V-bin]
 Same C++ codebase (identical `LWT::Connect2::APIv1`, `buildConnect2Tree`,

@@ -1,6 +1,8 @@
 // Typed views over the raw packed messages. Raw bytes are the source of truth:
 // setters edit in place so reserved/unknown bytes survive read-modify-write.
 #pragma once
+#include <optional>
+
 #include "Types.hpp"
 
 namespace lewitt {
@@ -8,6 +10,45 @@ namespace lewitt {
 enum class PreampType : std::uint8_t { Clean = 0, Warm = 1, Vivid = 2 };
 enum class MonitorSource : std::uint8_t { InstrumentOnly = 0, MicrophoneOnly = 1, Both = 2 };
 enum class LedElement { Icons, Mute, Parameter, Metering, GainReduction };
+
+// CustomButtonShortPress (settings byte 53). Values recovered from the Windows
+// settings UI: each radio button is constructed with its enum value
+// (FUN_140252390 / EnumCircleRadioButton ctor immediates); medium-high confidence.
+// Values 3..7, 10, 11 are not offered by the CONNECT 2 UI.
+enum class CustomButtonFunction : std::uint8_t {
+    ShowControlCenter = 0,
+    ToggleHeadphoneSpeakerMute = 1,       // mute headphone/unmute speakers <-> inverse
+    ToggleHeadphoneMicSpeakerMute = 2,    // same, and the microphone
+    DimOutputs = 8,
+    MonoStereoOutputs = 9,
+    TogglePreampMic = 0x0C,
+    TogglePreampInstrument = 0x0D,
+    ToggleBrightness = 0x0E,
+};
+constexpr bool isKnownCustomButton(std::uint8_t v) {
+    return v <= 2 || v == 8 || v == 9 || v == 0x0C || v == 0x0D || v == 0x0E;
+}
+
+// USB device mode as the app derives it from the product id
+// (Connect2Device::getCurrentMode: PID 0x0004 -> 0, PID 0x0002 -> 1; other PIDs throw).
+// Mode 1 is entered by the "macOS streaming mode" toggle (PowerCycleWindow(Mode=1)).
+enum class DeviceMode { Normal, MacOSStreaming, Unknown };
+constexpr DeviceMode deviceModeFromPid(std::uint16_t pid) {
+    return pid == 0x0004 ? DeviceMode::Normal
+         : pid == 0x0002 ? DeviceMode::MacOSStreaming : DeviceMode::Unknown;
+}
+
+// The app's settings schema (Connect2Device::tick merge table, 62 records).
+// Bytes 0..70 are fields; bytes 71..127 are never touched by the app.
+struct SettingsField { std::uint8_t offset; std::uint8_t length; };
+inline constexpr std::array<SettingsField, 62> kSettingsSchema{{
+    {0,2},{2,1},{3,1},{4,1},{5,1},{6,1},{7,1},{8,1},{9,1},{10,2},{12,1},{13,1},{14,1},{15,1},
+    {16,1},{17,1},{18,1},{19,1},{20,2},{22,1},{23,1},{24,1},{25,1},{26,1},{27,2},{29,1},{30,1},
+    {31,1},{32,1},{33,1},{34,1},{35,2},{37,1},{38,1},{39,1},{40,1},{41,1},{42,1},{43,1},{44,1},
+    {45,1},{46,1},{47,1},{48,1},{49,1},{50,1},{51,1},{52,1},{53,1},{54,1},{55,1},{56,1},{57,1},
+    {58,1},{59,1},{60,1},{61,1},{62,1},{63,4},{67,1},{68,2},{70,1},
+}};
+inline constexpr std::size_t kSettingsDefinedBytes = 71;
 struct Rgb {
     std::uint8_t r{0}, g{0}, b{0};
     bool operator==(const Rgb&) const = default;
@@ -94,6 +135,11 @@ public:
     bool externalGainLock() const;
     bool mobileStreaming() const;
     std::uint8_t customButton() const;
+    // nullopt if the byte holds a value the CONNECT 2 UI never offers.
+    std::optional<CustomButtonFunction> customButtonFunction() const;
+    // "Input/playback mix applies to speakers": only 0/1 are ever written by the UI
+    // (bound to a boolean toggle); other raw values are preserved and read as "on".
+    bool mixToSpeakers() const { return mixToSpeakersRaw() != 0; }
     std::uint8_t nativeVolumeMapping() const;
     std::uint8_t ledBrightness() const;
     Rgb ledColor(LedElement e) const;
@@ -120,6 +166,12 @@ public:
     // selected (instrument-only <-> both <-> microphone-only).
     Status setMonitorMicrophone(bool on);
     Status setMonitorInstrument(bool on);
+    Status setMixToSpeakers(bool v);
+    Status setCustomButtonFunction(CustomButtonFunction f);
+    // Field-wise merge used by the original app's sync loop: for every schema field
+    // whose device value changed between `snapshot` and `device`, take the device
+    // value; fields the user edited but the device did not change are kept.
+    void mergeExternalChanges(const SettingsMessage& snapshot, const SettingsMessage& device);
     Status setHighVolumeSpeaker(bool v);
     Status setHighImpedanceHeadphone(bool v);
     Status setExternalGainLock(bool v);
@@ -151,10 +203,32 @@ public:
     double loopbackLevelDb(int ch) const { return levelAt(0x12 + 2 * (ch & 1)); }
     double speakerLevelDb(int ch) const { return levelAt(0x16 + 2 * (ch & 1)); }
     double headphoneLevelDb(int ch) const { return levelAt(0x1A + 2 * (ch & 1)); }
-    std::uint16_t clipFlags1() const { return rdU16(raw_, 0x2E); }
-    std::uint16_t clipFlags2() const { return rdU16(raw_, 0x30); }
+    // Clip event counters (u16): the app compares each against its previous
+    // snapshot; any change means "clipping detected" for that input.
+    std::uint16_t clipCounter(int input) const { return rdU16(raw_, input == 0 ? 0x2E : 0x30); }
+    // Measurement outcome derived from the same byte as autosetupResultRaw():
+    // 0 = idle/in progress (bit 6), 1 = failed (bit 5 clear), 2 = succeeded (bit 5 set).
+    // Failure reason: no clipping counter change -> "no signal"; counter change -> "clipping".
+    enum class MeasureOutcome : std::uint8_t { InProgressOrIdle = 0, Failed = 1, Succeeded = 2 };
+    MeasureOutcome measureOutcome() const { return static_cast<MeasureOutcome>(autosetupResultRaw()); }
+    bool measurementFinished() const { return autosetupProgress() >= 100; }
 private:
     double levelAt(std::size_t o) const;
+    std::array<std::uint8_t, kSize> raw_{};
+};
+
+// lewitt_api_t (message 0x0A): the device's API version handshake. LewittDevice::open
+// reads it and stores byte 0 / byte 1 as 16-bit major / minor; LewittDevice::read/write
+// throw "Message API version not supported by the device." when a message's
+// apiMajorVersion differs from the device major. Remaining bytes unknown.
+class ApiVersionMessage {
+public:
+    static constexpr std::size_t kSize = 0x40;
+    static Result<ApiVersionMessage> fromBytes(std::span<const std::uint8_t> b);
+    std::uint8_t major() const { return raw_[0]; }
+    std::uint8_t minor() const { return raw_[1]; }
+    std::span<const std::uint8_t> bytes() const { return raw_; }
+private:
     std::array<std::uint8_t, kSize> raw_{};
 };
 
@@ -171,17 +245,20 @@ private:
 // iface_triggers_t: first u16 is the command word the app writes; remaining
 // bytes are assumed zero (app's trigger buffer layout beyond word 0 unverified).
 enum class Trigger : std::uint16_t {
-    // Values observed as immediates in the UI callbacks. Their exact actions are
-    // inferred from callback ordering and are UNVERIFIED.
-    AutoGainInput1 = 1,
-    AutoGainInput2 = 2,
-    AutoGainBoth = 3,
-    DenoiseMeasureInput1 = 6,
-    DenoiseMeasureInput2 = 7,
-    DenoiseMeasureBoth = 8,
-    Unknown0x103 = 0x103,  // possibly LED related; do not send
-    Unknown0x106 = 0x106,  // possibly LED related; do not send
+    // Command words written to byte 0..1 of the trigger message. Assignments are
+    // confirmed by lambda/identifier creation adjacency in buildConnect2Tree:
+    // each lambda is constructed immediately before the identifier it serves.
+    AutoGainMicrophone = 1,          // id AutoGain (Microphone group)
+    AutoGainInstrument = 2,          // id AutoGain (Instrument group)
+    AutoGainBoth = 3,                // id AutoGainMicPlusInst
+    DenoiseMeasureMicrophone = 6,    // id DenoiseMeasurement (Microphone)
+    DenoiseMeasureInstrument = 7,    // id DenoiseMeasurement (Instrument)
+    DenoiseMeasureBoth = 8,          // id DenoiseMicPlusInst
+    ResetLedColors = 0x103,          // id ResetLedColors  (persistent LED change)
+    FactoryReset = 0x106,            // id FactoryReset    (destructive; never sent)
 };
+// Backwards-compatible names used by earlier code.
+inline constexpr Trigger kAutoGainInput1 = Trigger::AutoGainMicrophone;
 
 class TriggerMessage {
 public:
@@ -199,5 +276,6 @@ namespace lewitt {
 static_assert(SettingsMessage::kSize == 0x80);
 static_assert(StatusMessage::kSize == 0x40 && VersionMessage::kSize == 0x40 && TriggerMessage::kSize == 0x40);
 static_assert(wValueFor(MessageId::Version) == 0x0103);
+static_assert(wValueFor(MessageId::ApiVersion) == 0x000A);
 static_assert(wIndexFor(2) == 0x3302);
 }  // namespace lewitt

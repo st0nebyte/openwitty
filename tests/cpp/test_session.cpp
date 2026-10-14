@@ -87,8 +87,8 @@ TEST(Session, ConnectFailsWhenAbsent) {
 TEST(Session, TriggerValidation) {
     Fixture f;
     ASSERT_TRUE(f.session->connect().ok());
-    EXPECT_TRUE(f.session->sendTrigger(Trigger::AutoGainInput1).ok());
-    EXPECT_EQ(f.session->sendTrigger(Trigger::Unknown0x103).error().code, Errc::NotSupported);
+    EXPECT_TRUE(f.session->sendTrigger(Trigger::AutoGainMicrophone).ok());
+    EXPECT_EQ(f.session->sendTrigger(Trigger::FactoryReset).error().code, Errc::NotSupported);
 }
 
 TEST(Mock, WriteOnlyAndSizeChecks) {
@@ -158,7 +158,9 @@ TEST(Session, WritesDisabledForRealPolicy) {
         bool isOpen() const override { return open_; }
         DeviceInfo info() const override { return {}; }
         Result<Bytes> read(MessageId id) override {
-            return Bytes(messageInfo(id)->size, 0);
+            Bytes b(messageInfo(id)->size, 0);
+            if (id == MessageId::ApiVersion) b[0] = 1;   // device speaks API v1
+            return b;
         }
         Status write(MessageId, std::span<const std::uint8_t>) override { ++writes; return okStatus(); }
         bool open_{false}; int writes{0};

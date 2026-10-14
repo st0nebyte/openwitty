@@ -37,10 +37,9 @@ Rectangle {
         ToggleSwitch { width: 330; label: "Gain lock (block external gain changes)"; enabled: root.interactive
                        checked: root.v("set.gainLock", false)
                        onToggled: (b) => device.setValue("set.gainLock", b) }
-        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: false
-                       checked: root.v("set.mixToSpeakers", false) }
-        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               text: "(read-only: the enum value set behind this option is not yet decoded)" }
+        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: root.interactive
+                       checked: root.v("set.mixToSpeakers", false)
+                       onToggled: (b) => device.setValue("set.mixToSpeakers", b) }
         ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.interactive
                        checked: root.v("set.highImpedance", false)
                        onToggled: (b) => device.setValue("set.highImpedance", b) }
@@ -89,16 +88,30 @@ Rectangle {
         visible: root.open === "button"
         x: 16; y: 150; width: 330; spacing: 8
         Repeater {
-            model: ["Show CONTROL CENTER", "Toggle mic preamp styles", "Toggle instrument preamp styles",
-                    "Toggle mute: headphone / speakers", "Toggle mute: headphone + mic / speakers",
-                    "Dim outputs", "Mono/stereo outputs", "Toggle brightness settings"]
-            Row { spacing: 8
-                Rectangle { width: 14; height: 14; radius: 7; color: "transparent"; border.color: Theme.textDim }
-                Text { color: Theme.textDim; font.pixelSize: 11; text: modelData } }
+            model: [{v: 0, t: "Show CONTROL CENTER"}, {v: 12, t: "Toggle mic preamp styles"},
+                    {v: 13, t: "Toggle instrument preamp styles"},
+                    {v: 1, t: "Toggle mute: headphone / speakers"},
+                    {v: 2, t: "Toggle mute: headphone + mic / speakers"},
+                    {v: 8, t: "Dim outputs"}, {v: 9, t: "Mono/stereo outputs"},
+                    {v: 14, t: "Toggle brightness settings"}]
+            Rectangle {
+                id: opt
+                property var o: modelData
+                width: 330; height: 22; color: "transparent"
+                opacity: root.interactive ? 1 : 0.55
+                Rectangle { id: dot; width: 14; height: 14; radius: 7; color: "transparent"
+                            border.color: Theme.textDim; anchors.verticalCenter: parent.verticalCenter
+                            Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent
+                                        visible: root.v("set.customButton", -1) === opt.o.v } }
+                Text { x: 24; anchors.verticalCenter: parent.verticalCenter; color: Theme.text
+                       font.pixelSize: 11; text: opt.o.t }
+                MouseArea { anchors.fill: parent; enabled: root.interactive
+                            onClicked: device.setValue("set.customButton", opt.o.v) }
+            }
         }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               text: "Current raw value: " + root.v("set.customButton", "?") +
-                     ". The value-to-function mapping is not yet decoded, so this list is display-only." }
+               text: root.v("set.customButtonKnown", true) ? "Stored value: " + root.v("set.customButton", "?")
+                     : "Stored value " + root.v("set.customButton", "?") + " is not offered by the CONNECT 2 UI." }
     }
 
     // right column

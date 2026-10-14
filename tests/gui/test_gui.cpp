@@ -167,3 +167,20 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     EXPECT_EQ(root->property("interactive").toBool(), true);
     root.reset();
 }
+
+TEST(GuiBackend, CustomButtonAndMixToSpeakers) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("set.customButton"); }));
+    EXPECT_EQ(c.values()["set.customButton"].toInt(), 14);       // simulated default
+    EXPECT_TRUE(c.values()["set.customButtonKnown"].toBool());
+    c.setValue("set.customButton", 8);
+    ASSERT_TRUE(waitFor([&] { return c.values()["set.customButton"].toInt() == 8; }));
+    Count spy(&c, &DeviceController::errorChanged);
+    c.setValue("set.customButton", 5);                           // not a UI-offered function
+    ASSERT_TRUE(waitFor([&] { return spy.count() > 0; }));
+    EXPECT_EQ(c.values()["set.customButton"].toInt(), 8);
+    c.setValue("set.mixToSpeakers", true);
+    ASSERT_TRUE(waitFor([&] { return c.values()["set.mixToSpeakers"].toBool(); }));
+}

@@ -15,11 +15,12 @@ enum class ConnectionState { Disconnected, Connecting, Connected, Error };
 struct WritePolicy {
     // Routing-changing edits (streaming modes) additionally require this.
     bool allowRoutingChanges{false};
-    // Real-hardware writes need BOTH: policy enabled here AND transport allowing.
+    // Persistent device-side changes such as resetting LED colours.
+    bool allowPersistentChanges{false};
+    // Real-hardware writes need this AND a transport that allows writes.
     // Simulated transports are always writable.
     bool allowHardwareWrites{false};
 };
-
 class DeviceSession {
 public:
     DeviceSession(std::unique_ptr<IDeviceTransport> t, WritePolicy p = {});
@@ -37,6 +38,7 @@ public:
 
     const std::optional<SettingsMessage>& settings() const { return current_; }
     const std::optional<StatusMessage>& status() const { return status_; }
+    const std::optional<ApiVersionMessage>& apiVersion() const { return api_; }
 
     // Stage-edit-commit. Edits apply to a copy of the last read settings so
     // unknown bytes round-trip untouched. Nothing is sent until commit().
@@ -65,6 +67,7 @@ private:
     Error lastError_;
     std::optional<SettingsMessage> current_, pending_;
     std::optional<StatusMessage> status_;
+    std::optional<ApiVersionMessage> api_;
     std::uint32_t sampleRate_{0};
 };
 

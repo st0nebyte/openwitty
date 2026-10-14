@@ -163,7 +163,7 @@ TEST(Policy, RiskAssessment) {
 TEST(Mock, SimulatedAutoGainRuns) {
     MockSession f;
     ASSERT_TRUE(f.s->connect().ok());
-    ASSERT_TRUE(f.s->sendTrigger(Trigger::AutoGainInput1).ok());
+    ASSERT_TRUE(f.s->sendTrigger(Trigger::AutoGainMicrophone).ok());
     EXPECT_TRUE(f.mock->autoGainRunning());
     int last = -1; int reads = 0;
     while (f.mock->autoGainRunning() && reads++ < 20) {

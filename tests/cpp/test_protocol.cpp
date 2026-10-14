@@ -19,6 +19,8 @@ TEST(Types, MessageTable) {
     EXPECT_FALSE(messageInfo(MessageId::Triggers)->readable);
     EXPECT_EQ(messageInfo(MessageId::Version)->size, 0x40u);
     EXPECT_EQ(messageInfo(static_cast<MessageId>(1)), nullptr);
+    EXPECT_EQ(messageInfo(MessageId::ApiVersion)->size, 0x40u);
+    EXPECT_FALSE(messageInfo(MessageId::ApiVersion)->writable);
 }
 
 TEST(Types, SetupFields) {
@@ -26,6 +28,7 @@ TEST(Types, SetupFields) {
     EXPECT_EQ(wValueFor(MessageId::Status), 0x0102);
     EXPECT_EQ(wValueFor(MessageId::Version), 0x0103);
     EXPECT_EQ(wValueFor(MessageId::Triggers), 0x0104);
+    EXPECT_EQ(wValueFor(MessageId::ApiVersion), 0x000A);   // apiMajor 0 for the handshake
     EXPECT_EQ(wIndexFor(0), 0x3300);
 }
 
@@ -139,7 +142,7 @@ TEST(Trigger, Encoding) {
     ASSERT_EQ(t.size(), 0x40u);
     EXPECT_EQ(t[0], 3); EXPECT_EQ(t[1], 0);
     for (std::size_t i = 2; i < t.size(); ++i) EXPECT_EQ(t[i], 0);
-    auto u = TriggerMessage(Trigger::Unknown0x103).bytes();
+    auto u = TriggerMessage(Trigger::ResetLedColors).bytes();
     EXPECT_EQ(u[0], 0x03); EXPECT_EQ(u[1], 0x01);
 }
 

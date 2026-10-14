@@ -4,7 +4,8 @@
 
 namespace lewitt {
 
-MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(0x40, 0) {
+MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(0x40, 0), api_(0x40, 0) {
+    api_[0] = 1;  // simulated device speaks API v1.0
     // Plausible defaults (not device data): input1 25 dB, volumes 0 dB, preamp clean.
     settings_[0] = 0x00; settings_[1] = 25;      // 25 dB Q8.8
     settings_[10] = 0x00; settings_[11] = 25;
@@ -13,6 +14,7 @@ MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(
     settings_[34] = 1;  // simulated default: microphone monitoring
     settings_[37] = 80;  // LED brightness
     settings_[41] = 0xFF;  // mute LED red (guide: factory red)
+    settings_[53] = 0x0E;  // custom button: toggle brightness (as in the guide screenshot)
 }
 
 Status MockTransport::open() {
@@ -53,12 +55,18 @@ Result<Bytes> MockTransport::read(MessageId id) {
             Bytes st = status_;
             if (agProgress_ >= 0) {  // simulated measurement
                 st[0x24] = static_cast<std::uint8_t>(agProgress_);
-                if (agProgress_ >= 100) { st[0x23] = agOutcome_; agProgress_ = -1; }
+                if (agProgress_ >= 100) {
+                    st[0x23] = agOutcome_;
+                    status_[0x23] = agOutcome_;   // outcome persists after the measurement
+                    status_[0x24] = 100;
+                    agProgress_ = -1;
+                }
                 else agProgress_ += 10;
             }
             return st;
         }
         case MessageId::Version: return version_;
+        case MessageId::ApiVersion: return api_;
         default: return makeError(Errc::NotSupported, "message is write-only");
     }
 }

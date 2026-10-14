@@ -27,6 +27,9 @@ public:
     // Simulated auto-gain: progress 0..100 advances by 10 per status read.
     bool autoGainRunning() const { return agProgress_ >= 0; }
     void setAutoGainOutcome(std::uint8_t resultBits) { agOutcome_ = resultBits; }
+    // Simulates a change made on the device itself (hardware button, other software).
+    void setSettingsBytes(Bytes b) { settings_ = std::move(b); }
+    void setApiVersion(std::uint8_t major, std::uint8_t minor) { api_[0] = major; api_[1] = minor; }
     Bytes settingsBytes() const { return settings_; }
     std::vector<MessageId> writeLog() const { return log_; }
 
@@ -39,6 +42,7 @@ private:
     Bytes settings_;
     Bytes status_;
     Bytes version_;
+    Bytes api_;
     std::vector<MessageId> log_;
     int agProgress_{-1};
     std::uint8_t agOutcome_{0x20};  // SIMULATED result bits (meaning of values unverified)

@@ -12,8 +12,9 @@
 
 ## Engineering
 * ✔ done: Windows MEM GET/SET verified against macOS (PROTOCOL.md).
-* Locate the macOS-streaming flag, the custom-button enum values, `OutputSource` values, factory-reset / reset-LED trigger words.
-* Decode Autosetup/Autogain result codes and error conditions (noise too loud, clipping, no response) from the status flags.
+* ✔ done (5A): custom-button enum, OutputSource usage, trigger words incl. 0x103/0x106, measurement result bits, settings schema, sync algorithm, API handshake (0x0A).
+* Still open: the macOS-streaming **mode-switch command**; bytes 54–56, 58, 60–70; "Background noise too loud" status source (ambient-noise panel); mix range; `iface_version_t`.
+* Hardware: first read `lewitt-cli read api` (message 0x0A) — it validates the whole transport with the smallest read-only message.
 * Use REA MCP session for iterative function/xref work (CLI re-imports each call, ~2 min).
 * Recover `iface_version_t` layout; identify which settings groups are headphone/speaker.
 * Disassemble the write path & tick cadence (`Connect2Device::tick`).

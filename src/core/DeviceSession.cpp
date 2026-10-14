@@ -19,6 +19,24 @@ Status DeviceSession::fail(Error e) {
 Status DeviceSession::connect() {
     state_ = ConnectionState::Connecting;
     if (auto s = transport_->open(); !s) return fail(s.error());
+    // Version handshake first, as LewittDevice::open does: message 0x0A, major must be 1.
+    if (auto r = transport_->read(MessageId::ApiVersion); !r) {
+        transport_->close();
+        return fail(r.error());
+    } else if (auto m = ApiVersionMessage::fromBytes(r.value()); !m) {
+        transport_->close();
+        return fail(m.error());
+    } else {
+        api_ = m.value();
+        if (api_->major() != kSupportedApiMajor) {
+            transport_->close();
+            state_ = ConnectionState::Error;
+            lastError_ = makeError(Errc::NotSupported,
+                "Message API version not supported by the device (device major " +
+                std::to_string(api_->major()) + ", supported " + std::to_string(kSupportedApiMajor) + ")");
+            return lastError_;
+        }
+    }
     state_ = ConnectionState::Connected;
     if (auto s = refreshSettings(); !s) { state_ = ConnectionState::Error; transport_->close(); return s; }
     (void)refreshStatus();
@@ -28,7 +46,7 @@ Status DeviceSession::connect() {
 void DeviceSession::disconnect() {
     transport_->close();
     state_ = ConnectionState::Disconnected;
-    current_.reset(); pending_.reset(); status_.reset();
+    current_.reset(); pending_.reset(); status_.reset(); api_.reset();
 }
 
 Status DeviceSession::refreshSettings() {
@@ -36,8 +54,16 @@ Status DeviceSession::refreshSettings() {
     if (!r) return fail(r.error());
     auto m = SettingsMessage::fromBytes(r.value());
     if (!m) return fail(m.error());
+    // Same merge as the original app: user edits survive, fields that changed on the
+    // device (hardware button, other software) win. Unedited pending state is dropped.
+    if (pending_ && current_) {
+        SettingsMessage merged = *pending_;
+        merged.mergeExternalChanges(*current_, m.value());
+        pending_ = (merged == m.value()) ? std::nullopt : std::optional<SettingsMessage>(merged);
+    } else {
+        pending_.reset();
+    }
     current_ = m.value();
-    pending_.reset();
     return okStatus();
 }
 
@@ -69,8 +95,10 @@ Status DeviceSession::commit() {
 Status DeviceSession::sendTrigger(Trigger t) {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
-    if (t == Trigger::Unknown0x103 || t == Trigger::Unknown0x106)
-        return makeError(Errc::NotSupported, "trigger meaning unknown; refusing to send");
+    if (t == Trigger::FactoryReset)
+        return makeError(Errc::NotSupported, "factory reset is destructive and never sent by this build");
+    if (t == Trigger::ResetLedColors && !(policy_.allowPersistentChanges || transport_->isSimulated()))
+        return makeError(Errc::WritesDisabled, "resetting LED colours is a persistent change; not enabled");
     auto b = TriggerMessage(t).bytes();
     if (auto s = transport_->write(MessageId::Triggers, b); !s) return fail(s.error());
     return okStatus();

@@ -58,6 +58,7 @@ enum class MessageId : std::uint8_t {
     Status = 2,    // R   0x40
     Version = 3,   // R   0x40
     Triggers = 4,  // W   0x40
+    ApiVersion = 0x0A,  // R   0x40 (lewitt_api_t; its own apiMajor is 0)
 };
 
 struct MessageInfo {
@@ -68,12 +69,18 @@ struct MessageInfo {
     bool writable;
 };
 
-inline constexpr std::array<MessageInfo, 4> kMessages{{
+inline constexpr std::array<MessageInfo, 5> kMessages{{
     {MessageId::Settings, "iface_settings_t", 0x80, true, true},
     {MessageId::Status, "iface_status_t", 0x40, true, false},
     {MessageId::Version, "iface_version_t", 0x40, true, false},
     {MessageId::Triggers, "iface_triggers_t", 0x40, false, true},
+    {MessageId::ApiVersion, "lewitt_api_t", 0x40, true, false},
 }};
+
+// apiMajorVersion() of each message (high byte of wValue). iface_* messages are
+// API v1; the API-version message itself is 0 (it is read before the version is known).
+constexpr std::uint8_t apiMajorOf(MessageId id) { return id == MessageId::ApiVersion ? 0 : 1; }
+inline constexpr std::uint8_t kSupportedApiMajor = 1;
 
 const MessageInfo* messageInfo(MessageId id);
 
@@ -90,7 +97,7 @@ inline constexpr std::uint8_t kReqUac1SetMem = 0x05;
 inline constexpr unsigned kTimeoutMs = 500;
 
 constexpr std::uint16_t wValueFor(MessageId id) {
-    return static_cast<std::uint16_t>((kApiMajor << 8) | static_cast<std::uint8_t>(id));
+    return static_cast<std::uint16_t>((apiMajorOf(id) << 8) | static_cast<std::uint8_t>(id));
 }
 constexpr std::uint16_t wIndexFor(std::uint8_t interfaceNumber) {
     return static_cast<std::uint16_t>((kUnitId << 8) | interfaceNumber);

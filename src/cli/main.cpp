@@ -69,15 +69,15 @@ static int probe(bool execute) {
         if (libusb_kernel_driver_active(h, num) == 1) continue;  // never touch bound interfaces
         vars.push_back({"interface recipient, UNBOUND interface", kBmGet, num});
     }
-    std::printf("planned read-only probes (GET version, wLength 0x40):\n");
+    std::printf("planned read-only probes (GET api-version 0x0A, wLength 0x40):\n");
     int idx = 0;
     for (auto& v : vars) {
         for (std::uint8_t req : {kReqUac2Mem, kReqUac1GetMem}) {
             std::printf("  #%d %-45s bm=%02x req=%02x wValue=%04x wIndex=%04x\n", ++idx, v.what, v.bm, req,
-                        wValueFor(MessageId::Version), wIndexFor(std::uint8_t(v.ifnum)));
+                        wValueFor(MessageId::ApiVersion), wIndexFor(std::uint8_t(v.ifnum)));
             if (!execute) continue;
             std::uint8_t buf[0x40] = {};
-            int rc = libusb_control_transfer(h, v.bm, req, wValueFor(MessageId::Version),
+            int rc = libusb_control_transfer(h, v.bm, req, wValueFor(MessageId::ApiVersion),
                                              wIndexFor(std::uint8_t(v.ifnum)), buf, sizeof buf, kTimeoutMs);
             if (rc < 0) std::printf("      -> %s\n", libusb_error_name(rc));
             else { std::printf("      -> %d bytes: ", rc); for (int k = 0; k < rc; ++k) std::printf("%02x", buf[k]); std::puts(""); }
@@ -94,7 +94,7 @@ static int probe(bool execute) {
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: lewitt-cli list | probe [--execute] | read <version|status|settings> [--mock] [--uac1] [--detach]\n"
+                     "usage: lewitt-cli list | probe [--execute] | read <api|version|status|settings> [--mock] [--uac1] [--detach]\n"
                      "  --detach is disruptive (drops the sound card) and also needs "
                      "LEWITT_ALLOW_DISRUPTIVE=1\n");
         return 64;
@@ -135,7 +135,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "open failed: %s\n", s.error().message.c_str());
         return 1;
     }
-    MessageId id = what == "version" ? MessageId::Version
+    MessageId id = what == "api" ? MessageId::ApiVersion
+                   : what == "version" ? MessageId::Version
                    : what == "status" ? MessageId::Status : MessageId::Settings;
     auto r = t->read(id);
     if (!r) {
@@ -147,6 +148,13 @@ int main(int argc, char** argv) {
         auto m = SettingsMessage::fromBytes(r.value());
         if (!m) { std::fprintf(stderr, "%s\n", m.error().message.c_str()); return 1; }
         printSettings(m.value());
+    } else if (id == MessageId::ApiVersion) {
+        auto m = ApiVersionMessage::fromBytes(r.value());
+        if (!m) { std::fprintf(stderr, "%s\n", m.error().message.c_str()); return 1; }
+        std::printf("api major=%u minor=%u (supported major: %u)\n", m.value().major(), m.value().minor(),
+                    kSupportedApiMajor);
+        std::printf("raw=");
+        hex(r.value());
     } else {
         hex(r.value());
     }
