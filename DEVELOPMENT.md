@@ -57,3 +57,16 @@ cmake --build build --target lewitt_bench lewitt_bench_gui && build/lewitt_bench
 # diagnostics (read-only)
 build/lewitt-cli devices | diagnose | read api [--method interface|device-recipient] [--request uac2|uac1] | probe [--execute]
 ```
+
+## Packaging builds
+
+```sh
+cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-rel
+(cd build-rel && cpack -G DEB)                     # rootless .deb, not installed
+cmake -S . -B build-mock -DLEWITT_ENABLE_USB=OFF   # mock-only, no libusb
+tools/packaging/check_staging.sh build-rel         # isolated DESTDIR install checks
+tools/packaging/emulate_pkgbuild.sh                # PKGBUILD emulation (no makepkg here)
+```
+
+The configure step bakes `QML_IMPORT_PATH` into the GUI test environment; set it (and the
+sysroot variables) *before* running `cmake`, or reconfigure. Details: docs/PACKAGING.md.

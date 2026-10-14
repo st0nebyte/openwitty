@@ -10,7 +10,9 @@
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
 //           LEWITT_ALLOW_DISRUPTIVE=1 as well).  Requests: uac2 (default) | uac1.
+#ifdef LEWITT_HAVE_USB
 #include <libusb.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +26,7 @@
 #include "transport/MockTransport.hpp"
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
+#include "lewitt/version.hpp"
 
 using namespace lewitt;
 
@@ -177,6 +180,12 @@ int cmdRead(const ReadArgs& a) {
     return 0;
 }
 
+#ifndef LEWITT_HAVE_USB
+int cmdProbe(bool) {
+    std::puts("this build has no USB support (mock-only build); nothing to probe");
+    return 1;
+}
+#else
 // Read-only experiment matrix (GET of the 0x0A handshake). Dry run unless --execute.
 int cmdProbe(bool execute) {
     struct Variant { const char* what; std::uint8_t bm; int ifnum; };
@@ -246,6 +255,7 @@ int cmdProbe(bool execute) {
     libusb_exit(ctx);
     return 0;
 }
+#endif  // LEWITT_HAVE_USB
 
 }  // namespace
 
@@ -260,6 +270,10 @@ int main(int argc, char** argv) {
         return 64;
     }
     std::string cmd = argv[1];
+    if (cmd == "--version" || cmd == "version") {
+        std::printf("lewitt-cli %s (%s build)\n%s\n", LEWITT_VERSION_STRING, LEWITT_BUILD_FLAVOUR, LEWITT_NOTICE);
+        return 0;
+    }
     if (cmd == "devices") return cmdDevices(false);
     if (cmd == "diagnose") return cmdDevices(true);
     if (cmd == "list") {

@@ -1,0 +1,9 @@
+# LEWITT CONNECT 2 (VID 0x29c2): give the logged-in (seat) user read/write access to the
+# USB device node so that userspace tools (lewitt-cli, the control application) can open it.
+#
+# * The file must sort BEFORE 73-seat-late.rules, which turns the "uaccess" tag into an ACL,
+#   hence the 70- prefix (a 99- prefix would be applied too late).
+# * This only fixes file permissions (EACCES). It does not and cannot solve EBUSY, which is the
+#   kernel's snd-usb-audio driver owning the AudioControl interface (see docs/USB_PERMISSIONS.md).
+# * It does not load or bind any driver and does not change the sound card in any way.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="29c2", TAG+="uaccess"

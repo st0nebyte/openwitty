@@ -38,3 +38,12 @@
 * Interruptible control transfers (libusb async + cancel) to bound shutdown latency below 500 ms.
 * Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).
 * Persist onboarding flag; log file / diagnostics export.
+
+## Packaging (phase 5D follow-ups)
+
+- Owner: choose a project licence (metadata currently "all rights reserved until chosen").
+- Owner: replace placeholder homepage/maintainer in CPack, PKGBUILD, metainfo.
+- Run makepkg + namcap (Arch) and lintian (Debian) on real hosts; smoke-test installs in a VM.
+- Install the udev rule manually only after review (docs/USB_PERMISSIONS.md).
+- AppImage/Flatpak: deferred (see docs/PACKAGING.md).
+- Add `developer`/screenshots to metainfo once a licence and hosting exist.

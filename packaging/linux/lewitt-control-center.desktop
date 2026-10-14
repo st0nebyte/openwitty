@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CONNECT 2 Control Center (unofficial)
+GenericName=Audio interface control
+Comment=Unofficial, experimental Linux control application for the LEWITT CONNECT 2 (not affiliated with LEWITT)
+Exec=lewitt-control-center
+Icon=lewitt-control-center
+Terminal=false
+StartupNotify=false
+StartupWMClass=lewitt-control-center
+Categories=AudioVideo;Audio;Mixer;Settings;HardwareSettings;
+Keywords=audio;interface;mixer;CONNECT 2;LEWITT;microphone;
+Actions=Simulated;
+
+[Desktop Action Simulated]
+Name=Start with simulated device
+Exec=lewitt-control-center --mock

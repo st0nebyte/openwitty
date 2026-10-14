@@ -2,35 +2,11 @@
 
 #include <libusb.h>
 
+#include <string>
+
 #include "protocol/WriteGuard.hpp"
 
 namespace lewitt {
-Error mapLibusbError(int rc, const char* what) {
-    Errc c = Errc::Io;
-    const char* hint = "";
-    switch (rc) {
-        case LIBUSB_ERROR_TIMEOUT: c = Errc::Timeout; break;
-        case LIBUSB_ERROR_NO_DEVICE: c = Errc::Disconnected; break;
-        case LIBUSB_ERROR_PIPE:
-            c = Errc::Stall;
-            hint = " (device rejected the request; unsupported request variant or recipient?)";
-            break;
-        case LIBUSB_ERROR_BUSY:
-            c = Errc::Busy;
-            hint = " (interface is owned by another driver, e.g. snd-usb-audio; this is a kernel "
-                   "ownership conflict, not a file-permission problem)";
-            break;
-        case LIBUSB_ERROR_ACCESS:
-            c = Errc::AccessDenied;
-            hint = " (no filesystem permission on /dev/bus/usb node; a udev rule/uaccess is needed; "
-                   "unrelated to driver ownership)";
-            break;
-        case LIBUSB_ERROR_NOT_FOUND: c = Errc::NotFound; break;
-        default: break;
-    }
-    return makeError(c, std::string(what) + ": " + libusb_error_name(rc) + hint);
-}
-
 namespace {
 Error mapErr(int rc, const char* what) { return mapLibusbError(rc, what); }
 bool isConnect2Pid(std::uint16_t pid) {

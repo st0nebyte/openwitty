@@ -112,7 +112,10 @@ TEST(UsbTransport, WritesRefusedByDefault) {
 }
 
 // --- error taxonomy: permission vs. claimed interface vs. stall ---------
+#ifdef LEWITT_HAVE_USB
 #include <libusb.h>
+#endif
+#ifdef LEWITT_HAVE_USB
 TEST(UsbErrors, PermissionBusyStallAreDistinct) {
     auto acc = mapLibusbError(LIBUSB_ERROR_ACCESS, "open");
     auto busy = mapLibusbError(LIBUSB_ERROR_BUSY, "ctrl");
@@ -127,6 +130,7 @@ TEST(UsbErrors, PermissionBusyStallAreDistinct) {
     EXPECT_NE(acc.message.find("udev"), std::string::npos);
     EXPECT_NE(busy.message.find("ownership"), std::string::npos);
 }
+#endif
 
 TEST(Session, StallKeepsConnection) {
     Fixture f;
@@ -183,4 +187,16 @@ TEST(Session, DisconnectClearsState) {
     EXPECT_FALSE(f.session->settings().has_value());
     EXPECT_FALSE(f.session->status().has_value());
     EXPECT_EQ(f.session->state(), ConnectionState::Disconnected);
+}
+
+TEST(UsbErrors, NumericCodesMatchLibusbAbi) {
+    // enum libusb_error values are ABI-stable; this guards the libusb-free mapping.
+    EXPECT_EQ(mapLibusbError(-3, "x").code, Errc::AccessDenied);
+    EXPECT_EQ(mapLibusbError(-6, "x").code, Errc::Busy);
+    EXPECT_EQ(mapLibusbError(-9, "x").code, Errc::Stall);
+    EXPECT_EQ(mapLibusbError(-7, "x").code, Errc::Timeout);
+    EXPECT_EQ(mapLibusbError(-4, "x").code, Errc::Disconnected);
+    EXPECT_EQ(mapLibusbError(-5, "x").code, Errc::NotFound);
+    EXPECT_EQ(mapLibusbError(-10, "x").code, Errc::Cancelled);
+    EXPECT_EQ(mapLibusbError(-99, "x").code, Errc::Io);
 }

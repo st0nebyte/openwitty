@@ -24,6 +24,10 @@ qt_add_qml_module(lewitt-control-center
     QML_FILES ${LEWITT_QML_FILES})
 
 target_link_libraries(lewitt-control-center PRIVATE lewitt_gui_backend Qt6::Qml Qt6::Quick)
+# Distribution packages must not carry an RPATH/RUNPATH (qt_standard_project_setup adds
+# $ORIGIN/../lib); the system loader finds Qt and libusb through ld.so.cache.
+set_target_properties(lewitt-control-center PROPERTIES INSTALL_RPATH "" INSTALL_RPATH_USE_LINK_PATH OFF)
+install(TARGETS lewitt-control-center RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(LEWITT_BUILD_TESTS)
     add_executable(lewitt_gui_tests ${CMAKE_SOURCE_DIR}/tests/gui/test_gui.cpp)

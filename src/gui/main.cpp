@@ -6,11 +6,15 @@
 #include <QTimer>
 
 #include "DeviceController.hpp"
+#include "lewitt/version.hpp"
 
 int main(int argc, char** argv) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("lewitt-control-center");
+    app.setApplicationDisplayName(LEWITT_APP_NAME);
+    app.setApplicationVersion(LEWITT_VERSION_STRING);
     app.setOrganizationName("lewitt-linux");
+    QGuiApplication::setDesktopFileName(LEWITT_APP_DESKTOP_ID);   // Wayland app-id / icon matching
     QCommandLineParser p;
     QCommandLineOption mock("mock", "Start with the simulated device.");
     p.addOption(mock);
@@ -20,7 +24,9 @@ int main(int argc, char** argv) {
     p.addOption(sizeOpt);
     QCommandLineOption show("show", "Open a page at start: settings | wizard | onboarding.", "page");
     p.addOption(show);
+    p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();
+    p.addVersionOption();
     p.process(app);
 
     DeviceController controller;

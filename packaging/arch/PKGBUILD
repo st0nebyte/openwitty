@@ -1,0 +1,48 @@
+# Maintainer: unofficial community project <noreply@example.invalid>
+#
+# Local-source PKGBUILD for the UNOFFICIAL LEWITT CONNECT 2 control centre (experimental,
+# not validated on hardware). It builds from a tarball of THIS repository, never from the
+# network and never from proprietary files:
+#
+#   packaging/arch/make-source-tarball.sh        # writes packaging/arch/<pkgname>-<pkgver>.tar.gz
+#   cd packaging/arch && makepkg -s              # run as a normal user, never as root
+#
+# makepkg itself is not installed on the Ubuntu development host; this file was validated
+# by `bash -n` and by emulating prepare/build/package with a fake srcdir/pkgdir.
+pkgname=lewitt-connect2-unofficial
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2 (not hardware-validated)'
+arch=('x86_64')
+url='https://example.invalid/lewitt-connect2-linux'
+# No licence has been chosen by the project owner yet; see docs/PACKAGING.md.
+license=('LicenseRef-custom')
+depends=('qt6-base' 'qt6-declarative' 'libusb' 'hicolor-icon-theme')
+makedepends=('cmake' 'ninja' 'gtest')
+optdepends=('usbutils: lsusb for manual diagnostics'
+            'alsa-utils: aplay/amixer for manual diagnostics')
+options=('!strip' '!debug')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')   # local tarball produced from the working tree
+
+build() {
+    cmake -S "$srcdir/$pkgname-$pkgver" -B "$srcdir/build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DLEWITT_BUILD_TESTS=ON \
+        -DLEWITT_INSTALL_UDEV_RULES=ON \
+        -DLEWITT_REPRODUCIBLE=ON \
+        -Wno-dev
+    cmake --build "$srcdir/build"
+}
+
+check() {
+    # Offscreen platform: no display needed. The Python/venv based tests are skipped
+    # automatically when their prerequisites are missing.
+    QT_QPA_PLATFORM=offscreen ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    # Arch uses /usr/lib/udev/rules.d (already the default prefix-relative location).
+}

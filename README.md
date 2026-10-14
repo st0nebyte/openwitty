@@ -24,3 +24,11 @@ no driver detach unless `--detach` **and** `LEWITT_ALLOW_DISRUPTIVE=1`;
 firmware/DFU is not implemented.
 
 See `BUILDING` section in `DEVELOPMENT.md`, `PROTOCOL.md`, `FEATURES.md`.
+
+## Installing
+
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) (Ubuntu `.deb`, Arch/CachyOS PKGBUILD, user-local),
+[docs/USB_PERMISSIONS.md](docs/USB_PERMISSIONS.md) (udev rule, EACCES vs EBUSY) and
+[docs/PACKAGING.md](docs/PACKAGING.md). Packages are **unofficial and experimental**; the
+protocol is not validated on hardware, hardware writes are disabled, and no project licence has
+been chosen yet.

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+# Re-read udev rules and re-apply them to an already plugged-in device so the access ACL
+# appears without replugging. Failures are not fatal (e.g. containers without udev).
+if [ "$1" = "configure" ] && command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules >/dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=usb --attr-match=idVendor=29c2 >/dev/null 2>&1 || true
+fi
+exit 0

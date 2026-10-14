@@ -65,3 +65,13 @@ GUI path (offscreen): `setValue` → echoed state median 0.03 ms, p95 0.06 ms, m
 simulated unplug→replug→Connected ≈ 40 ms (dominated by the 40 ms poll tick). Idle:
 no-device USB mode ≈ 0 CPU ticks / 10 s; mock with 25 Hz meters ≈ 11 % of one core on the
 software renderer; RSS ≈ 65 MB. Real USB latency (ms) will dominate all of the above.
+
+## Phase 5D: packaging
+
+* `packaging_staging` (ctest): `tools/packaging/check_staging.sh` – isolated DESTDIR install,
+  layout, RPATH/dev-path leakage, `--version`, headless mock start/exit, desktop/appstream/XML
+  validation, udev rule properties.
+* Mock-only configuration (`-DLEWITT_ENABLE_USB=OFF`): 90 tests + packaging pass; the stub
+  transport keeps the same write-guard order (`WriteGuard.UsbTransportRefusesEvenWithWritesEnabled`).
+* Release build: 92/92 ctest entries pass. Not hardware-verified. Not installed on the host.
+* `tools/packaging/emulate_pkgbuild.sh`: PKGBUILD build/check/package emulation (not makepkg).

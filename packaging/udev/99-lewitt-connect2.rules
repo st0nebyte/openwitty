@@ -1,2 +1,0 @@
-# LEWITT (VID 0x29c2) -- grant the logged-in user access for the control utility
-SUBSYSTEM=="usb", ATTR{idVendor}=="29c2", TAG+="uaccess"
