@@ -1,0 +1,26 @@
+.TH LEWITT-CONTROL-CENTER 1 "October 2026" "lewitt-connect2-unofficial 0.1.0" "User Commands"
+.SH NAME
+lewitt-control-center \- unofficial, experimental control application for the LEWITT CONNECT 2
+.SH SYNOPSIS
+.B lewitt-control-center
+.RB [ \-\-mock "] [" \-\-show " page] [" \-\-screenshot " file] [" \-\-size " WxH] [" \-\-version ]
+.SH DESCRIPTION
+A Qt 6 / QML control application. It is not affiliated with LEWITT. The control protocol was
+derived by static analysis and has \fBnot been validated on real hardware\fR; writes to real
+hardware are disabled, so a connected device is shown read-only. A simulated device is
+included and always labelled as simulated.
+.SH OPTIONS
+.TP
+.B \-\-mock
+Start with the simulated device.
+.TP
+.BI \-\-show " page"
+Open settings, wizard or onboarding at start.
+.TP
+.BI \-\-screenshot " file"
+Render one frame to a PNG and exit (offscreen use).
+.TP
+.BI \-\-size " WxH"
+Window size for screenshots.
+.SH SEE ALSO
+.BR lewitt-cli (1)

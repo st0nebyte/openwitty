@@ -1,0 +1,42 @@
+.TH LEWITT-CLI 1 "October 2026" "lewitt-connect2-unofficial 0.1.0" "User Commands"
+.SH NAME
+lewitt-cli \- read-only diagnostic tool for the LEWITT CONNECT 2 (unofficial, experimental)
+.SH SYNOPSIS
+.B lewitt-cli
+.RB { devices | diagnose | list | probe " [" \-\-execute "] | read"
+.IR what " [" options "] | \-\-version }"
+.SH DESCRIPTION
+.B lewitt-cli
+inspects LEWITT USB devices (vendor id 0x29c2) and performs single read-only control
+transfers. It has no command that writes to the device. This software is not affiliated with
+LEWITT, and its protocol knowledge has not been validated on real hardware.
+.SH COMMANDS
+.TP
+.B devices
+List LEWITT devices from sysfs: descriptors, interfaces, bound kernel drivers and node
+permissions. No USB traffic is sent.
+.TP
+.B diagnose
+Like \fBdevices\fR, with an explanation of what each finding means for control access.
+.TP
+.B list
+Quick libusb enumeration (vendor/product id only).
+.TP
+.BR probe " [" \-\-execute ]
+Dry run (default) or execution of a small matrix of GET-only experiments.
+.TP
+.BR read " " api | version | status | settings
+Read one message. Options:
+.BR \-\-mock " (simulated device), " \-\-method " interface|device-recipient|detach,"
+.BR \-\-request " uac2|uac1."
+.SH EXIT STATUS
+0 success; 3 permission denied (EACCES); 4 interface busy (EBUSY); 5 stall (EPIPE); 6 timeout;
+7 device absent; 8 unsupported; 9 bad response; 64 usage error.
+.SH ENVIRONMENT
+.TP
+.B LEWITT_ALLOW_DISRUPTIVE
+Must be set, in addition to \fB\-\-method detach\fR, to allow detaching the kernel audio driver
+(this removes the sound card while it runs). Never set by default.
+.SH SEE ALSO
+.BR lewitt-control-center (1),
+/usr/share/doc/lewitt-connect2-unofficial/USB_PERMISSIONS.md

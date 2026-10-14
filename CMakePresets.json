@@ -1,0 +1,39 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    { "name": "base", "hidden": true, "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-${presetName}" },
+    { "name": "release", "inherits": "base", "displayName": "Release (default, tests on)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "debug", "inherits": "base", "displayName": "Debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "mock-only", "inherits": "base", "displayName": "Release, no libusb (simulated device only)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LEWITT_ENABLE_USB": "OFF" } },
+    { "name": "core-only", "inherits": "base", "displayName": "Qt-free core + CLI + core tests",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LEWITT_BUILD_GUI": "OFF" } },
+    { "name": "asan", "inherits": "base", "displayName": "Debug + ASan/UBSan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "LEWITT_SANITIZE": "address,undefined",
+                          "CMAKE_CXX_FLAGS": "-D_GLIBCXX_ASSERTIONS" } },
+    { "name": "tsan", "inherits": "base", "displayName": "Debug + TSan (core only; run with setarch -R)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "LEWITT_SANITIZE": "thread", "LEWITT_BUILD_GUI": "OFF" } },
+    { "name": "warnings", "inherits": "base", "displayName": "Debug + strict warnings",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Wnull-dereference -Wcast-qual -Wformat=2 -Woverloaded-virtual -Wnon-virtual-dtor" } }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "release" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "mock-only", "configurePreset": "mock-only" },
+    { "name": "core-only", "configurePreset": "core-only" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "warnings", "configurePreset": "warnings" }
+  ],
+  "testPresets": [
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "mock-only", "configurePreset": "mock-only", "output": { "outputOnFailure": true } },
+    { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true } }
+  ]
+}

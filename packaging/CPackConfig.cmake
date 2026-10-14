@@ -6,10 +6,12 @@ set(CPACK_PACKAGE_VENDOR "unofficial community project")
 set(CPACK_PACKAGE_CONTACT "LEWITT CONNECT 2 Linux project <noreply@example.invalid>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Unofficial, experimental control application for the LEWITT CONNECT 2")
 set(CPACK_PACKAGE_DESCRIPTION
-    "Independent Linux control application and diagnostic tool for the LEWITT CONNECT 2 USB audio interface.\n Not affiliated with LEWITT. The control protocol was derived by static analysis and has not been validated on real hardware; hardware writes are disabled and a simulated device is included.")
+    "Independent Linux control application and diagnostic tool for the\nLEWITT CONNECT 2 USB audio interface.\nNot affiliated with LEWITT. The control protocol was derived by static\nanalysis and has not been validated on real hardware; hardware writes are\ndisabled and a simulated device is included.")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://example.invalid/lewitt-connect2-linux")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES ON)
+set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 set(CPACK_SET_DESTDIR OFF)
 set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
 set(CPACK_GENERATOR "DEB")

@@ -14,7 +14,12 @@
     simulation mode.</p>
   </description>
   <launchable type="desktop-id">lewitt-control-center.desktop</launchable>
-  <provides><binary>lewitt-control-center</binary><binary>lewitt-cli</binary></provides>
+  <provides>
+    <binary>lewitt-control-center</binary>
+    <binary>lewitt-cli</binary>
+    <modalias>usb:v29C2p0004d*</modalias>
+    <modalias>usb:v29C2p0002d*</modalias>
+  </provides>
   <categories><category>AudioVideo</category><category>Audio</category></categories>
   <content_rating type="oars-1.1"/>
   <releases><release version="0.1.0" date="2026-10-14"/></releases>

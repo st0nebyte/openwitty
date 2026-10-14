@@ -136,6 +136,31 @@ install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_AC
               docs/HARDWARE_TEST_PLAN.md PROTOCOL.md FEATURES.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES packaging/udev/70-lewitt-connect2.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)
+
+# Debian changelog and man pages are compressed at configure time with a timestamp-free
+# gzip (-n) so the output is reproducible.
+find_program(LEWITT_GZIP gzip)
+if(LEWITT_GZIP)
+    set(_gzdir ${CMAKE_BINARY_DIR}/packaging-gz)
+    file(MAKE_DIRECTORY ${_gzdir})
+    foreach(_f debian/changelog man/lewitt-cli.1 man/lewitt-control-center.1)
+        get_filename_component(_n ${_f} NAME)
+        if(_n STREQUAL "changelog")
+            set(_out ${_gzdir}/changelog.Debian.gz)
+        else()
+            set(_out ${_gzdir}/${_n}.gz)
+        endif()
+        execute_process(COMMAND ${LEWITT_GZIP} -9nc ${CMAKE_SOURCE_DIR}/packaging/${_f}
+                        OUTPUT_FILE ${_out} RESULT_VARIABLE _rc)
+        if(NOT _rc EQUAL 0)
+            message(FATAL_ERROR "gzip failed for ${_f}")
+        endif()
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/packaging/${_f})
+    endforeach()
+    install(FILES ${_gzdir}/changelog.Debian.gz DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    install(FILES ${_gzdir}/lewitt-cli.1.gz ${_gzdir}/lewitt-control-center.1.gz
+            DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+endif()
 if(LEWITT_INSTALL_UDEV_RULES)
     install(FILES packaging/udev/70-lewitt-connect2.rules DESTINATION ${LEWITT_UDEV_RULES_DIR})
 endif()

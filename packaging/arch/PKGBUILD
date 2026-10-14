@@ -7,8 +7,9 @@
 #   packaging/arch/make-source-tarball.sh        # writes packaging/arch/<pkgname>-<pkgver>.tar.gz
 #   cd packaging/arch && makepkg -s              # run as a normal user, never as root
 #
-# makepkg itself is not installed on the Ubuntu development host; this file was validated
-# by `bash -n` and by emulating prepare/build/package with a fake srcdir/pkgdir.
+# On the Ubuntu development host the genuine makepkg script was run rootless with --nodeps
+# (tools/packaging/run_makepkg_rootless.sh); namcap could not be run there (needs libalpm).
+# A run on an Arch/CachyOS system with `makepkg -s` and `namcap` is still outstanding.
 pkgname=lewitt-connect2-unofficial
 pkgver=0.1.0
 pkgrel=1
@@ -21,7 +22,6 @@ depends=('qt6-base' 'qt6-declarative' 'libusb' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'gtest')
 optdepends=('usbutils: lsusb for manual diagnostics'
             'alsa-utils: aplay/amixer for manual diagnostics')
-options=('!strip' '!debug')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')   # local tarball produced from the working tree
 
