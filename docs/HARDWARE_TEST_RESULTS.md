@@ -354,3 +354,135 @@ were performed at any point.
 * Instrument gain, mute toggles, Dim (not present on this unit's front panel — see FEATURES.md),
   Mono, speaker mute, Clipguard, and preamp style have not yet been physically tested.
 * No write test has been proposed or executed. This session stayed entirely within plan step 9.
+
+## 12. Phase 6B — extended physical validation (follow-up session)
+
+Same method as §10: one control changed by hand at a time, `read settings --interface 3` before and
+after, diffed byte-for-byte, checked against `settings_off`. All reads only; card present and
+unchanged after every single capture; no writes, claims, detaches, resets, mode switches, or
+phantom-power changes at any point.
+
+Baseline at the start of this session (continuation of §10's end state): mic gain 28.00 dB (muted),
+instrument gain 12.00 dB (muted), phantom on, speaker 0.00 dB (unmuted), headphone −22.63 dB (muted),
+byte 56 = `01` (mic last selected).
+
+### 12.1 Instrument gain (wheel turn)
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 10–11 | `kGain[1]` (instrument gain, i16 LE Q8.8, 0–60 dB) | `0c 00`-equivalent = 12.00 dB | byte11 `0c`→`17` = 23.00 dB | **CONFIRMED** — exact +11 dB |
+| 56 | selected-channel | `01` (mic) | `02` | **Confirms the session's open hypothesis: instrument = `0x02`** |
+
+No other byte changed. Restored (wheel turned back down) to 16.00 dB — direction and field confirmed
+again on the partial-restore read; exact dB value not expected to match given the wheel's analog step
+granularity (same behaviour observed for headphone volume in §10).
+
+### 12.2 Safety reordering — speaker mute moved earlier
+
+Speaker was unmuted and at the 0.00 dB ceiling (loudest point in its range) at this point, with
+monitor source set to "both" (direct mic+instrument monitoring). Before testing mic/instrument mute,
+speaker was muted first as a precaution against unexpected monitored output. The user separately
+confirmed the physical speakers' own power switch was off and headphones were not being worn,
+providing additional margin.
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 22 | `kSpeakerMute` | `00` | `01` | **CONFIRMED** |
+| 56 | selected-channel | `02` (instrument) | `03` | consistent (3rd observation of speaker=`0x03`, counting the §10 baseline) |
+
+Speaker was **deliberately left muted for the remainder of the session** rather than restored to its
+original unmuted state — an intentional safety choice, not an oversight.
+
+### 12.3 Microphone mute
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 2 | `kMute[0]` (mic mute) | `01` | `00` | **CONFIRMED** |
+| 56 | selected-channel | `03` (speaker) | `01` (mic) | consistent |
+
+Bonus corroboration (not a target offset, observational only): a `read status --interface 3` capture
+taken while mic was live showed the input-1 meter (bytes 0–1, PROTOCOL.md's documented offset) move
+from −100 dB (floor, while muted) to −62.27 dB (near the documented [−60,0] clamp, consistent with
+ambient room noise on a live mic). Two neighbouring status bytes (3–4) also moved; their meaning is
+not established and is **not** claimed here — flagged as an observation only, out of scope for this
+settings-focused session.
+
+Restored: MUTE pressed again, settings re-read, only byte 2 reverted (`00`→`01`); **reversal
+verified**, all other bytes unchanged including byte 56.
+
+### 12.4 Instrument mute
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 12 | `kMute[1]` (instrument mute) | `01` | `00` | **CONFIRMED** |
+| 56 | selected-channel | `01` (mic) | `02` (instrument) | consistent (2nd observation) |
+
+Restored: MUTE pressed again, only byte 12 reverted; **reversal verified**.
+
+### 12.5 Speaker volume (wheel turn; safe since speaker was already muted per §12.2)
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 20–21 | `kSpeakerVolume` (i16 LE Q8.8, −60…0 dB) | `00 00` = 0.00 dB | `58 f4` = −11.66 dB | **CONFIRMED** |
+| 56 | selected-channel | `02` (instrument) | `03` (speaker) | consistent |
+
+Restored: wheel turned back up; settings re-read, offset 20–21 returned to exactly `00 00` = 0.00 dB
+— an **exact** match this time (unlike the headphone-volume partial restores in §10), consistent with
+0.00 dB being a hard ceiling the wheel physically stops at rather than a steppable mid-range value.
+**Reversal verified exactly.**
+
+### 12.6 Headphone mute
+
+| Offset | Field | Before | After | Verdict |
+|---|---|---|---|---|
+| 29 | `kHeadphoneMute` | `01` | `00` | **CONFIRMED** |
+| 56 | selected-channel | `03` (speaker) | `04` (headphone) | consistent |
+
+Restored: MUTE pressed again, only byte 29 reverted; **reversal verified**. (Headphones were off the
+user's ears throughout, per their earlier confirmation in §10.)
+
+### 12.7 Controls with no physical access on this unit — documented, not invented
+
+The user confirmed (2026-10-14/15): no long-press gesture exists on any front-panel button, and the
+following are CONTROL CENTER (software)/overlay-only on this CONNECT 2 unit, with no hardware path to
+test them:
+
+* **Mono/stereo toggle** (`kMono`, offset 33)
+* **Clipguard** (offsets 4/14)
+* **Preamp style selection** (Clean/Warm/Vivid, offsets 6/15)
+
+Per the session's instruction, these are recorded as a hardware-access limitation rather than tested
+via an invented interaction. (Dim, offset 32, was already established in §10 as having no dedicated
+front-panel button on this unit either.)
+
+### 12.8 Byte 56 — full channel-selection enum now confirmed
+
+Combining §10 and this session: `0x01`=microphone, `0x02`=instrument, `0x03`=speaker, `0x04`=headphone
+— each observed more than once, always via a clean select-only action (or as an incidental side
+effect of a MUTE/volume action on that channel) with no other byte moving unless the actual control
+being exercised changed too. This is now a **confirmed mapping** for these four values (not merely a
+hypothesis) — see PROTOCOL.md. Not necessarily complete: the mute, custom, mix/monitor and autogain
+buttons are action-trigger buttons rather than pure channel selectors and were not tested against
+byte 56, since doing so would have side effects (toggling real settings, or in autogain's case
+triggering a real ~10 s measurement cycle) beyond simple selection.
+
+### 12.9 Summary table
+
+| # | Control tested | Offset(s) | Field | Result |
+|---|---|---|---|---|
+| 1 | Instrument gain wheel | 10–11 | `kGain[1]` | **CONFIRMED** |
+| 2 | Speaker mute | 22 | `kSpeakerMute` | **CONFIRMED** (left muted intentionally, not reversed) |
+| 3 | Microphone mute | 2 | `kMute[0]` | **CONFIRMED** + reversal verified |
+| 4 | Instrument mute | 12 | `kMute[1]` | **CONFIRMED** + reversal verified |
+| 5 | Speaker volume wheel | 20–21 | `kSpeakerVolume` | **CONFIRMED** + exact reversal verified |
+| 6 | Headphone mute | 29 | `kHeadphoneMute` | **CONFIRMED** + reversal verified |
+| 7 | Mono/stereo toggle | 33 | `kMono` | **not accessible on this hardware** — documented, not tested |
+| 8 | Clipguard | 4/14 | — | **not accessible on this hardware** — documented, not tested |
+| 9 | Preamp style | 6/15 | — | **not accessible on this hardware** — documented, not tested |
+| 10 | Additional selected-channel values | 56 | selected-channel indicator | **instrument (`0x02`) confirmed**, completing the 4-value enum; mute/custom/mix/autogain states intentionally untested (side effects) |
+
+No unexpected changes in any test: in every case only the bytes listed above (plus byte 56 when a
+different channel was selected as part of the same action) moved; every other byte in the 128-byte
+struct stayed constant throughout. Card present and unchanged after every read. No USB writes, driver
+detachment, resets, firmware operations, factory reset, streaming-mode changes, or phantom-power
+changes were performed at any point in this session.

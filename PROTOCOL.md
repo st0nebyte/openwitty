@@ -177,20 +177,46 @@ is written back, so they must round-trip). Field list (offset:length):
 Fields known to the schema but with no UI id yet: 8, 17, 25, 26, 30, 54–56,
 58, 60–62, 63–66 (u32?), 68–69, 70.
 
-**Hardware-confirmed 2026-10-14** (`docs/HARDWARE_TEST_RESULTS.md` §10): physically turning the mic
-gain wheel and the headphone volume wheel on a real CONNECT 2 and diffing `read settings --interface
-3` before/after confirms offsets 0–1 (`kGain[0]`, mic gain) and 27–28 (`kHeadphoneVolume`) exactly —
-the predicted field, and only that field (plus byte 56, see next paragraph), changed, by the exact
-dB amount expected. First real (non-tautological) validation of any settings offset on this project.
+**Hardware-confirmed 2026-10-14/2026-10-15** (`docs/HARDWARE_TEST_RESULTS.md` §§10, 12): physically
+operating the real CONNECT 2's front panel and diffing `read settings --interface 3` before/after
+confirms the following offsets exactly — in every case the predicted field, and only that field (plus
+byte 56, see below), changed:
 
-**Byte 56 — partially identified, hardware-confirmed 2026-10-14** (`docs/HARDWARE_TEST_RESULTS.md`
-§10.5): repeatedly and predictably changes to reflect which channel is currently *selected* on the
-touch surface (`0x01`=microphone, `0x03`=speaker, `0x04`=headphone observed so far), **independent of
-any value edit** — confirmed by pressing a select button alone, with no wheel turn, and seeing only
-this byte move. This **contradicts** the unverified guess below (§"CustomButton (byte 53)") that
-bytes 54–56 relate to custom-button long-press configuration; that guess should be treated as
-superseded for byte 56 specifically (54–55 remain unmapped). Not yet a complete enum (instrument,
-mute, custom-button and mix/monitor selection states unobserved).
+| Offset(s) | Field | Confirmed via |
+|---|---|---|
+| 0–1 | `kGain[0]` (mic gain) | wheel turn, exact +1.00 dB |
+| 10–11 | `kGain[1]` (instrument gain) | wheel turn, exact +11 dB then partial restore |
+| 2 | `kMute[0]` (mic mute) | MUTE button, exact toggle + verified reversal |
+| 12 | `kMute[1]` (instrument mute) | MUTE button, exact toggle + verified reversal |
+| 20–21 | `kSpeakerVolume` | wheel turn, exact −11.66 dB then exact restore to the 0.00 dB ceiling |
+| 22 | `kSpeakerMute` | MUTE button, exact toggle (deliberately left muted afterward, not reversed, as a monitoring-safety precaution during the session) |
+| 27–28 | `kHeadphoneVolume` | wheel turn, exact dB match on two separate edits including a partial restore |
+| 29 | `kHeadphoneMute` | MUTE button, exact toggle + verified reversal |
+
+First real (non-tautological) validation of any settings offsets on this project. The MUTE button
+was confirmed (by direct observation on hardware) to act on whichever channel is currently selected,
+not a fixed channel — consistent with the byte-56 finding below.
+
+**Byte 56 — CONFIRMED channel-selection indicator** (`docs/HARDWARE_TEST_RESULTS.md` §§10.5, 12):
+repeatedly and predictably changes to reflect which channel is currently *selected* on the touch
+surface, **independent of any value edit** — confirmed by pressing a select button alone, with no
+wheel turn, and seeing only this byte move, for all four primary channels, each confirmed more than
+once:
+
+| Value | Channel |
+|---|---|
+| `0x01` | microphone |
+| `0x02` | instrument |
+| `0x03` | speaker |
+| `0x04` | headphone |
+
+This matches the button numbering (1–4) on the device's own front-panel diagram exactly. This
+**contradicts** the unverified guess below (§"CustomButton (byte 53)") that bytes 54–56 relate to
+custom-button long-press configuration; that guess should be treated as superseded for byte 56
+specifically (54–55 remain unmapped). Still not necessarily a *complete* enum — the mute, custom,
+mix/monitor and autogain buttons are action-trigger buttons rather than pure selectors and were not
+tested against this byte (doing so would have side effects beyond selection), so whether they also
+populate byte 56, and with what values, remains open.
 
 Sync loop (every tick; `LewittDevice::tick`): snapshot ← current;
 `readStatus()`; optionally `readSettings()`; then for each schema field, if
@@ -324,12 +350,17 @@ real CONNECT 2 on 2026-10-14 (`docs/HARDWARE_TEST_RESULTS.md`). Everything else 
 static-analysis-only.
 
 ### Not found / still open
-* `OutputSource` enumerator names; bytes 54–55, 58, 60–70 semantics (byte 56 partially identified,
-  see the hardware-confirmed note earlier in this file — not a complete enum yet).
+* `OutputSource` enumerator names; bytes 54–55, 58, 60–70 semantics (byte 56 is now confirmed for
+  the 4 channel-select values, see the hardware-confirmed note earlier in this file — not
+  necessarily complete for mute/custom/mix/autogain button states).
 * Authoritative range for the input/playback mix value (Q8.8 sign-inverted).
 * `iface_version_t` layout (no consumer).
 * Windows has not been re-traced for the above (same codebase; cross-check of
   the transport only).
+* **Hardware access, not RE:** Clipguard (@4/@14), preamp style (@6/@15), Mono (@33) have no
+  physical control and no long-press gesture on this CONNECT 2 unit (owner-confirmed 2026-10-14) —
+  CONTROL CENTER/software-only, so they cannot be physically validated on this hardware regardless
+  of RE confidence. Dim (@32) likewise has no dedicated front-panel button on this unit.
 
 ## Windows build cross-check  [V-bin]
 Same C++ codebase (identical `LWT::Connect2::APIv1`, `buildConnect2Tree`,

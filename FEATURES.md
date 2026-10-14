@@ -13,22 +13,22 @@ control wired to the mock backend; writes to real hardware are disabled.
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|
-| 1 | Mic / instrument gain (mic 0–72, inst 0–60 dB) | Input strips, knob | settings @0/@10 Q8.8 | core+GUI+tests | — | **mic: yes** (physically confirmed 2026-10-14, exact +1.00 dB on wheel turn; instrument not yet tested) |
+| 1 | Mic / instrument gain (mic 0–72, inst 0–60 dB) | Input strips, knob | settings @0/@10 Q8.8 | core+GUI+tests | — | **yes, both** (physically confirmed 2026-10-14: mic +1.00 dB on one notch; instrument +11 dB then partial restore, both exact matches) |
 | 2 | Low-cut filter | LC button | @3/@13 | core+GUI | — | no |
 | 3 | 48 V phantom (mic only) | 48V button, confirmation | @5 | core+GUI (confirm dialog) | input 2 has none in tree ✔ | no |
-| 4 | Clipguard | CG button | @4/@14 | core+GUI | — | no |
-| 5 | Preamp Clean/Warm/Vivid | segmented | @6/@15 (0/1/2) | core+GUI | — | no |
+| 4 | Clipguard | CG button | @4/@14 | core+GUI | — | **not testable on this unit** — no dedicated physical control and no long-press gesture found on the front panel (owner-confirmed 2026-10-14); CONTROL CENTER/software-only |
+| 5 | Preamp Clean/Warm/Vivid | segmented | @6/@15 (0/1/2) | core+GUI | — | **not testable on this unit** — no dedicated physical control and no long-press gesture found (owner-confirmed 2026-10-14); CONTROL CENTER/software-only |
 | 6 | Denoise (noise-floor measurement; n/a at 96 kHz) | button | @7/@16 + trigger 6/7/8 (?) | core+GUI+96 kHz restriction+tests | trigger semantics, measurement UI | no |
 | 7 | Comp (n/a at 96 kHz) | button | @9/@18 | core+GUI+restriction | compressor parameters (presets show more) | no |
-| 8 | Input mute | MUTE | @2/@12 | core+GUI | — | no |
+| 8 | Input mute | MUTE | @2/@12 | core+GUI | — | **yes, both** (mic and instrument mute toggled and verified reversed on real hardware, 2026-10-14, exact 0x01/0x00 matches; MUTE button confirmed to act on whichever channel is currently selected) |
 | 9 | Autogain (10 s, progress, success/fail) | Autogain button | triggers 1/2/3; status @0x24 progress, @0x23 bit5/6 result | core+GUI+mock workflow+tests | timing/limits only | no |
 | 10 | Autosetup wizard | top-left button | settings writes + autogain trigger | GUI wizard (reconstruction) | exact step→field mapping, noise/clipping error codes | no |
-| 11 | Loudspeaker volume/mute | Outputs | @20 / @22 | core+GUI | — | no |
-| 12 | Headphone volume/mute (independent) | Outputs | @27 / @29 | core+GUI | — | **volume: yes** (physically confirmed 2026-10-14, exact dB match on two separate wheel edits; mute byte observed unaffected by volume changes, confirming independence; mute *toggling* not yet tested) |
+| 11 | Loudspeaker volume/mute | Outputs | @20 / @22 | core+GUI | — | **yes, both** (volume: exact −11.66 dB match then restored to exact 0.00 dB ceiling; mute: exact toggle; both physically confirmed 2026-10-14 — speaker deliberately left muted afterward as a monitoring-safety precaution, not restored to its original unmuted state) |
+| 12 | Headphone volume/mute (independent) | Outputs | @27 / @29 | core+GUI | — | **yes, both** (volume: exact dB match on two separate wheel edits; mute: exact toggle and verified reversal; both physically confirmed 2026-10-14) |
 | 13 | Loopback mute + meters | Outputs | @19, status 0x12/0x14 | core+GUI | — | no |
 | 14 | Input/playback mix | Monitoring knob | @35 sign-inverted Q8.8 | core+GUI | value range, % mapping | no |
 | 15 | Direct monitoring mic/inst/both | Mic/Inst buttons | @34 (0/1/2) | core+GUI+state-machine tests | — | no |
-| 16 | Dim / Mono | Monitoring | @32 / @33 | core+GUI | dim amount (device-side) | no |
+| 16 | Dim / Mono | Monitoring | @32 / @33 | core+GUI | dim amount (device-side) | **not testable on this unit** — no dedicated Dim or Mono button on this front panel and no long-press gesture found (owner-confirmed 2026-10-14); CONTROL CENTER/software-only |
 | 17 | Metering (inputs, loopback, speaker, headphone) | meters | status 0x00,0x09,0x12–0x1C | core+GUI | peak-hold/clip flags @0x2E/0x30 | no |
 | 18 | Sample rate display/select | header | audio stack, not control protocol | GUI (simulated only) | PipeWire/ALSA integration | n/a |
 | 19 | Gain lock (external gain) | Settings▸Audio | @57 | core+GUI | — | no |
@@ -56,4 +56,4 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 38 | Read-only diagnostics: `devices`, `diagnose`, classified `read` (api/version/status/settings), `probe` | CLI | sysfs + libusb GET | implemented, fixture/mock tested | — | **yes** (all four read-only message types confirmed against a real CONNECT 2, 2026-10-14, via the unbound interface-3 access path; see `docs/HARDWARE_TEST_RESULTS.md`) |
 | 39 | Hot-plug discovery + auto-reconnect with backoff (USB mode) | GUI status | sysfs scan | implemented, simulated | needs device | no |
 | 40 | Backend write guard (destructive words, unknown bytes, enum preservation) | n/a | — | implemented + tests | — | n/a |
-| 41 | Touch-surface channel selection (LED-ring focus state) | front-panel LEDs (hardware), not yet surfaced in GUI | settings byte 56 (new; not in `settings_off`) | not implemented in OpenWitty | not a complete enum (mic/speaker/headphone only; instrument/mute/custom/mix unobserved) | **partial** (physically confirmed 2026-10-14 that this byte tracks selection independent of value edits; see `docs/HARDWARE_TEST_RESULTS.md` §10.5 and PROTOCOL.md) |
+| 41 | Touch-surface channel selection (LED-ring focus state) | front-panel LEDs (hardware), not yet surfaced in GUI | settings byte 56 (new; not in `settings_off`) | not implemented in OpenWitty | the 4 channel-select values are confirmed; mute/custom/mix/autogain button states unobserved (those are action-trigger buttons, not pure selectors, so may not populate this byte the same way — untested to avoid side effects) | **yes** — all 4 values confirmed 2026-10-14: `0x01` mic, `0x02` instrument, `0x03` speaker, `0x04` headphone, each via a select-only press with zero value change; see `docs/HARDWARE_TEST_RESULTS.md` §§10.5, 12 and PROTOCOL.md |
