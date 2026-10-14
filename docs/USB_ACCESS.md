@@ -34,6 +34,14 @@ master, fetched during this session), **[bin]** macOS app disassembly,
    controls — the accepted in-tree pattern for "vendor protocol on a class
    audio interface".
 
+## Windows confirms the protocol shape  [V-bin]
+The Windows build issues the same requests (entity 0x33, request 3 / 0x85 /
+0x05, selector = API major, channel = message id) through
+`TUSBAUDIO_AudioControlRequestGet/Set`; the Thesycon driver chooses the
+AudioControl interface itself (details in PROTOCOL.md). On Linux the
+equivalent of "ask the driver to send an AC request" does not exist in
+`snd-usb-audio`, hence the analysis below.
+
 ## Three separate problems (do not conflate)
 | Problem | Error seen | Cause | Fixable without root? |
 |---|---|---|---|

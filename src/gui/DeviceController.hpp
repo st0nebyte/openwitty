@@ -1,5 +1,5 @@
 // QObject facade between QML and the Qt-free core. All device I/O happens on a
-// dedicated worker thread; the GUI thread only sees queued signals.
+// dedicated worker thread; the GUI thread only sees queued, diffed state.
 #pragma once
 #include <QObject>
 #include <QThread>
@@ -20,20 +20,25 @@ public slots:
     void disconnectDevice();
     void setValue(const QString& key, const QVariant& v);
     void trigger(const QString& name);
+    void setSampleRate(int hz);
     void poll();
     void simulateUnplug();
     void simulateReplug();
 signals:
-    void stateChanged(const QVariantMap& state);
+    void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
     void errorOccurred(const QString& message);
 private:
     void publish();
     void report(const lewitt::Status& s);
+    void startTimer(int ms);
     std::unique_ptr<lewitt::DeviceSession> session_;
     lewitt::MockTransport* mock_{nullptr};
     QTimer* timer_{nullptr};
+    QVariantMap last_;
     double phase_{0};
+    int sampleRate_{48000};
+    QString autoState_{"idle"};  // idle | running | finished
 };
 
 class DeviceController : public QObject {
@@ -59,8 +64,11 @@ public:
     Q_INVOKABLE void disconnectDevice();
     Q_INVOKABLE void setValue(const QString& key, const QVariant& v);
     Q_INVOKABLE void trigger(const QString& name);
+    Q_INVOKABLE void setSampleRate(int hz);
     Q_INVOKABLE void simulateUnplug();
     Q_INVOKABLE void simulateReplug();
+    // Synchronous test hook: blocks until the worker has processed queued calls.
+    Q_INVOKABLE void flush();
 signals:
     void connectionChanged();
     void valuesChanged();

@@ -38,18 +38,16 @@ std::uint8_t SettingsMessage::preampRaw(int i) const { return raw_[settings_off:
 PreampType SettingsMessage::preamp(int i) const { return static_cast<PreampType>(preampRaw(i)); }
 bool SettingsMessage::denoise(int i) const { return raw_[settings_off::kDenoise[i & 1]] != 0; }
 bool SettingsMessage::compress(int i) const { return raw_[settings_off::kCompress[i & 1]] != 0; }
-double SettingsMessage::volumeADb() const { return q88ToDouble(rdI16(raw_, settings_off::kVolumeA)); }
-double SettingsMessage::volumeBDb() const { return q88ToDouble(rdI16(raw_, settings_off::kVolumeB)); }
 bool SettingsMessage::dim() const { return raw_[settings_off::kDim] != 0; }
 bool SettingsMessage::mono() const { return raw_[settings_off::kMono] != 0; }
-double SettingsMessage::balance() const { return 0.0 - q88ToDouble(rdI16(raw_, settings_off::kBalance)); }
 std::uint8_t SettingsMessage::customButton() const { return raw_[settings_off::kCustomButton]; }
 std::uint8_t SettingsMessage::nativeVolumeMapping() const { return raw_[settings_off::kNativeVolumeMapping]; }
 
 Status SettingsMessage::setGainDb(int i, double db) {
     if (!inputOk(i)) return Status{badInput()};
-    if (!std::isfinite(db) || db < kGainMinDb || db > kGainMaxDb)
-        return makeError(Errc::InvalidArgument, "gain must be within 0..85 dB");
+    if (!std::isfinite(db) || db < kGainMinDb || db > gainLimitDb(i))
+        return makeError(Errc::InvalidArgument, i == 0 ? "microphone gain must be within 0..72 dB"
+                                                       : "instrument gain must be within 0..60 dB");
     wrI16(raw_, settings_off::kGain[i], doubleToQ88(db));
     return okStatus();
 }
@@ -82,10 +80,86 @@ static Status setVol(std::array<std::uint8_t, 0x80>& raw, std::size_t off, doubl
     wrI16(raw, off, doubleToQ88(db));
     return okStatus();
 }
-Status SettingsMessage::setVolumeADb(double db) { return setVol(raw_, settings_off::kVolumeA, db); }
-Status SettingsMessage::setVolumeBDb(double db) { return setVol(raw_, settings_off::kVolumeB, db); }
+double SettingsMessage::speakerVolumeDb() const { return q88ToDouble(rdI16(raw_, settings_off::kSpeakerVolume)); }
+double SettingsMessage::headphoneVolumeDb() const { return q88ToDouble(rdI16(raw_, settings_off::kHeadphoneVolume)); }
+bool SettingsMessage::speakerMute() const { return raw_[settings_off::kSpeakerMute] != 0; }
+bool SettingsMessage::headphoneMute() const { return raw_[settings_off::kHeadphoneMute] != 0; }
+bool SettingsMessage::loopbackMute() const { return raw_[settings_off::kLoopbackMute] != 0; }
+double SettingsMessage::inputPlaybackMix() const {
+    return 0.0 - q88ToDouble(rdI16(raw_, settings_off::kInputPlaybackMix));
+}
+MonitorSource SettingsMessage::monitorSource() const {
+    return static_cast<MonitorSource>(raw_[settings_off::kMonitorSource]);
+}
+bool SettingsMessage::monitorMicrophone() const {
+    auto v = raw_[settings_off::kMonitorSource];
+    return v == 1 || v == 2;
+}
+bool SettingsMessage::monitorInstrument() const {
+    auto v = raw_[settings_off::kMonitorSource];
+    return v == 0 || v == 2;
+}
+std::uint8_t SettingsMessage::mixToSpeakersRaw() const { return raw_[settings_off::kMixToSpeakers]; }
+bool SettingsMessage::highVolumeSpeaker() const { return raw_[settings_off::kHighVolumeSpeaker] != 0; }
+bool SettingsMessage::highImpedanceHeadphone() const { return raw_[settings_off::kHighImpedanceHeadphone] != 0; }
+bool SettingsMessage::externalGainLock() const { return raw_[settings_off::kExternalGainLock] != 0; }
+bool SettingsMessage::mobileStreaming() const { return raw_[settings_off::kMobileStreaming] != 0; }
+std::uint8_t SettingsMessage::ledBrightness() const { return raw_[settings_off::kLedBrightness]; }
+static std::size_t ledOff(LedElement e) {
+    switch (e) {
+        case LedElement::Icons: return settings_off::kLedColorIcons;
+        case LedElement::Mute: return settings_off::kLedColorMute;
+        case LedElement::Parameter: return settings_off::kLedColorParameter;
+        case LedElement::Metering: return settings_off::kLedColorMetering;
+        case LedElement::GainReduction: return settings_off::kLedColorGainReduction;
+    }
+    return settings_off::kLedColorIcons;
+}
+Rgb SettingsMessage::ledColor(LedElement e) const {
+    auto o = ledOff(e);
+    return Rgb{raw_[o], raw_[o + 1], raw_[o + 2]};
+}
+Status SettingsMessage::setSpeakerVolumeDb(double db) { return setVol(raw_, settings_off::kSpeakerVolume, db); }
+Status SettingsMessage::setHeadphoneVolumeDb(double db) { return setVol(raw_, settings_off::kHeadphoneVolume, db); }
+Status SettingsMessage::setSpeakerMute(bool v) { raw_[settings_off::kSpeakerMute] = v; return okStatus(); }
+Status SettingsMessage::setHeadphoneMute(bool v) { raw_[settings_off::kHeadphoneMute] = v; return okStatus(); }
+Status SettingsMessage::setLoopbackMute(bool v) { raw_[settings_off::kLoopbackMute] = v; return okStatus(); }
 Status SettingsMessage::setDim(bool v) { raw_[settings_off::kDim] = v; return okStatus(); }
 Status SettingsMessage::setMono(bool v) { raw_[settings_off::kMono] = v; return okStatus(); }
+Status SettingsMessage::setInputPlaybackMix(double v) {
+    if (!std::isfinite(v) || v < -1.0 || v > 1.0)
+        return makeError(Errc::InvalidArgument, "mix must be within -1..+1 (range unverified)");
+    wrI16(raw_, settings_off::kInputPlaybackMix, doubleToQ88(-v));
+    return okStatus();
+}
+// Mirrors the app's pair tables: mic {(2,0),(1,0)}, instrument {(2,1),(0,1)}.
+Status SettingsMessage::setMonitorMicrophone(bool on) {
+    auto& b = raw_[settings_off::kMonitorSource];
+    if (b > 2) return makeError(Errc::Malformed, "unknown monitor source value");
+    if (on) { if (b == 0) b = 2; }          // instrument only -> both
+    else    { if (b == 2) b = 0; }          // both -> instrument only (never "none")
+    return okStatus();
+}
+Status SettingsMessage::setMonitorInstrument(bool on) {
+    auto& b = raw_[settings_off::kMonitorSource];
+    if (b > 2) return makeError(Errc::Malformed, "unknown monitor source value");
+    if (on) { if (b == 1) b = 2; }          // microphone only -> both
+    else    { if (b == 2) b = 1; }          // both -> microphone only
+    return okStatus();
+}
+Status SettingsMessage::setHighVolumeSpeaker(bool v) { raw_[settings_off::kHighVolumeSpeaker] = v; return okStatus(); }
+Status SettingsMessage::setHighImpedanceHeadphone(bool v) { raw_[settings_off::kHighImpedanceHeadphone] = v; return okStatus(); }
+Status SettingsMessage::setExternalGainLock(bool v) { raw_[settings_off::kExternalGainLock] = v; return okStatus(); }
+Status SettingsMessage::setLedBrightness(int p) {
+    if (p < 0 || p > 100) return makeError(Errc::InvalidArgument, "brightness must be 0..100");
+    raw_[settings_off::kLedBrightness] = static_cast<std::uint8_t>(p);
+    return okStatus();
+}
+Status SettingsMessage::setLedColor(LedElement e, Rgb c) {
+    auto o = ledOff(e);
+    raw_[o] = c.r; raw_[o + 1] = c.g; raw_[o + 2] = c.b;
+    return okStatus();
+}
 
 Result<StatusMessage> StatusMessage::fromBytes(std::span<const std::uint8_t> b) {
     if (auto s = checkSize(b, kSize, "status"); !s) return s.error();
@@ -99,6 +173,7 @@ static double meter(std::span<const std::uint8_t> b, std::size_t o) {
 }
 double StatusMessage::input1LevelDb() const { return meter(raw_, 0x00); }
 double StatusMessage::input2LevelDb() const { return meter(raw_, 0x09); }
+double StatusMessage::levelAt(std::size_t o) const { return meter(raw_, o); }
 std::uint8_t StatusMessage::autosetupResultRaw() const {
     std::uint8_t b = raw_[0x23];
     if (b & 0x40) return 0;

@@ -23,9 +23,10 @@ static void printSettings(const SettingsMessage& s) {
         std::printf("input%d: gain=%.2f dB mute=%d hpf=%d clipguard=%d preamp=%u denoise=%d compress=%d\n",
                     i + 1, s.gainDb(i), s.mute(i), s.highPass(i), s.clipguard(i), s.preampRaw(i),
                     s.denoise(i), s.compress(i));
-    std::printf("phantom(input1)=%d volA=%.2f dB volB=%.2f dB dim=%d mono=%d balance=%.2f button=%u\n",
-                s.phantom1(), s.volumeADb(), s.volumeBDb(), s.dim(), s.mono(), s.balance(),
-                s.customButton());
+    std::printf("phantom(input1)=%d speaker=%.2f dB%s headphone=%.2f dB%s dim=%d mono=%d mix=%.2f monitor=%u button=%u\n",
+                s.phantom1(), s.speakerVolumeDb(), s.speakerMute() ? " (muted)" : "",
+                s.headphoneVolumeDb(), s.headphoneMute() ? " (muted)" : "", s.dim(), s.mono(),
+                s.inputPlaybackMix(), unsigned(s.monitorSource()), s.customButton());
     std::printf("raw=");
     hex(s.bytes());
 }

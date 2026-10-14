@@ -4,25 +4,15 @@ Item {
     id: root
     property bool checked: false
     property string label: ""
-    property bool unverified: true
     signal toggled(bool value)
-    implicitWidth: 150; implicitHeight: 30
+    implicitWidth: 300; implicitHeight: 26
     opacity: enabled ? 1 : 0.45
-    Row {
-        spacing: 10; anchors.verticalCenter: parent.verticalCenter
-        Rectangle {
-            width: 44; height: 24; radius: 12
-            color: root.checked ? Theme.accent : Theme.panelHi
-            border.color: Theme.line
-            Rectangle {
-                width: 18; height: 18; radius: 9; y: 3
-                x: root.checked ? 23 : 3
-                color: "#fff"
-                Behavior on x { NumberAnimation { duration: 90 } }
-            }
-        }
-        Text { text: root.label; color: Theme.text; font.pixelSize: 13
-               anchors.verticalCenter: parent.verticalCenter }
+    Text { text: root.label; color: Theme.text; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+    Rectangle {
+        width: 40; height: 18; radius: 9; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+        color: root.checked ? Theme.accentDim : "#444"
+        Rectangle { width: 14; height: 14; radius: 7; y: 2; x: root.checked ? 24 : 2; color: "#ddd"
+                    Behavior on x { NumberAnimation { duration: 80 } } }
     }
     MouseArea { anchors.fill: parent; onClicked: root.toggled(!root.checked) }
 }

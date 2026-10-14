@@ -45,18 +45,49 @@ written back; setters edit this one). Writes therefore send the **entire**
 0x80-byte struct, so read-modify-write is mandatory [V-bin, inferred from
 `tick()`; write path itself not yet disassembled].
 
-## iface_settings_t field map  [V-bin offsets, ? semantics]
+## iface_settings_t field map  [V-bin offsets + group names; names of enums ?]
 
-Authoritative copy lives in `src/protocol/Messages.hpp` (`settings_off`).
-Input N fields (N=1 / N=2): gain i16 Q8.8 @0/10 (setter clamps 0…0x5500 =
-0…85 dB), mute @2/12, high-pass @3/13, Clipguard @4/14, preamp type @6/15
-(0 Clean, 1 Warm, 2 Vivid), denoise @7/16, compress @9/18; phantom power @5
-(input 1 only; input 2 not located). Output-side: mute @19, volume i16 @20,
-mute @22, OutputSource @23, bool @24, volume i16 @27 (setter clamp
--60…0 dB), mute @29, bool @31, dim @32, mono @33, flag @34, balance i16 @35
-(sign inverted), custom-button action @53, native-volume mapping @59.
-Group semantics for 19–35 are provisional. Anything not listed is unknown;
-read-modify-write preserves it.
+Authoritative copy: `src/protocol/Messages.hpp` (`settings_off`). Offsets are
+exact (getter/setter code). Group membership is confirmed **by identifier
+name**: the tree builder loads the app's own `Microphone`, `Instrument`,
+`Loopback`, `Speaker`, `Headphone`, `Monitor` and `Main` (settings) identifiers
+immediately before constructing each group (macOS `buildConnect2Tree`).
+
+| off | type | group / app id | meaning & encoding | evidence |
+|-----|------|----------------|--------------------|----------|
+| 0 | i16 | Microphone `Volume` | gain, Q8.8 dB; device clamp 0…85, **UI scale 0…72** | getter/setter + guide screenshot |
+| 2,3,4,5 | u8 | Microphone | mute, high-pass (LC), Clipguard, **phantom 48 V** | `Mute`,`HighPassFilter`,`ClipGain`,`PhantomPower` |
+| 6 | u8 | Microphone | preamp: 0 Clean, 1 Warm, 2 Vivid (three bool ids over one byte) | `CleanPreampType`… compare ==0/1/2 |
+| 7, 9 | u8 | Microphone | Denoise, Compress | `Denoise`,`Compress` |
+| 10 | i16 | Instrument | gain Q8.8; **UI scale 0…60** | guide screenshot |
+| 12,13,14 | u8 | Instrument | mute, high-pass, Clipguard (no phantom id in this group) | |
+| 15,16,18 | u8 | Instrument | preamp, Denoise, Compress | |
+| 19 | u8 | Loopback | mute (group has levels + mute only, no volume) | group ids: LeftLevel, RightLevel, Mute |
+| 20 | i16 | Speaker | volume Q8.8, **-60…0 dB** (setter clamp 0xC400…0) | `Volume` |
+| 22 | u8 | Speaker | mute | `Mute` |
+| 27 | i16 | Headphone | volume, same clamp | |
+| 29 | u8 | Headphone | mute | |
+| 32 | u8 | Monitor | Dim | `Dim` |
+| 33 | u8 | Monitor | Mono | `Mono` |
+| 34 | u8 | Monitor | direct-monitor source: **0 instrument only, 1 microphone only, 2 both**; the app's toggle logic (pair tables {(2,0),(1,0)} / {(2,1),(0,1)}) never reaches "none" | `MonitorMicrophone`,`MonitorInstrument` lambdas |
+| 35 | i16 | Monitor | **input/playback mix** (id `Balance`), Q8.8 stored sign-inverted; range unverified | getter `-raw/256` |
+| 37 | u8 | Main | LED brightness, clamp 0…100 | setter `cmp 0x64` |
+| 38–40 | RGB | Main `Icons` | LED colour, byte order R,G,B | setter splits 0xRRGGBB |
+| 41–43 / 44–46 / 47–49 / 50–52 | RGB | Main `Mute`/`Parameter`/`Metering`/`GainReduction` | LED colours | contiguous 5×3 bytes |
+| 53 | u8 | Main `CustomButton` | custom-button function enum (value↔function map unknown) | |
+| 23 | u8 | Main `MixToSpeakers` | `OutputSource` enum; guide: "input/playback mix applies to speakers" (value set unknown) | ordered match |
+| 24 | u8 | Main `HighVolumeSpeaker` | bool | ordered match |
+| 31 | u8 | Main `HighImpedanceHeadphone` | bool | ordered match |
+| 57 | u8 | Main `ExternalGainControl` | bool, guide "gain lock" | ordered match + guide |
+| 59 | u8 | Main `MasterSliderMap` | `NativeVolumeControlMapping` enum | type name matches |
+| 67 | u8 | Main `MobileStreaming` | bool (routing change) | ordered match |
+
+"ordered match": identifiers and lambda triplets inside the `Main` group are
+paired by creation order; the enum type names (`OutputSource`,
+`NativeVolumeControlMapping`) and the guide corroborate but do not prove
+every pairing. **macOS streaming mode**: id `MacOSStreaming` exists but its
+offset was not located (probably device-side/driver state) — unknown.
+Everything not listed is unknown; read-modify-write preserves it.
 
 ## iface_status_t (0x40)  [V-bin offsets]
 
@@ -68,7 +99,7 @@ Data starts at app-object offset 0x250, so status offset = disp − 0x250.
 | 0x02 | u8 | input 1 "Gain" (auto-gain result, integer dB?) |
 | 0x09 | i16 Q8.8 | input 2 level |
 | 0x0B | u8 | input 2 "Gain" |
-| 0x12,0x14,0x16,0x18,0x1A,0x1C | i16 Q8.8 | further L/R level pairs (output/mix meters, assignment ?) |
+| 0x12,0x14 / 0x16,0x18 / 0x1A,0x1C | i16 Q8.8 | L/R meters of Loopback / Speaker / Headphone (group order; group names confirmed) |
 | 0x23 | u8 | auto-setup result bits: bit6 ⇒ result 0; else bit5 ? 2 : 1 |
 | 0x24 | u8 | auto-setup progress |
 | 0x2E,0x30 | u16 | clip flags, compared against previous snapshot |
@@ -114,10 +145,22 @@ See `docs/USB_ACCESS.md` (kernel-source-verified analysis and probe plan).
 * Firmware download (DFU) — **will not be implemented without explicit permission**.
 * Windows build (Inno Setup, needs `innoextract`) — expected to share the protocol.
 
-## Windows build cross-check  [V-bin, partial]
+## Windows build cross-check  [V-bin]
 Same C++ codebase (identical `LWT::Connect2::APIv1`, `buildConnect2Tree`,
-`doAsyncFWDownload` RTTI). Transport on Windows is Thesycon's user API
-(`TUSBAUDIO_AudioControlRequestGet/Set`, `ClassVendorRequestIn/Out`), i.e. the
-driver issues the requests; byte-level equivalence with the macOS
-`0xA1/0x21` + MEM requests has NOT been checked in the (stripped) Windows
-binary. Windows function-level verification is still open.
+`doAsyncFWDownload` RTTI). Windows loads Thesycon's `tusbaudioapi` and resolves
+`TUSBAUDIO_AudioControlRequestSet/Get` and `ClassVendorRequestOut/In` into the
+API object at +0x138/+0x140/+0x148/+0x150. In
+`LewittDeviceThesyconWinBackend` (vtable slots 15–18, Ghidra 12.1.4):
+
+| method | API call | entity | request | selector / channel | size | timeout |
+|---|---|---|---|---|---|---|
+| MEM GET (slot 15) | AudioControlRequestGet | **0x33** | **3**, or **0x85** if `this[8]==1` | `wValue>>8` / low byte of wValue (= apiMajor / messageId) | arg | 500 ms |
+| MEM SET (slot 16) | AudioControlRequestSet | **0x33** | **3**, or **0x05** if `this[8]==1` | same | arg | 500 ms |
+| OUT/IN CTRL (17/18) | ClassVendorRequestOut/In | — (interface from `this+0x14`) | — | — | — | 500 ms |
+
+This matches macOS byte-for-byte (entity 0x33, requests 3/0x85/0x05,
+wValue = apiMajor<<8 | messageId, 500 ms). Windows lets the Thesycon driver
+pick the AudioControl interface number (the app passes only the entity ID);
+macOS uses `0x3300 | interface`. Failure → "THESYCON: MEM GET/SET failed".
+The `this[8]` UAC1 flag is set by the same "≥ 0x0b" logic as on macOS (not
+re-traced on Windows).

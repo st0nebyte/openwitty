@@ -24,7 +24,8 @@ for ins in md.disasm(code,a):
         try: t=int(ins.op_str,16)
         except: continue
         n=S.get(t,'')
-        if 'PropertyItemDefinition' in n: ev.append(('PROP',ins.address,'itemdef'))
-        elif n.startswith('__ZN6lewitt4tree5GroupC2'): ev.append(('GROUP',ins.address,'group'))
+        if 'tree5GroupC' in n: ev.append(('GROUP',ins.address,'group'))
+        elif 'PropertyItemDefinition' in n: ev.append(('PROP',ins.address,'itemdef'))
+        elif 'tree5GroupC' in n: ev.append(('GROUP',ins.address,'group'))
 ev.sort(key=lambda e:e[1])
 for k,ad,n in ev: print("%x %-5s %s"%(ad,k,n[:120]))

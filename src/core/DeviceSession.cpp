@@ -54,6 +54,13 @@ Status DeviceSession::commit() {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
     if (!pending_) return okStatus();
+    if (sampleRate_ != 0 && violatesDspRestriction(*current_, *pending_, sampleRate_))
+        return makeError(Errc::NotSupported,
+                         "Denoise and Comp are not available at 96 kHz (documented restriction)");
+    if (changesRouting(*current_, *pending_) && !(policy_.allowRoutingChanges || transport_->isSimulated()))
+        return makeError(Errc::WritesDisabled,
+                         "streaming-mode changes alter channel routing and may restart the device; "
+                         "not enabled");
     auto bytes = pending_->bytes();
     if (auto s = transport_->write(MessageId::Settings, bytes); !s) return fail(s.error());
     return refreshSettings();

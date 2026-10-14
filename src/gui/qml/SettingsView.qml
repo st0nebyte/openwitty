@@ -1,0 +1,134 @@
+import QtQuick
+
+// Settings page (guide: Audio / LEDs / Custom button on the left, versions and
+// maintenance on the right). Items without verified protocol support are shown
+// disabled with the reason.
+Rectangle {
+    id: root
+    property bool interactive: false
+    signal closeRequested()
+    color: Theme.bg
+    function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
+    property string open: "audio"
+
+    Text { x: 16; y: 12; text: "Settings"; color: Theme.text; font.pixelSize: 15 }
+    ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; y: 10; width: 60; text: "Close"
+                   onClicked: root.closeRequested() }
+    Rectangle { x: 0; y: 44; width: parent.width; height: 1; color: Theme.line }
+
+    Column {
+        x: 16; y: 60; width: 330; spacing: 6
+        Repeater {
+            model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"}]
+            Rectangle {
+                width: 330; height: 26; color: Theme.panel; radius: 2
+                Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: Theme.text; font.pixelSize: 12; text: modelData.t }
+                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                       color: Theme.textDim; text: root.open === modelData.k ? "▾" : "◂" }
+                MouseArea { anchors.fill: parent; onClicked: root.open = modelData.k }
+            }
+        }
+    }
+
+    // Section bodies
+    Column {
+        visible: root.open === "audio"
+        x: 16; y: 150; width: 330; spacing: 6
+        ToggleSwitch { width: 330; label: "Gain lock (block external gain changes)"; enabled: root.interactive
+                       checked: root.v("set.gainLock", false)
+                       onToggled: (b) => device.setValue("set.gainLock", b) }
+        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: false
+                       checked: root.v("set.mixToSpeakers", false) }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "(read-only: the enum value set behind this option is not yet decoded)" }
+        ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.interactive
+                       checked: root.v("set.highImpedance", false)
+                       onToggled: (b) => device.setValue("set.highImpedance", b) }
+        ToggleSwitch { width: 330; label: "High volume speaker mode"; enabled: root.interactive
+                       checked: root.v("set.highVolume", false)
+                       onToggled: (b) => confirmLoud.ask(b) }
+        ToggleSwitch { width: 330; label: "Mobile streaming mode (routing change)"; enabled: false
+                       checked: root.v("set.mobileStreaming", false) }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "Streaming modes change USB channel routing and (macOS mode) restart the device. They are not enabled in this build." }
+        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: false; checked: false }
+    }
+    Column {
+        visible: root.open === "leds"
+        x: 16; y: 150; width: 330; spacing: 10
+        Text { color: Theme.text; font.pixelSize: 12; text: "Brightness: " + root.v("set.ledBrightness", 0) + " %" }
+        Fader_h { width: 330; enabled: root.interactive; value: root.v("set.ledBrightness", 0)
+                  onMoved: (nv) => device.setValue("set.ledBrightness", nv) }
+        Repeater {
+            model: [{k: "icons", t: "Icons"}, {k: "mute", t: "Mute"}, {k: "parameter", t: "Parameter"},
+                    {k: "metering", t: "Metering"}, {k: "gainReduction", t: "Gain reduction"}]
+            Row {
+                id: ledRow
+                property var elem: modelData
+                spacing: 6
+                Text { width: 100; color: Theme.text; font.pixelSize: 11; text: ledRow.elem.t
+                       anchors.verticalCenter: parent.verticalCenter }
+                Repeater {
+                    model: ["#ff0000", "#ff8800", "#ffee00", "#00cc44", "#0099ff", "#8844ff", "#ffffff"]
+                    Rectangle {
+                        id: sw
+                        property string key: "set.led." + ledRow.elem.k
+                        width: 22; height: 18; radius: 3; color: modelData
+                        opacity: root.interactive ? 1 : 0.4
+                        property bool sel: root.v(sw.key, "") === modelData
+                        border.width: sel ? 2 : 1
+                        border.color: sel ? Theme.text : Theme.line
+                        MouseArea { anchors.fill: parent; enabled: root.interactive
+                                    onClicked: device.setValue(sw.key, sw.color.toString()) }
+                    }
+                }
+            }
+        }
+    }
+    Column {
+        visible: root.open === "button"
+        x: 16; y: 150; width: 330; spacing: 8
+        Repeater {
+            model: ["Show CONTROL CENTER", "Toggle mic preamp styles", "Toggle instrument preamp styles",
+                    "Toggle mute: headphone / speakers", "Toggle mute: headphone + mic / speakers",
+                    "Dim outputs", "Mono/stereo outputs", "Toggle brightness settings"]
+            Row { spacing: 8
+                Rectangle { width: 14; height: 14; radius: 7; color: "transparent"; border.color: Theme.textDim }
+                Text { color: Theme.textDim; font.pixelSize: 11; text: modelData } }
+        }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "Current raw value: " + root.v("set.customButton", "?") +
+                     ". The value-to-function mapping is not yet decoded, so this list is display-only." }
+    }
+
+    // right column
+    Column {
+        x: 400; y: 60; width: 340; spacing: 10
+        Text { color: Theme.text; font.pixelSize: 12; text: "Control Center (unofficial) version 0.1.0" }
+        Text { color: Theme.textDim; font.pixelSize: 12
+               text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated" : "not decoded yet") }
+        Row { spacing: 8
+            ToggleButton { width: 120; text: "Check for updates"; enabled: false; tip: "Not implemented" }
+            ToggleButton { width: 100; text: "Manual update"; enabled: false; tip: "Firmware update is out of scope" } }
+        Text { width: 340; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "Firmware update and factory reset are disabled: they are destructive/persistent and not validated." }
+    }
+    ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom
+                   anchors.bottomMargin: 14; width: 100; text: "Factory reset"; enabled: false
+                   tip: "Disabled by policy" }
+
+    Rectangle {
+        id: confirmLoud
+        visible: false; z: 20; anchors.centerIn: parent; width: 260; height: 110; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        function ask(on) { if (!on) device.setValue("set.highVolume", false); else visible = true; }
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 230; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "High volume speaker mode raises the maximum speaker output level. Lower your monitors first." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmLoud.visible = false }
+                ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
+                               onClicked: { confirmLoud.visible = false; device.setValue("set.highVolume", true); } } }
+        }
+    }
+}

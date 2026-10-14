@@ -10,6 +10,9 @@ MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(
     settings_[10] = 0x00; settings_[11] = 25;
     settings_[20] = 0; settings_[21] = 0;
     settings_[27] = 0; settings_[28] = 0;
+    settings_[34] = 1;  // simulated default: microphone monitoring
+    settings_[37] = 80;  // LED brightness
+    settings_[41] = 0xFF;  // mute LED red (guide: factory red)
 }
 
 Status MockTransport::open() {
@@ -46,7 +49,15 @@ Result<Bytes> MockTransport::read(MessageId id) {
     if (!f.value().empty()) return makeError(Errc::ShortTransfer, "simulated short transfer");
     switch (id) {
         case MessageId::Settings: return settings_;
-        case MessageId::Status: return status_;
+        case MessageId::Status: {
+            Bytes st = status_;
+            if (agProgress_ >= 0) {  // simulated measurement
+                st[0x24] = static_cast<std::uint8_t>(agProgress_);
+                if (agProgress_ >= 100) { st[0x23] = agOutcome_; agProgress_ = -1; }
+                else agProgress_ += 10;
+            }
+            return st;
+        }
         case MessageId::Version: return version_;
         default: return makeError(Errc::NotSupported, "message is write-only");
     }
@@ -60,6 +71,10 @@ Status MockTransport::write(MessageId id, std::span<const std::uint8_t> data) {
     if (!mi || !mi->writable) return makeError(Errc::NotSupported, "message is read-only");
     if (data.size() != mi->size) return makeError(Errc::InvalidArgument, "wrong size");
     if (id == MessageId::Settings) settings_.assign(data.begin(), data.end());
+    if (id == MessageId::Triggers) {
+        auto cmd = static_cast<std::uint16_t>(data[0] | (data[1] << 8));
+        if (cmd == 1 || cmd == 2 || cmd == 3) { agProgress_ = 0; status_[0x23] = 0x40; }
+    }
     log_.push_back(id);
     return okStatus();
 }

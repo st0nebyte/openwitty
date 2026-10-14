@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 
+#include "core/Policy.hpp"
 #include "protocol/Messages.hpp"
 #include "transport/IDeviceTransport.hpp"
 
@@ -12,6 +13,8 @@ namespace lewitt {
 enum class ConnectionState { Disconnected, Connecting, Connected, Error };
 
 struct WritePolicy {
+    // Routing-changing edits (streaming modes) additionally require this.
+    bool allowRoutingChanges{false};
     // Real-hardware writes need BOTH: policy enabled here AND transport allowing.
     // Simulated transports are always writable.
     bool allowHardwareWrites{false};
@@ -45,6 +48,11 @@ public:
         pending_ = copy;
         return okStatus();
     }
+    // Sample rate comes from the audio stack, not the control protocol. 0 = unknown
+    // (restrictions are then NOT applied and the UI must say so).
+    void setSampleRateHint(std::uint32_t hz) { sampleRate_ = hz; }
+    std::uint32_t sampleRate() const { return sampleRate_; }
+    void discardPending() { pending_.reset(); }
     bool dirty() const { return pending_ && !(*pending_ == *current_); }
     Status commit();           // write pending settings (policy gated), then re-read
     Status sendTrigger(Trigger t);
@@ -57,6 +65,7 @@ private:
     Error lastError_;
     std::optional<SettingsMessage> current_, pending_;
     std::optional<StatusMessage> status_;
+    std::uint32_t sampleRate_{0};
 };
 
 }  // namespace lewitt

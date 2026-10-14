@@ -6,6 +6,12 @@
 namespace lewitt {
 
 enum class PreampType : std::uint8_t { Clean = 0, Warm = 1, Vivid = 2 };
+enum class MonitorSource : std::uint8_t { InstrumentOnly = 0, MicrophoneOnly = 1, Both = 2 };
+enum class LedElement { Icons, Mute, Parameter, Metering, GainReduction };
+struct Rgb {
+    std::uint8_t r{0}, g{0}, b{0};
+    bool operator==(const Rgb&) const = default;
+};
 
 // Settings struct offsets (0x80 bytes). Verification: static analysis only.
 namespace settings_off {
@@ -17,22 +23,37 @@ inline constexpr std::size_t kPhantom1 = 5;            // input 1 only (input 2 
 inline constexpr std::size_t kPreamp[2] = {6, 15};     // 0/1/2
 inline constexpr std::size_t kDenoise[2] = {7, 16};
 inline constexpr std::size_t kCompress[2] = {9, 18};
-inline constexpr std::size_t kVolumeA = 20;            // i16 Q8.8, grouping unverified
-inline constexpr std::size_t kVolumeB = 27;            // i16 Q8.8, clamp -60..0 dB
-inline constexpr std::size_t kMuteA = 22;
-inline constexpr std::size_t kMuteB = 29;
-inline constexpr std::size_t kMuteC = 19;
-inline constexpr std::size_t kOutputSource = 23;
+// Output groups: names are the app's own tree-group identifiers
+// (Loopback / Speaker / Headphone / Monitor), confirmed by name in the binary.
+inline constexpr std::size_t kLoopbackMute = 19;
+inline constexpr std::size_t kSpeakerVolume = 20;      // i16 Q8.8, -60..0 dB
+inline constexpr std::size_t kSpeakerMute = 22;
+inline constexpr std::size_t kMixToSpeakers = 23;      // OutputSource enum (value set unknown)
+inline constexpr std::size_t kHighVolumeSpeaker = 24;  // bool
+inline constexpr std::size_t kHeadphoneVolume = 27;    // i16 Q8.8, -60..0 dB
+inline constexpr std::size_t kHeadphoneMute = 29;
+inline constexpr std::size_t kHighImpedanceHeadphone = 31;  // bool
 inline constexpr std::size_t kDim = 32;
 inline constexpr std::size_t kMono = 33;
-inline constexpr std::size_t kMonitorFlag = 34;
-inline constexpr std::size_t kBalance = 35;            // i16 Q8.8, sign inverted
-inline constexpr std::size_t kCustomButton = 53;
-inline constexpr std::size_t kNativeVolumeMapping = 59;
+inline constexpr std::size_t kMonitorSource = 34;      // 0 instrument, 1 microphone, 2 both
+inline constexpr std::size_t kInputPlaybackMix = 35;   // i16 Q8.8, stored sign-inverted
+inline constexpr std::size_t kLedBrightness = 37;      // 0..100
+inline constexpr std::size_t kLedColorIcons = 38;      // RGB x3 bytes: 38..52
+inline constexpr std::size_t kLedColorMute = 41;
+inline constexpr std::size_t kLedColorParameter = 44;
+inline constexpr std::size_t kLedColorMetering = 47;
+inline constexpr std::size_t kLedColorGainReduction = 50;
+inline constexpr std::size_t kCustomButton = 53;       // enum
+inline constexpr std::size_t kExternalGainLock = 57;   // bool (ExternalGainControl)
+inline constexpr std::size_t kNativeVolumeMapping = 59;// enum (MasterSliderMap)
+inline constexpr std::size_t kMobileStreaming = 67;    // bool
 }  // namespace settings_off
 
 inline constexpr double kGainMinDb = 0.0;
-inline constexpr double kGainMaxDb = 85.0;   // setter clamp 0x5500
+inline constexpr double kGainMaxDb = 85.0;   // device-level setter clamp 0x5500 (binary)
+// Control Center scale labels (official guide screenshot): mic 0..72 dB, instrument 0..60 dB.
+// We enforce these narrower, documented ranges for writes.
+constexpr double gainLimitDb(int input) { return input == 0 ? 72.0 : 60.0; }
 inline constexpr double kVolumeMinDb = -60.0;
 inline constexpr double kVolumeMaxDb = 0.0;
 
@@ -55,13 +76,27 @@ public:
     std::uint8_t preampRaw(int input) const;
     bool denoise(int input) const;
     bool compress(int input) const;
-    double volumeADb() const;
-    double volumeBDb() const;
+    double speakerVolumeDb() const;
+    double headphoneVolumeDb() const;
+    bool speakerMute() const;
+    bool headphoneMute() const;
+    bool loopbackMute() const;
     bool dim() const;
     bool mono() const;
-    double balance() const;
+    // Input/playback mix control (app id "Balance"); raw is stored sign-inverted.
+    double inputPlaybackMix() const;
+    MonitorSource monitorSource() const;
+    bool monitorMicrophone() const;
+    bool monitorInstrument() const;
+    std::uint8_t mixToSpeakersRaw() const;
+    bool highVolumeSpeaker() const;
+    bool highImpedanceHeadphone() const;
+    bool externalGainLock() const;
+    bool mobileStreaming() const;
     std::uint8_t customButton() const;
     std::uint8_t nativeVolumeMapping() const;
+    std::uint8_t ledBrightness() const;
+    Rgb ledColor(LedElement e) const;
     std::uint8_t byteAt(std::size_t off) const { return raw_[off]; }
 
     // setters validate range; they never touch bytes outside the field
@@ -73,10 +108,23 @@ public:
     Status setPreamp(int input, PreampType t);
     Status setDenoise(int input, bool v);
     Status setCompress(int input, bool v);
-    Status setVolumeADb(double db);
-    Status setVolumeBDb(double db);
+    Status setSpeakerVolumeDb(double db);
+    Status setHeadphoneVolumeDb(double db);
+    Status setSpeakerMute(bool v);
+    Status setHeadphoneMute(bool v);
+    Status setLoopbackMute(bool v);
     Status setDim(bool v);
     Status setMono(bool v);
+    Status setInputPlaybackMix(double v);
+    // Reproduces the app's pair-table state machine: at least one source stays
+    // selected (instrument-only <-> both <-> microphone-only).
+    Status setMonitorMicrophone(bool on);
+    Status setMonitorInstrument(bool on);
+    Status setHighVolumeSpeaker(bool v);
+    Status setHighImpedanceHeadphone(bool v);
+    Status setExternalGainLock(bool v);
+    Status setLedBrightness(int percent);
+    Status setLedColor(LedElement e, Rgb c);
 
 private:
     std::array<std::uint8_t, kSize> raw_{};
@@ -98,9 +146,15 @@ public:
     // Meaning of 1 vs 2 not established.
     std::uint8_t autosetupResultRaw() const;
     std::uint8_t autosetupProgress() const { return raw_[0x24]; }
+    // Output meters: group order Loopback, Speaker, Headphone (group names
+    // confirmed in the binary). Channel L/R per group, dB clamped [-60, 0].
+    double loopbackLevelDb(int ch) const { return levelAt(0x12 + 2 * (ch & 1)); }
+    double speakerLevelDb(int ch) const { return levelAt(0x16 + 2 * (ch & 1)); }
+    double headphoneLevelDb(int ch) const { return levelAt(0x1A + 2 * (ch & 1)); }
     std::uint16_t clipFlags1() const { return rdU16(raw_, 0x2E); }
     std::uint16_t clipFlags2() const { return rdU16(raw_, 0x30); }
 private:
+    double levelAt(std::size_t o) const;
     std::array<std::uint8_t, kSize> raw_{};
 };
 

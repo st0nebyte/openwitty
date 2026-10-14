@@ -1,18 +1,21 @@
 pragma Singleton
 import QtQuick
 
+// Independent palette inspired by the official guide screenshots (near-black
+// panels, olive-green active state). No proprietary assets are used.
 QtObject {
-    readonly property color bg: "#101113"
-    readonly property color panel: "#1a1c1f"
-    readonly property color panelHi: "#24272b"
-    readonly property color line: "#33373d"
-    readonly property color text: "#e8e9eb"
-    readonly property color textDim: "#8b9097"
-    readonly property color accent: "#f2b134"
-    readonly property color ok: "#58c27d"
-    readonly property color warn: "#e5a13a"
-    readonly property color bad: "#e2574c"
-    readonly property int radius: 8
-    readonly property int pad: 14
-    readonly property string font: "Sans Serif"
+    readonly property color bg: "#1b1b1b"
+    readonly property color panel: "#222222"
+    readonly property color panelHi: "#2c2c2c"
+    readonly property color well: "#161616"
+    readonly property color line: "#3a3a3a"
+    readonly property color text: "#e4e4e4"
+    readonly property color textDim: "#8c8c8c"
+    readonly property color accent: "#86b82e"     // active/selected
+    readonly property color accentDim: "#4b6a1c"
+    readonly property color ok: "#6fae3a"
+    readonly property color warn: "#d7a73a"
+    readonly property color bad: "#d9534a"
+    readonly property color sim: "#e0b040"
+    readonly property int radius: 4
 }

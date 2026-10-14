@@ -11,7 +11,9 @@
 * If `ls -l /dev/bus/usb/...` shows no write access for the user, an admin must add the udev rule (not fixable without root).
 
 ## Engineering
-* Windows binary: recover `AudioControlRequestGet/Set` call sites with REA/Ghidra and confirm bmRequestType/bRequest/wValue/wIndex match macOS.
+* ✔ done: Windows MEM GET/SET verified against macOS (PROTOCOL.md).
+* Locate the macOS-streaming flag, the custom-button enum values, `OutputSource` values, factory-reset / reset-LED trigger words.
+* Decode Autosetup/Autogain result codes and error conditions (noise too loud, clipping, no response) from the status flags.
 * Use REA MCP session for iterative function/xref work (CLI re-imports each call, ~2 min).
 * Recover `iface_version_t` layout; identify which settings groups are headphone/speaker.
 * Disassemble the write path & tick cadence (`Connect2Device::tick`).

@@ -57,7 +57,7 @@ TEST(Settings, DecodeKnownOffsets) {
     EXPECT_DOUBLE_EQ(s.gainDb(1), 10.0);
     EXPECT_EQ(s.preamp(1), PreampType::Warm);
     EXPECT_TRUE(s.dim()); EXPECT_TRUE(s.mono());
-    EXPECT_DOUBLE_EQ(s.balance(), 1.0);
+    EXPECT_DOUBLE_EQ(s.inputPlaybackMix(), 1.0);
 }
 
 TEST(Settings, RejectsWrongSizes) {
@@ -72,12 +72,14 @@ TEST(Settings, RejectsWrongSizes) {
 TEST(Settings, GainRangeChecked) {
     SettingsMessage s;
     EXPECT_TRUE(s.setGainDb(0, 0.0).ok());
-    EXPECT_TRUE(s.setGainDb(0, 85.0).ok());
+    EXPECT_TRUE(s.setGainDb(0, 72.0).ok());
     EXPECT_FALSE(s.setGainDb(0, -0.1).ok());
-    EXPECT_FALSE(s.setGainDb(0, 85.1).ok());
+    EXPECT_FALSE(s.setGainDb(0, 72.1).ok());   // documented mic scale 0..72
+    EXPECT_TRUE(s.setGainDb(1, 60.0).ok());
+    EXPECT_FALSE(s.setGainDb(1, 60.5).ok());   // documented instrument scale 0..60
     EXPECT_FALSE(s.setGainDb(0, std::nan("")).ok());
     EXPECT_FALSE(s.setGainDb(2, 10).ok());
-    EXPECT_DOUBLE_EQ(s.gainDb(0), 85.0);  // failed sets did not change state
+    EXPECT_DOUBLE_EQ(s.gainDb(0), 72.0);  // failed sets did not change state
 }
 
 TEST(Settings, EditsPreserveUnknownBytes) {
@@ -97,9 +99,9 @@ TEST(Settings, EditsPreserveUnknownBytes) {
 
 TEST(Settings, VolumeClamp) {
     SettingsMessage s;
-    EXPECT_TRUE(s.setVolumeBDb(-60.0).ok());
-    EXPECT_FALSE(s.setVolumeBDb(-60.5).ok());
-    EXPECT_FALSE(s.setVolumeBDb(0.5).ok());
+    EXPECT_TRUE(s.setHeadphoneVolumeDb(-60.0).ok());
+    EXPECT_FALSE(s.setHeadphoneVolumeDb(-60.5).ok());
+    EXPECT_FALSE(s.setHeadphoneVolumeDb(0.5).ok());
     EXPECT_EQ(s.bytes()[27], 0x00);
     EXPECT_EQ(s.bytes()[28], 0xC4);
 }
@@ -167,5 +169,5 @@ TEST(Settings, OffsetsAreDisjoint) {
     EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setHighPass(1, true); }), 1);
     EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setPhantom1(true); }), 1);
     EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setCompress(1, true); }), 1);
-    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setGainDb(1, 85.0); }), 1);  // 0x5500 LE = 00 55
+    EXPECT_EQ(count([](SettingsMessage& s) { (void)s.setGainDb(1, 60.0); }), 1);  // 60 dB = 0x3C00 LE = 00 3C
 }
