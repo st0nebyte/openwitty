@@ -16,6 +16,8 @@ int main(int argc, char** argv) {
     p.addOption(mock);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
+    QCommandLineOption show("show", "Open a page at start: settings | wizard.", "page");
+    p.addOption(show);
     p.addHelpOption();
     p.process(app);
 
@@ -25,6 +27,11 @@ int main(int argc, char** argv) {
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Lewitt/Main.qml")));
+    if (p.isSet(show) && !engine.rootObjects().isEmpty()) {
+        QObject* root = engine.rootObjects().first();
+        if (p.value(show) == "settings") root->setProperty("showSettings", true);
+        if (p.value(show) == "wizard") root->setProperty("showWizard", true);
+    }
     if (p.isSet(mock)) controller.connectMock();
     else controller.connectUsb();  // read-only; reports "not found" if absent
     if (p.isSet(shot)) {
