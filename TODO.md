@@ -1,10 +1,13 @@
 # TODO
 
 ## Needs the device (do in this order, read-only first)
-1. `openwitty-cli list`; record VID/PID + descriptors (`lsusb -v`), `amixer -c N contents`.
-2. `openwitty-cli probe` (dry run), then `probe --execute` (GETs only) — decides the access method.
-3. Version → status → settings reads; compare with the official app / front panel.
-4. Propose one low-risk write test (e.g. mute toggle) for explicit approval.
+1. ✔ done 2026-10-14: `openwitty-cli list`/`devices`; descriptors recorded (`docs/HARDWARE_TEST_RESULTS.md`).
+2. ✔ done 2026-10-14: `probe --execute` — **access method decided: interface 3** (unbound,
+   vendor-specific `ff/f0/00`), not the AudioControl interface. See `docs/USB_ACCESS.md` §3b.
+3. **Next:** extend `read version`/`read status`/`read settings` to target interface 3 the same way
+   `probe` already does for message 0x0A (small, reviewed code change — not yet done); then compare
+   with the official app / front panel.
+4. Propose one low-risk write test (e.g. mute toggle) for explicit approval — still blocked on 3.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).
@@ -32,8 +35,12 @@
 * Re-trace on Windows: MixToSpeakers, API handshake, schema merge.
 
 ## Backend (phase 5C follow-ups)
-* On hardware: follow `docs/HARDWARE_TEST_PLAN.md`; send the filled result template.
-* If options A–C in `docs/USB_ACCESS.md` fail: prototype `HwdepTransport` + the snd-usb-audio quirk (option E) — needs kernel build rights.
+* ✔ done 2026-10-14: hardware session, filled result template → `docs/HARDWARE_TEST_RESULTS.md`.
+* Option C (`docs/USB_ACCESS.md`) confirmed working on real hardware; implement an "unbound
+  interface" access method in `UsbTransport`/CLI (currently only `probe`'s hardcoded message-0x0A
+  matrix uses it) so version/status/settings reads can use the same path.
+* Option E (hwdep kernel driver) deprioritized now that C works from userspace — only revisit if C
+  proves insufficient.
 * An administrator must install `packaging/udev/70-openwitty.rules` (EACCES otherwise).
 * Interruptible control transfers (libusb async + cancel) to bound shutdown latency below 500 ms.
 * Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).

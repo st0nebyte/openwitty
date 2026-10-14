@@ -48,8 +48,15 @@ Also: *"Device must be opened in APP mode."* when the device-info DFU flag
 0x100003c70 / 0x100005d50), vtable of `PackedStructMessage<lewitt_api_t,…>`
 at 0x10084fc98 (slot 0 `mov eax,0xa`; slot 3 `xor eax,eax`; slot 4 `0x40`).
 Byte 0 = major, byte 1 = minor is read from a `pmovzxbw` of two bytes (medium
-confidence); bytes 2..63 unknown. (id 1 is unused by Connect2; Connect 6 has
-additional levels/mixer/dsp messages.)
+confidence, now **hardware-confirmed**: real CONNECT 2, serial `XXXXXXXXXXXX`,
+returned byte0=`0x01`/byte1=`0x00` for this GET — see
+`docs/HARDWARE_TEST_RESULTS.md` §4); bytes 2..63 are **not unknown-and-presumed-zero
+any more** — the real device returned non-zero, partially-ASCII data there
+(including its own `iSerial` string at bytes 26–45), captured verbatim but not
+yet mapped field-by-field. This response was obtained over interface 3 (an
+undocumented unbound vendor-specific interface, not the AudioControl interface);
+see `docs/USB_ACCESS.md` §3b for why interface 0 did not answer. (id 1 is unused
+by Connect2; Connect 6 has additional levels/mixer/dsp messages.)
 
 The app keeps three copies of the settings struct: *current* (last read),
 *snapshot* (previous tick, for change detection) and *pending* (what gets
@@ -292,10 +299,12 @@ restart it, so the word goes out in the next tick's trigger write.
 | 4 / 5 | ✔ | ✔ (3 + 4 sites) | high that they are written; semantics medium |
 | MixToSpeakers boolean | ✔ (toggle bound via Paths) | not re-traced | medium |
 | Auto-gain result/progress | ✔ | ✔ (timer callback decompile) | medium |
-| API handshake 0x0A | ✔ | not re-traced | medium |
+| API handshake 0x0A | ✔ | not re-traced | medium (bytes 0–1 **hardware-verified** 2026-10-14, bytes 2–63 hardware-captured/unmapped) |
 | Settings schema / sync merge | ✔ | not re-traced | high (single binary) |
 
-Nothing above is hardware-verified.
+Nothing above is hardware-verified **except API handshake bytes 0–1**, first confirmed against a
+real CONNECT 2 on 2026-10-14 (`docs/HARDWARE_TEST_RESULTS.md`). Everything else remains
+static-analysis-only.
 
 ### Not found / still open
 * `OutputSource` enumerator names; bytes 54–56, 58, 60–70 semantics.

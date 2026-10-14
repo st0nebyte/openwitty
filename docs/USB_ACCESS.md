@@ -42,9 +42,9 @@ needs the device. Nothing here is hardware-verified.
 
 | Option | Works without disturbing audio? | Needs root? | Evidence | Verdict |
 |---|---|---|---|---|
-| **A. libusb, interface recipient, no claim** (default `--method interface`) | Does no harm, but **fails with `EBUSY`** while the AC interface is bound (F2) | udev rule for the node (F9) | [src] | baseline; useful to *prove* the failure mode |
-| **B. libusb, device recipient** (`--method device-recipient`) | Not blocked by usbfs (F3). Whether the **firmware** accepts a class request addressed to the device is unknown | udev rule (F9) | usbfs [src]; firmware [hyp] | worth one read-only experiment on hardware |
-| **C. Unbound interface** (probe lists them) | Claimable without touching audio, but UAC2 devices normally have **all** AC/AS interfaces bound by `snd-usb-audio`; a spare interface (HID/DFU) may not exist | udev rule | descriptors on a similar UAC2 device [sys] | only if the device exposes one; firmware routing [hyp] |
+| **A. libusb, interface recipient, no claim** (default `--method interface`) | Does no harm, but **fails** while the AC interface is bound and in use (F2) — hardware-verified `LIBUSB_ERROR_IO`, not the predicted `EBUSY` | udev rule for the node (F9) | [src]; [sys] 2026-10-14 | **confirmed non-working**; useful to *prove* the failure mode |
+| **B. libusb, device recipient** (`--method device-recipient`) | Not blocked by usbfs (F3). Firmware **actively rejects** it (`EPIPE`/stall) | udev rule (F9) | usbfs [src]; firmware [sys] 2026-10-14 | **confirmed non-working**; device says no |
+| **C. Unbound interface** (probe lists them) | Claimable without touching audio; the CONNECT 2 exposes one (vendor-specific, interface 3, 0 endpoints) in addition to a DFU interface (4) | udev rule | [sys] 2026-10-14: hardware-verified GET success on interface 3, no audio disruption | **confirmed working** — current recommended path |
 | **D. ALSA mixer / `amixer`** | n/a — MEM is not reachable (F4) | no | [src] | **not possible** |
 | **E. hwdep interface in `snd-usb-audio`** (new quirk + ioctl `MEM_GET/SET`) | **Yes**: runs inside the driver that already owns the interface, no detach, no audio interruption | kernel patch + module build/install (root); once present, `/dev/snd/hwC*` is user-accessible via uaccess (F8) — no udev rule needed | precedent F6; quirk hook F5/F6 | **smallest correct solution**; recommended if B/C fail |
 | **F. Detach + claim (usbfs)** (`--method detach`) | **No**: drops the whole sound card (F7) | udev rule | [src] | disruptive; isolated, opt-in, env-gated, never used by the GUI |
@@ -52,12 +52,17 @@ needs the device. Nothing here is hardware-verified.
 | **H. usbmon / sniffing the vendor app** | Observation only | root | — | useful for *verification* on a machine with Windows/macOS, not for control |
 | **I. Out-of-tree standalone kernel driver** | Competes with `snd-usb-audio` for the interface | root | — | rejected: duplicates the claim problem |
 
-### Recommendation
+### Recommendation (updated 2026-10-14 after first hardware session)
 1. On hardware, first run `openwitty-cli diagnose` (sysfs only) → learn PID, interfaces, driver
    ownership, node permissions without any I/O.
-2. If the node is writable (admin installed the rule): `read api` (A), then B, then C —
-   each read-only, each opt-in.
-3. If none works (expected for A), propose **E**. Design sketch, *not implemented*:
+2. If the node is writable (admin installed the rule): go straight to **C** (`probe --execute`,
+   the unbound-interface variants) — A and B are now confirmed non-working on this device class (see
+   §3b) and are kept only as documented negative results / regression checks, not as things worth
+   retrying first.
+3. **C is the current working path** for message 0x0A. Extending it (new CLI/transport method) to
+   the other read-only message types (version/status/settings) is the proposed next step — not yet
+   implemented. Option **E** (hwdep) is deprioritized unless C proves insufficient. Design sketch for
+   E, kept for reference, *still not implemented*:
    * quirk entry for `USB_ID(0x29c2, 0x0004)` and `0x0002` in `mixer_quirks.c`
      (`snd_usb_mixer_apply_create_quirk`);
    * `snd_hwdep_new(card, "LEWITT Control", 0, &hw)`, ioctls `GET_VERSION`, `MEM_GET`,
@@ -68,6 +73,35 @@ needs the device. Nothing here is hardware-verified.
      `snd_usb_lock_shutdown()`;
    * userspace adds `HwdepTransport : IDeviceTransport` — no protocol/GUI changes.
    Upstream acceptance is not assumed; the patch would be small and class-compliant.
+
+## 3b. Hardware session 2026-10-14 — option C confirmed
+
+First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what changed:
+
+* **Option C is no longer hypothetical.** The CONNECT 2 (serial `XXXXXXXXXXXX`, bcdDevice `0121`)
+  exposes interface 3, class `ff/f0/00` (vendor-specific, 0 endpoints), unbound to any driver. A
+  read-only GET (`req=0x03`, `wValue=0x000A`, `wIndex=0x3303`) addressed to it succeeded: 64 bytes
+  back, byte0/1 matching the documented API-handshake shape (major=1), with additional structured
+  data in bytes 2–63 including the device's own serial number in ASCII. No claim, no driver
+  conflict, no audio disruption (card stayed enumerated throughout; no kernel teardown messages).
+* **Option A (interface 0, kernel-owned) fails, but not the way F2 predicted.** Both GET variants
+  (`req=0x03` and `req=0x85`) returned `LIBUSB_ERROR_IO`, not `EBUSY`. `dmesg` showed only an
+  advisory `usbfs: ... did not claim interface 0 before use` warning — the same advisory also fired
+  for interfaces 3 and 4, which both succeeded, so the warning does not explain the failure. Most
+  likely cause: a genuine bus-level collision with `snd-usb-audio`'s own active use of interface 0's
+  control pipe, not a usbfs-level claim refusal on this kernel. F2 should be read as "interface 0 is
+  not usable while the card is attached", not "fails with EBUSY" — the exact errno is kernel/timing
+  dependent.
+* **Option B (device recipient) got a clean, well-defined answer**: `EPIPE`/stall on both request
+  variants — the firmware actively rejects device-recipient class requests. This rules B out
+  definitively; it is not a permissions or kernel issue, the device itself says no.
+* The device also has an **interface 4** (class `fe/01/01`, real DFU functional descriptor) that
+  answered the identical 64 bytes to the same GET. Likely a shared EP0 handler rather than a second
+  real channel; not re-tested beyond the one capture because `req=0x03`/`bmRequestType=0xA1` aliases
+  the standard DFU `DFU_GETSTATUS` request. **Use interface 3, not interface 4, going forward.**
+* Consequence for the recommendation below: **Option E (hwdep kernel driver) is no longer the
+  default next step.** Option C works today, from userspace, with no kernel patch. Revisit E only if
+  C turns out insufficient (e.g. if settings/status reads over interface 3 misbehave).
 
 ## 4. What stays unknown until hardware exists
 * The product id/mode of the attached device and its interface list (F9/F10 give the

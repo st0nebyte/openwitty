@@ -1,8 +1,13 @@
 # Feature inventory / parity matrix (CONNECT 2)
 
 Sources: official online guide (documented behaviour, screenshots), macOS and
-Windows Control Center 5.2.2 (protocol). **HW** column: nothing is verified on
-a real device. "RE" = what reverse engineering still has to establish.
+Windows Control Center 5.2.2 (protocol). **HW** column: no individual feature
+below is verified on a real device yet. A first hardware session (2026-10-14,
+`docs/HARDWARE_TEST_RESULTS.md`) confirmed the transport-level API handshake
+(message 0x0A) over a newly-discovered unbound vendor interface, which is a
+prerequisite for testing any feature below but does not by itself validate any
+specific setting/control. "RE" = what reverse engineering still has to
+establish.
 Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML
 control wired to the mock backend; writes to real hardware are disabled.
 
