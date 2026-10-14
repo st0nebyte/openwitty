@@ -46,7 +46,7 @@ PKGBUILD) install the same file into `/usr/lib/udev/rules.d/` and the `.deb` pos
 ## Verifying
 
 ```sh
-lewitt-cli devices                       # lists the device, node path and owner/mode
+lewitt-cli devices                       # is the device visible in sysfs?
 getfacl /dev/bus/usb/BBB/DDD             # expect user:<you>:rw- after the rule applied
 lewitt-cli diagnose                      # read-only report with next steps
 ```
