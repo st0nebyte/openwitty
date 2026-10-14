@@ -9,6 +9,7 @@
 #include <memory>
 
 #include <atomic>
+#include <mutex>
 
 #include "core/DeviceManager.hpp"
 #include "core/DeviceSession.hpp"
@@ -58,7 +59,12 @@ private:
     int pollCount_{0};
     QSet<QString> pendingKeys_;
     lewitt::SerializedTransport* serialized_{nullptr};
-    std::atomic<lewitt::IDeviceTransport*> active_{nullptr};
+    // cancelAll() runs on the GUI thread; the pointer is only dereferenced under this lock and
+    // is cleared (under the same lock) before the transport it points to is destroyed.
+    std::mutex activeM_;
+    lewitt::IDeviceTransport* active_{nullptr};
+    void resetWorkflowState();
+    void endMeasurementSessionBestEffort();
     lewitt::DeviceManager manager_;
     QTimer* scanTimer_{nullptr};
     bool usbMode_{false};

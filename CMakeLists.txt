@@ -99,9 +99,15 @@ if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/.venv/
     set_tests_properties(visual_geometry PROPERTIES ENVIRONMENT "QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
 endif()
 
+# Static guard over every source location that can reach USB hardware.
+if(LEWITT_BUILD_TESTS AND UNIX)
+    add_test(NAME audit_usb_call_sites
+             COMMAND ${CMAKE_SOURCE_DIR}/tools/audit/check_usb_call_sites.sh ${CMAKE_SOURCE_DIR})
+endif()
+
 # Packaging check: install into an isolated DESTDIR and verify layout, RPATH, dev-path
 # leakage, desktop/appstream metadata and a headless simulated start (no host install).
-if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND UNIX)
+if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND UNIX AND NOT LEWITT_SANITIZE)   # sanitizer binaries are not package candidates
     add_test(NAME packaging_staging
              COMMAND ${CMAKE_SOURCE_DIR}/tools/packaging/check_staging.sh ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR})
     set_tests_properties(packaging_staging PROPERTIES

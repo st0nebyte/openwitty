@@ -200,9 +200,9 @@ public:
     std::uint8_t autosetupProgress() const { return raw_[0x24]; }
     // Output meters: group order Loopback, Speaker, Headphone (group names
     // confirmed in the binary). Channel L/R per group, dB clamped [-60, 0].
-    double loopbackLevelDb(int ch) const { return levelAt(0x12 + 2 * (ch & 1)); }
-    double speakerLevelDb(int ch) const { return levelAt(0x16 + 2 * (ch & 1)); }
-    double headphoneLevelDb(int ch) const { return levelAt(0x1A + 2 * (ch & 1)); }
+    double loopbackLevelDb(int ch) const { return levelAt(0x12 + 2u * static_cast<unsigned>(ch & 1)); }
+    double speakerLevelDb(int ch) const { return levelAt(0x16 + 2u * static_cast<unsigned>(ch & 1)); }
+    double headphoneLevelDb(int ch) const { return levelAt(0x1A + 2u * static_cast<unsigned>(ch & 1)); }
     // Clip event counters (u16): the app compares each against its previous
     // snapshot; any change means "clipping detected" for that input.
     std::uint16_t clipCounter(int input) const { return rdU16(raw_, input == 0 ? 0x2E : 0x30); }

@@ -64,10 +64,15 @@ Status UsbTransport::open() {
     if (rc != 0) { libusb_exit(ctx_); ctx_ = nullptr; handle_ = nullptr; return mapErr(rc, "libusb_open"); }
     info_ = DeviceInfo{fd.idVendor, fd.idProduct, "", "", "usb"};
     unsigned char buf[128];
-    if (fd.iProduct && libusb_get_string_descriptor_ascii(handle_, fd.iProduct, buf, sizeof buf) > 0)
-        info_.product = reinterpret_cast<char*>(buf);
-    if (fd.iSerialNumber && libusb_get_string_descriptor_ascii(handle_, fd.iSerialNumber, buf, sizeof buf) > 0)
-        info_.serial = reinterpret_cast<char*>(buf);
+    // Use the returned length: never rely on the buffer being NUL-terminated.
+    if (fd.iProduct) {
+        int len = libusb_get_string_descriptor_ascii(handle_, fd.iProduct, buf, sizeof buf);
+        if (len > 0) info_.product.assign(reinterpret_cast<char*>(buf), static_cast<std::size_t>(len));
+    }
+    if (fd.iSerialNumber) {
+        int len = libusb_get_string_descriptor_ascii(handle_, fd.iSerialNumber, buf, sizeof buf);
+        if (len > 0) info_.serial.assign(reinterpret_cast<char*>(buf), static_cast<std::size_t>(len));
+    }
     if (auto s = ensureInterface(); !s) { close(); return s; }
     return okStatus();
 }
@@ -99,11 +104,14 @@ void UsbTransport::close() {
 }
 
 Result<Bytes> UsbTransport::read(MessageId id) {
+    const bool detach = opt_.allowDetachKernelDriver || opt_.method == AccessMethod::DetachAndClaim;
+    if (detach && !opt_.allowDisruptive)   // checked first: no state, no USB I/O involved
+        return makeError(Errc::NotSupported,
+                         "detaching the kernel driver is disruptive and not enabled (allowDisruptive)");
     if (!handle_) return makeError(Errc::Disconnected, "not open");
     const MessageInfo* mi = messageInfo(id);
     if (!mi || !mi->readable) return makeError(Errc::NotSupported, "message not readable");
     if (cancel_.load()) return makeError(Errc::Cancelled, "request cancelled");
-    const bool detach = opt_.allowDetachKernelDriver || opt_.method == AccessMethod::DetachAndClaim;
     if (detach && !claimed_) {
         // EXPERIMENTAL / DISRUPTIVE path, off by default.
         if (libusb_kernel_driver_active(handle_, interface_) == 1) {
@@ -116,7 +124,7 @@ Result<Bytes> UsbTransport::read(MessageId id) {
     Bytes buf(mi->size);
     std::uint8_t req = opt_.request == MemRequest::Uac1Mem ? kReqUac1GetMem : kReqUac2Mem;
     const std::uint8_t bm = opt_.method == AccessMethod::DeviceRecipient ? std::uint8_t(0xA0) : kBmGet;
-    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(interface_),
+    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(static_cast<std::uint8_t>(interface_)),
                                      buf.data(), static_cast<std::uint16_t>(buf.size()), kTimeoutMs);
     if (rc < 0) return mapErr(rc, "control read");
     if (static_cast<std::size_t>(rc) != mi->size)
@@ -134,7 +142,7 @@ Status UsbTransport::write(MessageId id, std::span<const std::uint8_t> data) {
     std::uint8_t req = opt_.request == MemRequest::Uac1Mem ? kReqUac1SetMem : kReqUac2Mem;
     Bytes tmp(data.begin(), data.end());
     const std::uint8_t bm = opt_.method == AccessMethod::DeviceRecipient ? std::uint8_t(0x20) : kBmSet;
-    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(interface_),
+    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(static_cast<std::uint8_t>(interface_)),
                                      tmp.data(), static_cast<std::uint16_t>(tmp.size()), kTimeoutMs);
     if (rc < 0) return mapErr(rc, "control write");
     if (static_cast<std::size_t>(rc) != tmp.size()) return makeError(Errc::ShortTransfer, "short write");

@@ -36,6 +36,10 @@ struct UsbOptions {
     bool allowDetachKernelDriver{false};
     // Writes are refused at transport level unless explicitly enabled.
     bool allowWrites{false};
+    // Transport-level gate for the disruptive detach/claim path: even if a caller selects
+    // DetachAndClaim / allowDetachKernelDriver, read() refuses unless this is also set.
+    // Only an explicit, user-confirmed action (CLI: LEWITT_ALLOW_DISRUPTIVE=1) may set it.
+    bool allowDisruptive{false};
 };
 
 // libusb transport. Default behaviour issues control transfers WITHOUT

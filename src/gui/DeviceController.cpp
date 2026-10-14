@@ -42,38 +42,60 @@ void DeviceWorker::startTimer(int ms) {
 }
 
 void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t) {
+    {
+        std::lock_guard lk(activeM_);
+        active_ = nullptr;               // old transport is about to be destroyed
+    }
+    session_.reset();
+    resetWorkflowState();
     auto ser = std::make_unique<SerializedTransport>(std::move(t));
     serialized_ = ser.get();
-    active_.store(serialized_);
     session_ = std::make_unique<DeviceSession>(std::move(ser));
+    std::lock_guard lk(activeM_);
+    active_ = serialized_;
+}
+
+// Nothing belonging to a previous session may leak into the next one (stale "pending"
+// flags, a measurement that can no longer finish, a restart that will never complete).
+void DeviceWorker::resetWorkflowState() {
+    pendingKeys_.clear();
+    autoState_ = "idle";
+    inMeasureSession_ = false;
+    restarting_ = false;
+    pollCount_ = 0;
+    mock_ = nullptr;
+    serialized_ = nullptr;
 }
 
 void DeviceWorker::cancelAll() {
-    if (auto* t = active_.load()) t->requestCancel();
+    std::lock_guard lk(activeM_);
+    if (active_) active_->requestCancel();
 }
 
 void DeviceWorker::connectMock() {
+    endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
+    if (timer_) timer_->stop();
     usbMode_ = false;
     if (scanTimer_) scanTimer_->stop();
     auto m = std::make_unique<MockTransport>();
-    mock_ = m.get();
-    adoptSession(std::move(m));
+    auto* raw = m.get();
+    adoptSession(std::move(m));      // resets workflow state (and mock_)
+    mock_ = raw;
     session_->setSampleRateHint(static_cast<std::uint32_t>(sampleRate_));
-    last_.clear();
     report(session_->connect());
     startTimer(40);  // ~25 Hz meters; stopped again on disconnect
     publish();
 }
 
 void DeviceWorker::connectUsb() {
+    endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
-    mock_ = nullptr;
+    if (timer_) timer_->stop();
     usbMode_ = true;
     backoffMs_ = 1000;
     // Real hardware: default options => no detach, no claim, writes refused.
     adoptSession(std::make_unique<UsbTransport>());
-    last_.clear();
     auto s = session_->connect();
     if (!s) report(s);
     if (session_->state() == ConnectionState::Connected) startTimer(250);
@@ -111,9 +133,23 @@ void DeviceWorker::rescan() {
     publish();
 }
 
+// If a measurement bracket is open, close it before the link goes away (only possible
+// while connected and writable; a failure is deliberately ignored).
+void DeviceWorker::endMeasurementSessionBestEffort() {
+    if (inMeasureSession_ && session_ && session_->state() == ConnectionState::Connected)
+        (void)session_->sendTrigger(Trigger::EndMeasurementSession);
+    inMeasureSession_ = false;
+}
+
 void DeviceWorker::disconnectDevice() {
     if (timer_) timer_->stop();
+    if (scanTimer_) scanTimer_->stop();
+    endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
+    pendingKeys_.clear();
+    autoState_ = "idle";
+    restarting_ = false;
+    usbMode_ = false;                   // no automatic re-connection after an explicit disconnect
     publish();
 }
 

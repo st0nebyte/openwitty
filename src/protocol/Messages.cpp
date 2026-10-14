@@ -58,6 +58,8 @@ Status SettingsMessage::setMixToSpeakers(bool v) {
     return okStatus();
 }
 Status SettingsMessage::setCustomButtonFunction(CustomButtonFunction f) {
+    if (!isKnownCustomButton(static_cast<std::uint8_t>(f)))
+        return makeError(Errc::InvalidArgument, "unknown custom button function");
     raw_[settings_off::kCustomButton] = static_cast<std::uint8_t>(f);
     return okStatus();
 }

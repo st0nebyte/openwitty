@@ -141,7 +141,8 @@ Status DeviceSession::commit() {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
     if (!pending_) return okStatus();
-    if (current_ && *pending_ == *current_) {   // nothing differs: no duplicate command
+    if (!current_) return makeError(Errc::InvalidArgument, "no device settings read yet; refusing to write");
+    if (*pending_ == *current_) {   // nothing differs: no duplicate command
         pending_.reset();
         return okStatus();
     }
@@ -158,8 +159,7 @@ Status DeviceSession::commit() {
     if (auto g = checkWriteAllowed(MessageId::Settings, bytes, WriteGuardContext{transport_->isSimulated(),
                                                                                  policy_.allowPersistentChanges}); !g)
         return g;
-    if (current_)
-        if (auto g = verifyOnlyKnownFieldsChanged(*current_, *pending_); !g) return g;
+    if (auto g = verifyOnlyKnownFieldsChanged(*current_, *pending_); !g) return g;
     if (auto s = transport_->write(MessageId::Settings, bytes); !s) { auto st = fail(s.error()); noteResult(st); return st; }
     failures_ = 0;
     return refreshSettings();

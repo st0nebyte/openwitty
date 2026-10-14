@@ -315,3 +315,54 @@ TEST(GuiHardening, UsbModeWithoutDeviceStaysQuietAndSafe) {
     c.flush();
     EXPECT_FALSE(c.simulated());
 }
+
+// ---- Phase 5E audit: no state may leak between sessions --------------------------------
+TEST(GuiAudit, PendingFlagsAndWorkflowResetWhenSessionIsReplaced) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in1.gain"); }));
+    c.injectFault("timeout");              // next write fails -> edit stays pending
+    c.setValue("spk.mute", true);
+    ASSERT_TRUE(waitFor([&] { return c.values().value("pending.spk.mute").toBool(); }));
+    c.connectMock();                        // brand-new simulated device
+    ASSERT_TRUE(waitFor([&] { return !c.values().value("pending.spk.mute").toBool(); }));
+    EXPECT_FALSE(c.values().value("spk.mute").toBool());   // fresh device state, not the stale edit
+    EXPECT_EQ(c.values().value("auto.state").toString(), "idle");
+}
+
+TEST(GuiAudit, ExplicitDisconnectClearsPendingAndDoesNotReconnect) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
+    c.disconnectDevice();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Disconnected"; }));
+    c.flush();
+    EXPECT_TRUE(waitFor([&] { return !c.values().contains("in1.gain"); }));   // no stale device values
+    EXPECT_EQ(c.connection(), "Disconnected");
+}
+
+TEST(GuiAudit, EveryQmlWritableKeyIsAcceptedByTheBackend) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in1.gain"); }));
+    Count errors(&c, &DeviceController::errorChanged);
+    // keys the QML layer sends (src/gui/qml), with a valid value for each
+    const QList<QPair<QString, QVariant>> keys{
+        {"in1.gain", 30.0}, {"in2.gain", 20.0}, {"in1.mute", true}, {"in2.mute", true},
+        {"in1.highPass", true}, {"in2.highPass", true}, {"in1.clipguard", true}, {"in2.clipguard", true},
+        {"in1.preamp", 1}, {"in2.preamp", 2}, {"in1.denoise", true}, {"in2.denoise", true},
+        {"in1.compress", true}, {"in2.compress", true}, {"in1.phantom", true},
+        {"loop.mute", true}, {"spk.volume", -10.0}, {"spk.mute", true}, {"hp.volume", -12.0}, {"hp.mute", true},
+        {"mon.mix", 0.5}, {"mon.mic", true}, {"mon.inst", true}, {"out.dim", true}, {"out.mono", true},
+        {"set.gainLock", true}, {"set.mixToSpeakers", true}, {"set.customButton", 8},
+        {"set.highImpedance", true}, {"set.highVolume", true}, {"set.ledBrightness", 40},
+        {"set.led.icons", "#112233"}, {"set.led.mute", "#112233"}, {"set.led.parameter", "#112233"},
+        {"set.led.metering", "#112233"}, {"set.led.gainReduction", "#112233"}};
+    for (const auto& [k, v] : keys) c.setValue(k, v);
+    c.flush();
+    EXPECT_TRUE(waitFor([&] { return c.values()["in1.preamp"].toInt() == 1 && c.values()["set.customButton"].toInt() == 8; }));
+    EXPECT_EQ(errors.count(), 0) << "backend rejected a key the UI sends: " << c.lastError().toStdString();
+}

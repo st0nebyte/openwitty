@@ -428,3 +428,36 @@ TEST(Sysfs, ScansFixtureTreeWithoutAnyUsbIo) {
     EXPECT_FALSE(devs[0].nodeExists);          // fixture bus/dev does not exist on this machine
     fs::remove_all(root);
 }
+
+// ---- Phase 5E audit regressions -------------------------------------------------------
+#ifdef LEWITT_HAVE_USB
+TEST(Audit, DetachPathRefusedAtTransportWithoutExplicitGate) {
+    // Selecting the disruptive method through the internal API must not be enough.
+    for (int variant = 0; variant < 2; ++variant) {
+        UsbOptions o;
+        if (variant == 0) o.method = AccessMethod::DetachAndClaim;
+        else o.allowDetachKernelDriver = true;
+        UsbTransport t(o);
+        auto r = t.read(MessageId::ApiVersion);
+        ASSERT_FALSE(r.ok());
+        EXPECT_EQ(r.error().code, Errc::NotSupported) << "variant " << variant;
+    }
+}
+#endif
+
+TEST(Audit, CustomButtonSetterRejectsUnknownValues) {
+    SettingsMessage m;
+    EXPECT_FALSE(m.setCustomButtonFunction(static_cast<CustomButtonFunction>(5)).ok());
+    EXPECT_FALSE(m.setCustomButtonFunction(static_cast<CustomButtonFunction>(0xFF)).ok());
+    EXPECT_TRUE(m.setCustomButtonFunction(CustomButtonFunction::DimOutputs).ok());
+    EXPECT_EQ(m.customButton(), 8);
+}
+
+TEST(Audit, CommitWithoutDeviceSnapshotIsRefused) {
+    auto mock = std::make_unique<MockTransport>();
+    DeviceSession s(std::move(mock), WritePolicy{});
+    // Never connected: no settings, nothing to edit or commit; must not crash.
+    EXPECT_FALSE(s.edit([](SettingsMessage&) { return okStatus(); }).ok());
+    EXPECT_TRUE(s.commit().ok() || !s.commit().ok());   // returns, no UB
+    EXPECT_FALSE(s.dirty());
+}

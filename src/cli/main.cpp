@@ -158,6 +158,7 @@ int cmdRead(const ReadArgs& a) {
         UsbOptions o;
         o.request = a.request;
         o.method = a.method;
+        o.allowDisruptive = std::getenv("LEWITT_ALLOW_DISRUPTIVE") != nullptr;   // checked above too
         t = std::make_unique<UsbTransport>(o);
     }
     if (auto s = t->open(); !s) { printError(s.error(), "open"); return exitCodeFor(s.error().code); }
