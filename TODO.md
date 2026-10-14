@@ -39,6 +39,16 @@
 * Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).
 * Persist onboarding flag; log file / diagnostics export.
 
+## Phase 5E follow-ups
+
+- Owner decision: remove `build-asan/`/`build-tsan/` from history (commits eb2956b..91fdefd);
+  see docs/AUDIT_PHASE5E.md section 6. Not done without approval.
+- Run namcap and `makepkg -s` on Arch/CachyOS; clang-tidy/cppcheck when obtainable rootless.
+- USB mode: stop retrying after EACCES/EBUSY until the device list changes.
+- Re-examine autogain completion inference before any write test.
+- Auto-select UAC1/UAC2 request variant from bcdDevice once known.
+- Choose a licence (docs/LICENSE_ASSESSMENT.md).
+
 ## Packaging (phase 5D follow-ups)
 
 - Owner: choose a project licence (metadata currently "all rights reserved until chosen").

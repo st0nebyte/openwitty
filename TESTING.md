@@ -75,3 +75,14 @@ software renderer; RSS ≈ 65 MB. Real USB latency (ms) will dominate all of the
   transport keeps the same write-guard order (`WriteGuard.UsbTransportRefusesEvenWithWritesEnabled`).
 * Release build: 92/92 ctest entries pass. Not hardware-verified. Not installed on the host.
 * `tools/packaging/emulate_pkgbuild.sh`: PKGBUILD build/check/package emulation (not makepkg).
+
+## Phase 5E: audit
+
+* `audit_usb_call_sites` (ctest): static guard over every location that can reach USB hardware.
+* New regression tests: `Audit.*` (core), `GuiAudit.*` (backend/QML key binding, session
+  replacement, explicit disconnect). 96 ctest entries on the full build.
+* Sanitizers re-run: ASan+UBSan (core + GUI, `_GLIBCXX_ASSERTIONS`) clean; TSan core-only
+  clean (`setarch -R`). A clean TSan core run does **not** make the Qt GUI race-free.
+* Presets: `cmake --preset release|debug|mock-only|core-only|asan|tsan|warnings`.
+* Clean-clone rebuild (fresh `git clone` + `tools/setup-sysroot.sh`): release and mock-only pass.
+* Details and results: docs/AUDIT_PHASE5E.md.

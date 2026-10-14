@@ -30,6 +30,10 @@ if(NOT LEWITT_ENABLE_USB)
 endif()
 if(LEWITT_REPRODUCIBLE)
     add_compile_options(-ffile-prefix-map=${CMAKE_SOURCE_DIR}=. -ffile-prefix-map=${CMAKE_BINARY_DIR}=.build)
+    # A build-tree RPATH (e.g. the rootless .sysroot) would be rewritten in place at install
+    # time and leave directory-length dependent padding in .dynstr, making the installed
+    # binaries differ between build directories. Development runs use LD_LIBRARY_PATH.
+    set(CMAKE_SKIP_BUILD_RPATH ON)
 endif()
 configure_file(src/version.hpp.in ${CMAKE_BINARY_DIR}/generated/lewitt/version.hpp @ONLY)
 # -DLEWITT_SANITIZE=address|undefined|thread|address,undefined (development builds only)

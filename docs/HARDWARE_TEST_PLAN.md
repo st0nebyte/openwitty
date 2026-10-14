@@ -110,3 +110,55 @@ step 6/7/8 raw hex:            (paste)
 step 9 diffs:                  (paste)
 step 10 notes:                 (xruns? card still present?)
 ```
+
+
+---
+
+## Appendix A (Phase 5E): pre-flight checklist and privilege matrix
+
+### A.1 Pre-flight (do all before touching the device)
+
+| # | Check | How | Pass |
+|---|-------|-----|------|
+| 1 | Build is the audited one | `lewitt-cli --version` prints `0.1.0 (full build)`; `git rev-parse HEAD` recorded | yes |
+| 2 | Test suite green on the build under test | `ctest --test-dir <build> --output-on-failure` (96 entries incl. `audit_usb_call_sites`) | 0 failures |
+| 3 | Writes are off | `lewitt-cli` has no write command; the GUI shows the device read-only (`writable=false`); do **not** set any write option | by construction |
+| 4 | Simulation is not mistaken for hardware | GUI footer says "SIMULATED"; hardware sessions show backend `usb` | visual |
+| 5 | Kernel audio is working before the test | play a sound through the device; `aplay -l` shows the card | yes |
+| 6 | Results sheet ready | copy the "Result template" below; record outputs verbatim | yes |
+
+### A.2 Which steps need which privileges
+
+| Step | Needs root / admin? | Notes |
+|------|--------------------|-------|
+| 1 enumeration (`list`, `devices`) | **No** | sysfs / libusb enumeration only |
+| 2 descriptors | **No** | `devices` reads sysfs; `lsusb -v` may need root for string descriptors on some systems (optional) |
+| 3 driver ownership | **No** | sysfs `driver` links |
+| 4 permissions | **No** to inspect; **Yes (admin, once)** to install `70-lewitt-connect2.rules` | rule is user-reviewed; nothing in this repo installs it automatically |
+| 5 API handshake (`read api`) | **No** after the udev rule; otherwise EACCES (exit 3) | expect EBUSY (exit 4) while `snd-usb-audio` owns the interface; this is a *finding*, not an error to "fix" |
+| 5b device-recipient variant | **No** (same as 5) | opt-in `--method device-recipient`; read-only GET |
+| 6 version, 7 status, 8 settings | **No** (same as 5) | reads only, 500 ms timeouts |
+| 9 compare with the device | **No** | |
+| 10 audio coexistence | **No** | observe `aplay`/PipeWire during steps 5-8; no detach |
+| `--method detach` | **Admin-equivalent effect (drops the sound card)** | **not part of this plan**; needs `LEWITT_ALLOW_DISRUPTIVE=1` *and* a transport-level `allowDisruptive` |
+| 11 write test | **Not authorised** | separate written approval, separate plan |
+
+### A.3 Abort criteria (stop immediately, record, do not retry in a loop)
+
+* PID `29c2:000a` (probable bootloader/DFU) or any PID other than `0002`/`0004`.
+* The sound card disappears from `aplay -l` or audio glitches during a read.
+* Any response whose size differs from the message size (`short-transfer`/`malformed`), or an
+  API major other than 1 (`Message API version not supported`).
+* Three consecutive timeouts: the session declares the link dead; unplug/replug before continuing.
+
+### A.4 What the first session must produce
+
+1. `lewitt-cli devices` (full), `lsusb -v -d 29c2:` if available.
+2. `lewitt-cli read api` for each of: default; `--request uac1`; `--method device-recipient`
+   (each is a single GET; stop at the first successful variant).
+3. If a variant succeeds: `read version`, `read status`, `read settings` (raw hex kept).
+4. `getfacl` of the `/dev/bus/usb/BBB/DDD` node, `id`, and the udev rule that was installed.
+5. Whether audio kept playing throughout.
+
+These results decide the access method (see USB_ACCESS.md) and are the first real evidence
+for the layouts in PROTOCOL.md; until then nothing in this project is hardware-verified.

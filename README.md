@@ -25,6 +25,13 @@ firmware/DFU is not implemented.
 
 See `BUILDING` section in `DEVELOPMENT.md`, `PROTOCOL.md`, `FEATURES.md`.
 
+## Status
+
+**Experimental — not hardware validated.** No real CONNECT 2 has been used. The protocol comes
+from static analysis; hardware writes are disabled; the simulated device is always labelled as
+such. See docs/AUDIT_PHASE5E.md (audit), docs/HARDWARE_TEST_PLAN.md (first-device procedure) and
+docs/LICENSE_ASSESSMENT.md (no licence chosen yet).
+
 ## Installing
 
 See [docs/INSTALLATION.md](docs/INSTALLATION.md) (Ubuntu `.deb`, Arch/CachyOS PKGBUILD, user-local),

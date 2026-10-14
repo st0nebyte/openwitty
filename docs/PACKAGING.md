@@ -5,10 +5,10 @@ root and nothing is installed on the build host.
 
 ## Artifacts
 
-| Format | Source | Status |
+| Format | Source | Validation performed (host: Ubuntu 24.04, rootless) |
 | ------ | ------ | ------ |
-| `.deb` (Ubuntu 24.04 / Debian) | `packaging/CPackConfig.cmake` (`cpack -G DEB`) | Built and inspected here (dpkg-deb, desktop-file-validate, appstreamcli, xmllint); **not installed**, not lintian-checked (lintian unavailable) |
-| Arch / CachyOS | `packaging/arch/PKGBUILD` + `make-source-tarball.sh` | Validated by `bash -n` and by `tools/packaging/emulate_pkgbuild.sh` (fake srcdir/pkgdir). **Not run through a real makepkg/namcap** (unavailable on the Ubuntu host) |
+| `.deb` (Ubuntu 24.04 / Debian) | `packaging/CPackConfig.cmake` (`cpack -G DEB`) | `lintian --pedantic` 2.117 (rootless copy): clean except `initial-upload-closes-no-bugs`, which only applies to Debian-archive uploads; `dpkg-deb -I/-c`; desktop/appstream/XML validators; **rootless install/upgrade/remove/purge simulation** into a private root with a stubbed `udevadm` (`tools/packaging/check_deb_lifecycle.sh`). Never installed on the host |
+| Arch / CachyOS | `packaging/arch/PKGBUILD` + `make-source-tarball.sh` | The genuine `makepkg` 7.1.0 script (from Arch's `pacman` package, sha256 checked against the mirror db) built a `.pkg.tar.zst` rootless with `--nodeps` and ran `check()` (`tools/packaging/run_makepkg_rootless.sh`). Built with the host (Ubuntu) toolchain, not an Arch chroot; `namcap` could **not** be run (needs libalpm/pyalpm). A `makepkg -s` + `namcap` run on Arch/CachyOS is still outstanding. `tools/packaging/emulate_pkgbuild.sh` remains as a faster approximation and is *not* equivalent |
 | AppImage | – | **Not built**, see decision below |
 
 ## Design rules
@@ -27,11 +27,23 @@ root and nothing is installed on the build host.
 * The udev rule is shipped in system-prefix packages only and is never installed by a
   plain `cmake --install` into `~/.local`.
 
+## Reproducibility
+
+Two builds from different source and build directories give a byte-identical package payload
+when `SOURCE_DATE_EPOCH` is set (makepkg and dpkg-buildpackage set it automatically; Qt's
+`rcc` embeds file mtimes otherwise). Verified with a fresh `git clone` against the working
+tree. `LEWITT_REPRODUCIBLE=ON` (default) adds `-ffile-prefix-map` and drops the build-tree RPATH,
+so sysroot-based development builds need `LD_LIBRARY_PATH` (as already documented).
+The `.deb` container itself (ar/tar mtimes, owner) is not normalised by CPack.
+
 ## Verification tooling
 
 ```sh
 tools/packaging/check_staging.sh build          # also a ctest entry: packaging_staging
 tools/packaging/emulate_pkgbuild.sh             # PKGBUILD build()/check()/package() emulation
+tools/packaging/run_makepkg_rootless.sh         # genuine makepkg, rootless, --nodeps (downloads pacman pkg)
+tools/packaging/check_deb_lifecycle.sh <deb>    # install/upgrade/remove/purge in a private root
+tools/audit/check_usb_call_sites.sh             # static guard (also ctest audit_usb_call_sites)
 ```
 
 `check_staging.sh` installs into a temp DESTDIR and checks: file layout, only `/usr`
@@ -56,5 +68,6 @@ properties (uaccess, vendor-scoped, no 0666).
 * **Choose a licence.** Metadata uses `LicenseRef-proprietary` (appstream) /
   `LicenseRef-custom` (PKGBUILD) and `copyright` says "all rights reserved until chosen".
 * Replace the placeholder homepage `https://example.invalid/…` and maintainer address.
-* Run `makepkg`, `namcap` and `lintian` on a real Arch / Debian host.
-* Install and smoke-test the packages in a clean VM/container (we did not install anything).
+* Run `makepkg -s` and `namcap` on a real Arch/CachyOS host (namcap has not been run at all).
+* Install and smoke-test the packages in a clean VM/container (nothing was installed on the
+  development host; install/remove was simulated into a private root).

@@ -58,6 +58,15 @@ cmake --build build --target lewitt_bench lewitt_bench_gui && build/lewitt_bench
 build/lewitt-cli devices | diagnose | read api [--method interface|device-recipient] [--request uac2|uac1] | probe [--execute]
 ```
 
+## Presets
+
+`cmake --preset release` (also `debug`, `mock-only`, `core-only`, `asan`, `tsan`, `warnings`),
+then `cmake --build --preset <name>` and `ctest --preset <name>`. Build trees are
+`build-<preset>/`. Export `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, `QML_IMPORT_PATH` and
+`CMAKE_PREFIX_PATH` for the rootless sysroot first (`tools/setup-sysroot.sh` prints them); the
+build tree carries no RPATH, so `LD_LIBRARY_PATH` is required to run the binaries. TSan needs
+`setarch -R` (also for the build, because of gtest test discovery).
+
 ## Packaging builds
 
 ```sh
