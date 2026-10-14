@@ -43,3 +43,17 @@ analyzeHeadless research/ghidra_proj lcc -process lcc_win.exe -noanalysis -readO
     -scriptPath tools/re/ghidra -postScript StringXrefs.java TUSBAUDIO_ 0   # ~4 s
 ```
 Scripts: `StringXrefs`, `DecompileAt`, `CallersOf`, `IndirectCalls`, `VtableDump`.
+
+## Sanitizers, benchmarks, diagnostics
+```
+# ASan+UBSan (core + GUI)
+cmake -S . -B build-asan -G Ninja -DCMAKE_PREFIX_PATH=$PWD/.sysroot/usr -DLEWITT_SANITIZE=address,undefined -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-asan && ctest --test-dir build-asan
+# TSan (core only)
+cmake -S . -B build-tsan -G Ninja -DCMAKE_PREFIX_PATH=$PWD/.sysroot/usr -DLEWITT_SANITIZE=thread -DLEWITT_BUILD_GUI=OFF -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-tsan; setarch $(uname -m) -R build-tsan/lewitt_tests
+# benchmarks
+cmake --build build --target lewitt_bench lewitt_bench_gui && build/lewitt_bench && QT_QPA_PLATFORM=offscreen build/src/gui/lewitt_bench_gui
+# diagnostics (read-only)
+build/lewitt-cli devices | diagnose | read api [--method interface|device-recipient] [--request uac2|uac1] | probe [--execute]
+```

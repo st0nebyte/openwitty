@@ -30,3 +30,11 @@
 * Analyse remaining high-resolution references (B-main, B-mute) for knob/meter detail; replace paraphrased onboarding text only if wording is verified.
 * Fonts: match the original's UI font if identifiable; own icon polish (guitar glyph).
 * Re-trace on Windows: MixToSpeakers, API handshake, schema merge.
+
+## Backend (phase 5C follow-ups)
+* On hardware: follow `docs/HARDWARE_TEST_PLAN.md`; send the filled result template.
+* If options A–C in `docs/USB_ACCESS.md` fail: prototype `HwdepTransport` + the snd-usb-audio quirk (option E) — needs kernel build rights.
+* An administrator must install `packaging/udev/99-lewitt-connect2.rules` (EACCES otherwise).
+* Interruptible control transfers (libusb async + cancel) to bound shutdown latency below 500 ms.
+* Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).
+* Persist onboarding flag; log file / diagnostics export.

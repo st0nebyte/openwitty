@@ -93,11 +93,12 @@ TEST(Settings, EditsPreserveUnknownBytes) {
     ASSERT_TRUE(s.setMute(1, true).ok());
     auto out = s.bytes();
     for (std::size_t i = 0; i < out.size(); ++i) {
-        if (i == 0 || i == 1 || i == 12) continue;  // the only bytes we touched
+        if (i == 0 || i == 1) continue;  // the only bytes a real change touches
         EXPECT_EQ(out[i], b[i]) << "byte " << i << " changed";
     }
     EXPECT_EQ(rdI16(out, 0), 30 * 256);
-    EXPECT_EQ(out[12], 1);
+    // byte 12 already held a non-zero value (= "muted"); setMute(true) must not rewrite it
+    EXPECT_EQ(out[12], b[12]);
 }
 
 TEST(Settings, VolumeClamp) {

@@ -12,7 +12,8 @@ Stack: C++20 core (Qt-free) · Qt 6 / QML GUI · libusb · CMake · GoogleTest.
 | `src/transport` | `IDeviceTransport`, `MockTransport`, `UsbTransport` (libusb) |
 | `src/core` | `DeviceSession`: sync, staged edits, write policy |
 | `src/gui` | Qt Quick app, threaded `DeviceController`, QML components |
-| `src/cli` | `lewitt-cli` (list / read / probe; **no write command**) |
+| `src/cli` | `lewitt-cli` (devices / diagnose / read / probe; **no write command**) |
+| `docs/HARDWARE_TEST_PLAN.md` | ordered, read-only validation procedure for the real device |
 | `tests/cpp` | 21 GoogleTest cases (+ legacy Python test via CTest) |
 | `tools/re`, `tools/py` | reverse-engineering scripts; Python prototype (legacy) |
 | `docs/USB_ACCESS.md` | the Linux driver-conflict analysis |

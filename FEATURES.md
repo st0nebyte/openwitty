@@ -48,3 +48,6 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 35 | Onboarding tour (4 steps) | overlay / Settings | host-side | GUI (on demand) | first-run persistence | n/a |
 | 36 | Unsent-edit tracking (retry/discard) | footer bar | session staging | core+GUI+tests | — | n/a |
 | 37 | Measurement session bracket (words 4/5) | Autogain/Denoise/Autosetup | trigger buffer | core+mock+GUI | device-side effect | no |
+| 38 | Read-only diagnostics: `devices`, `diagnose`, classified `read` (api/version/status/settings), `probe` | CLI | sysfs + libusb GET | implemented, fixture/mock tested | needs device | no |
+| 39 | Hot-plug discovery + auto-reconnect with backoff (USB mode) | GUI status | sysfs scan | implemented, simulated | needs device | no |
+| 40 | Backend write guard (destructive words, unknown bytes, enum preservation) | n/a | — | implemented + tests | — | n/a |

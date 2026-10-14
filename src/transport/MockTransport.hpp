@@ -1,5 +1,7 @@
 #pragma once
+#include <atomic>
 #include <deque>
+#include <functional>
 #include <mutex>
 
 #include "IDeviceTransport.hpp"
@@ -10,7 +12,7 @@ namespace lewitt {
 // Simulated device with fault injection. Never touches hardware.
 class MockTransport final : public IDeviceTransport {
 public:
-    enum class Fault { None, Timeout, ShortRead, Disconnect, Stall };
+    enum class Fault { None, Timeout, ShortRead, Disconnect, Stall, AccessDenied, Busy, LongRead, Internal };
     MockTransport();
     std::string name() const override { return "mock"; }
     Status open() override;
@@ -22,6 +24,12 @@ public:
     Result<Bytes> read(MessageId id) override;
     Status write(MessageId id, std::span<const std::uint8_t> data) override;
     bool isSimulated() const override { return true; }
+    void requestCancel() override { cancel_.store(true); }
+    void clearCancel() override { cancel_.store(false); }
+    // Test hook: runs at the start of every read, after the cancel check, before data is
+    // returned. Used to hold a request "in flight" from another thread.
+    void setReadHook(std::function<void()> h) { readHook_ = std::move(h); }
+    void setPid(std::uint16_t pid) { pidOverride_ = pid; }
 
     // test / GUI hooks
     void injectFault(Fault f, int count = 1) { fault_ = f; faultCount_ = count; }
@@ -48,6 +56,9 @@ private:
     Bytes api_;
     std::vector<MessageId> log_;
     int agProgress_{-1};
+    std::atomic<bool> cancel_{false};
+    std::function<void()> readHook_;
+    std::uint16_t pidOverride_{0};
     DeviceMode mode_{DeviceMode::Normal};
     std::vector<std::uint16_t> triggerLog_;
 public:

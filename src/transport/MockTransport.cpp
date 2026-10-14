@@ -24,6 +24,7 @@ Status MockTransport::open() {
 }
 
 DeviceInfo MockTransport::info() const {
+    if (pidOverride_) return DeviceInfo{kLewittVendorId, pidOverride_, "CONNECT 2 (simulated)", "MOCK0001", "mock"};
     return DeviceInfo{kLewittVendorId, std::uint16_t(mode_ == DeviceMode::Normal ? 0x0004 : 0x0002),
                       "CONNECT 2 (simulated)", "MOCK0001", "mock"};
 }
@@ -39,6 +40,10 @@ Result<Bytes> MockTransport::maybeFault() {
             case Fault::Disconnect: open_ = false; present_ = false;
                 return makeError(Errc::Disconnected, "simulated disconnect");
             case Fault::Stall: return makeError(Errc::Stall, "simulated stall");
+            case Fault::AccessDenied: return makeError(Errc::AccessDenied, "simulated EACCES");
+            case Fault::Busy: return makeError(Errc::Busy, "simulated EBUSY");
+            case Fault::Internal: return makeError(Errc::Internal, "simulated internal failure");
+            case Fault::LongRead: return Bytes(0x1000, 0xEE);
             case Fault::ShortRead: return Bytes{1, 2, 3};
             default: break;
         }
@@ -47,9 +52,16 @@ Result<Bytes> MockTransport::maybeFault() {
 }
 
 Result<Bytes> MockTransport::read(MessageId id) {
+    if (cancel_.load()) return makeError(Errc::Cancelled, "request cancelled");
+    if (readHook_) readHook_();
+    if (cancel_.load()) return makeError(Errc::Cancelled, "request cancelled");
     auto f = maybeFault();
     if (!f) return f;
-    if (!f.value().empty()) return makeError(Errc::ShortTransfer, "simulated short transfer");
+    if (!f.value().empty()) {
+        // a response of the wrong length is classified by size, never trusted
+        if (f.value().size() > 0x100) return makeError(Errc::Malformed, "simulated oversized response");
+        return makeError(Errc::ShortTransfer, "simulated short transfer");
+    }
     switch (id) {
         case MessageId::Settings: return settings_;
         case MessageId::Status: {

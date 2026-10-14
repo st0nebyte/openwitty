@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "core/Policy.hpp"
+#include "protocol/WriteGuard.hpp"
 #include "protocol/Messages.hpp"
 #include "transport/IDeviceTransport.hpp"
 
@@ -21,8 +22,20 @@ struct WritePolicy {
     // Simulated transports are always writable.
     bool allowHardwareWrites{false};
 };
+// What the handshake established about the device.
+struct DeviceCapabilities {
+    std::uint8_t apiMajor{0}, apiMinor{0};
+    std::uint16_t pid{0};
+    DeviceMode mode{DeviceMode::Unknown};
+    bool simulated{false};
+};
+
 class DeviceSession {
 public:
+    // Consecutive timeouts / I/O failures before the link is declared dead (state Error,
+    // transport closed, reconnect expected). Stalls never count: a stall is a rejected
+    // request, not a lost device.
+    static constexpr int kMaxConsecutiveFailures = 3;
     DeviceSession(std::unique_ptr<IDeviceTransport> t, WritePolicy p = {});
 
     ConnectionState state() const { return state_; }
@@ -33,6 +46,15 @@ public:
 
     Status connect();          // open + initial sync (read-only)
     void disconnect();
+    // Close + reopen + handshake + re-sync. Unconfirmed user edits survive (merged with
+    // whatever changed on the device in the meantime; device values win).
+    Status reconnect();
+    // Thread-safe: abort the in-flight request (shutdown) / allow requests again.
+    void cancel() { transport_->requestCancel(); }
+    void clearCancel() { transport_->clearCancel(); }
+    const DeviceCapabilities& capabilities() const { return caps_; }
+    int consecutiveFailures() const { return failures_; }
+    bool needsReconnect() const { return state_ == ConnectionState::Error || state_ == ConnectionState::Disconnected; }
     Status refreshSettings();  // read settings -> current & pending
     Status refreshStatus();    // read status (meters)
 
@@ -71,6 +93,10 @@ private:
     std::optional<SettingsMessage> current_, pending_;
     std::optional<StatusMessage> status_;
     std::optional<ApiVersionMessage> api_;
+    DeviceCapabilities caps_;
+    int failures_{0};
+    Status handshake();       // open + api version + capability checks (no settings)
+    void noteResult(const Status& s);
     std::uint32_t sampleRate_{0};
 };
 

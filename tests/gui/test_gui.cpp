@@ -271,3 +271,47 @@ TEST(GuiBackend, AutoGainSendsSessionBracket) {
     ASSERT_TRUE(waitFor([&] { return c.values()["auto.state"] == "finished"; }, 6000));
     EXPECT_EQ(c.values()["auto.progress"].toInt(), 100);
 }
+
+TEST(GuiHardening, ShutdownWhileCommandsAreQueued) {
+    app();
+    QElapsedTimer t; t.start();
+    {
+        DeviceController c;
+        c.connectMock();
+        ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
+        for (int i = 0; i < 300; ++i) c.setValue("in1.gain", double(i % 70));
+        c.simulateUnplug();
+        c.setSampleRate(96000);
+        for (int i = 0; i < 100; ++i) c.setValue("hp.volume", -double(i % 60));
+    }   // destructor: cancel, drain, join -- must be prompt and must not crash
+    EXPECT_LT(t.elapsed(), 4000);
+}
+
+TEST(GuiHardening, BusyAndPermissionErrorsAreReportedAndDoNotDisconnect) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("in1.gain"); }));
+    for (const char* kind : {"busy", "denied", "stall"}) {
+        Count err(&c, &DeviceController::errorChanged);
+        c.injectFault(kind);
+        c.setValue("in1.mute", true);
+        ASSERT_TRUE(waitFor([&] { return err.count() > 0; })) << kind;
+        EXPECT_EQ(c.connection(), "Connected") << kind;
+        c.discardPending();
+        c.flush();
+    }
+}
+
+TEST(GuiHardening, UsbModeWithoutDeviceStaysQuietAndSafe) {
+    app();
+    DeviceController c;
+    c.connectUsb();
+    ASSERT_TRUE(waitFor([&] { return !c.lastError().isEmpty() || c.connection() == "Connected"; }));
+    // whatever the machine has, nothing may have become writable on real hardware
+    EXPECT_FALSE(c.writable());
+    c.trigger("autogain1");        // must be refused by the backend, not just hidden in the UI
+    c.setDeviceMode(true);         // simulation only: ignored on real transports
+    c.flush();
+    EXPECT_FALSE(c.simulated());
+}

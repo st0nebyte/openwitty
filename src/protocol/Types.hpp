@@ -27,7 +27,31 @@ enum class Errc {
     Malformed,
     NotFound,
     Io,
+    Cancelled,       // request aborted by the application (shutdown, user cancel)
+    Internal,        // bug / impossible state inside our own code
 };
+
+// Stable, human-oriented name (used in logs and the diagnostic CLI).
+constexpr const char* errcName(Errc c) {
+    switch (c) {
+        case Errc::Ok: return "ok";
+        case Errc::Timeout: return "timeout";
+        case Errc::Disconnected: return "disconnected";
+        case Errc::ShortTransfer: return "short-transfer";
+        case Errc::Stall: return "stall";
+        case Errc::Busy: return "busy";
+        case Errc::AccessDenied: return "access-denied";
+        case Errc::NotSupported: return "not-supported";
+        case Errc::WritesDisabled: return "writes-disabled";
+        case Errc::InvalidArgument: return "invalid-argument";
+        case Errc::Malformed: return "malformed-response";
+        case Errc::NotFound: return "not-found";
+        case Errc::Io: return "io-error";
+        case Errc::Cancelled: return "cancelled";
+        case Errc::Internal: return "internal-error";
+    }
+    return "unknown";
+}
 
 struct Error {
     Errc code{Errc::Io};

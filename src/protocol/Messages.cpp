@@ -5,6 +5,13 @@
 
 namespace lewitt {
 
+// Boolean bytes: if the stored value already means the requested state, leave the raw
+// byte alone (an unexpected non-0/1 value is never silently rewritten).
+static void setBoolByte(std::uint8_t& b, bool v) {
+    if ((b != 0) == v) return;
+    b = v ? 1 : 0;
+}
+
 const MessageInfo* messageInfo(MessageId id) {
     for (const auto& m : kMessages)
         if (m.id == id) return &m;
@@ -47,7 +54,7 @@ std::optional<CustomButtonFunction> SettingsMessage::customButtonFunction() cons
     return static_cast<CustomButtonFunction>(v);
 }
 Status SettingsMessage::setMixToSpeakers(bool v) {
-    raw_[settings_off::kMixToSpeakers] = v ? 1 : 0;
+    setBoolByte(raw_[settings_off::kMixToSpeakers], v);
     return okStatus();
 }
 Status SettingsMessage::setCustomButtonFunction(CustomButtonFunction f) {
@@ -76,7 +83,7 @@ Status SettingsMessage::setGainDb(int i, double db) {
 #define LW_BOOL_SETTER(Name, Off)                                  \
     Status SettingsMessage::Name(int i, bool v) {                  \
         if (!inputOk(i)) return Status{badInput()};                \
-        raw_[Off[i]] = v ? 1 : 0;                                  \
+        setBoolByte(raw_[Off[i]], v);                              \
         return okStatus();                                         \
     }
 LW_BOOL_SETTER(setMute, settings_off::kMute)
@@ -87,7 +94,7 @@ LW_BOOL_SETTER(setCompress, settings_off::kCompress)
 #undef LW_BOOL_SETTER
 
 Status SettingsMessage::setPhantom1(bool v) {
-    raw_[settings_off::kPhantom1] = v ? 1 : 0;
+    setBoolByte(raw_[settings_off::kPhantom1], v);
     return okStatus();
 }
 Status SettingsMessage::setPreamp(int i, PreampType t) {
@@ -143,11 +150,11 @@ Rgb SettingsMessage::ledColor(LedElement e) const {
 }
 Status SettingsMessage::setSpeakerVolumeDb(double db) { return setVol(raw_, settings_off::kSpeakerVolume, db); }
 Status SettingsMessage::setHeadphoneVolumeDb(double db) { return setVol(raw_, settings_off::kHeadphoneVolume, db); }
-Status SettingsMessage::setSpeakerMute(bool v) { raw_[settings_off::kSpeakerMute] = v; return okStatus(); }
-Status SettingsMessage::setHeadphoneMute(bool v) { raw_[settings_off::kHeadphoneMute] = v; return okStatus(); }
-Status SettingsMessage::setLoopbackMute(bool v) { raw_[settings_off::kLoopbackMute] = v; return okStatus(); }
-Status SettingsMessage::setDim(bool v) { raw_[settings_off::kDim] = v; return okStatus(); }
-Status SettingsMessage::setMono(bool v) { raw_[settings_off::kMono] = v; return okStatus(); }
+Status SettingsMessage::setSpeakerMute(bool v) { setBoolByte(raw_[settings_off::kSpeakerMute], v); return okStatus(); }
+Status SettingsMessage::setHeadphoneMute(bool v) { setBoolByte(raw_[settings_off::kHeadphoneMute], v); return okStatus(); }
+Status SettingsMessage::setLoopbackMute(bool v) { setBoolByte(raw_[settings_off::kLoopbackMute], v); return okStatus(); }
+Status SettingsMessage::setDim(bool v) { setBoolByte(raw_[settings_off::kDim], v); return okStatus(); }
+Status SettingsMessage::setMono(bool v) { setBoolByte(raw_[settings_off::kMono], v); return okStatus(); }
 Status SettingsMessage::setInputPlaybackMix(double v) {
     if (!std::isfinite(v) || v < -1.0 || v > 1.0)
         return makeError(Errc::InvalidArgument, "mix must be within -1..+1 (range unverified)");
@@ -169,9 +176,9 @@ Status SettingsMessage::setMonitorInstrument(bool on) {
     else    { if (b == 2) b = 1; }          // both -> microphone only
     return okStatus();
 }
-Status SettingsMessage::setHighVolumeSpeaker(bool v) { raw_[settings_off::kHighVolumeSpeaker] = v; return okStatus(); }
-Status SettingsMessage::setHighImpedanceHeadphone(bool v) { raw_[settings_off::kHighImpedanceHeadphone] = v; return okStatus(); }
-Status SettingsMessage::setExternalGainLock(bool v) { raw_[settings_off::kExternalGainLock] = v; return okStatus(); }
+Status SettingsMessage::setHighVolumeSpeaker(bool v) { setBoolByte(raw_[settings_off::kHighVolumeSpeaker], v); return okStatus(); }
+Status SettingsMessage::setHighImpedanceHeadphone(bool v) { setBoolByte(raw_[settings_off::kHighImpedanceHeadphone], v); return okStatus(); }
+Status SettingsMessage::setExternalGainLock(bool v) { setBoolByte(raw_[settings_off::kExternalGainLock], v); return okStatus(); }
 Status SettingsMessage::setLedBrightness(int p) {
     if (p < 0 || p > 100) return makeError(Errc::InvalidArgument, "brightness must be 0..100");
     raw_[settings_off::kLedBrightness] = static_cast<std::uint8_t>(p);

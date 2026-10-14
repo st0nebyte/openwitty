@@ -27,6 +27,11 @@ public:
     virtual Status write(MessageId id, std::span<const std::uint8_t> data) = 0;
     // True only for backends that never touch real hardware.
     virtual bool isSimulated() const { return false; }
+    // Thread-safe, non-blocking. Asks the backend to abandon the in-flight request (if it
+    // can) and to fail later requests with Errc::Cancelled until `clearCancel()`.
+    // Backends that cannot interrupt a request still honour it between requests.
+    virtual void requestCancel() {}
+    virtual void clearCancel() {}
 };
 
 }  // namespace lewitt

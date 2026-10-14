@@ -323,3 +323,12 @@ pick the AudioControl interface number (the app passes only the entity ID);
 macOS uses `0x3300 | interface`. Failure → "THESYCON: MEM GET/SET failed".
 The `this[8]` UAC1 flag is set by the same "≥ 0x0b" logic as on macOS (not
 re-traced on Windows).
+
+## Backend contract derived from the protocol (phase 5C)
+* Handshake first: read message 0x0A (wValue `0x000A`, apiMajor 0); major must be 1; the USB
+  product id must be 0x0004 or 0x0002 (the app's two modes). Anything else → refuse.
+* Writes only of messages 0 (settings, whole 0x80 struct) and 4 (trigger word at bytes 0–1,
+  rest zero). Never: 0x106 (factory reset), 0x104/0x105 (mode switch) on hardware.
+* Only bytes with a verified setter may differ from the last device read; all other bytes —
+  including schema bytes without a UI binding and bytes 71–127 — are written back unchanged.
+* A boolean/enum byte holding an unexpected value is never "normalised".

@@ -8,7 +8,11 @@
 #include <QVariantMap>
 #include <memory>
 
+#include <atomic>
+
+#include "core/DeviceManager.hpp"
 #include "core/DeviceSession.hpp"
+#include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
 
 class DeviceWorker : public QObject {
@@ -25,6 +29,7 @@ public slots:
     void poll();
     void simulateUnplug();
     void simulateReplug();
+    void rescan();                       // timer: discovery / reconnect (sysfs only, no USB I/O)
     void setDeviceMode(bool macosStreaming);   // simulation only
     void retryPending();
     void discardPending();
@@ -34,8 +39,13 @@ signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
     void errorOccurred(const QString& message);
+public:
+    // Thread-safe, non-blocking: abort the in-flight transport request (used on shutdown).
+    void cancelAll();
 private:
     void publish();
+    void armRescan();
+    void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t);
     void refreshDeviceState();
     void report(const lewitt::Status& s);
     void startTimer(int ms);
@@ -47,6 +57,12 @@ private:
     int sampleRate_{48000};
     int pollCount_{0};
     QSet<QString> pendingKeys_;
+    lewitt::SerializedTransport* serialized_{nullptr};
+    std::atomic<lewitt::IDeviceTransport*> active_{nullptr};
+    lewitt::DeviceManager manager_;
+    QTimer* scanTimer_{nullptr};
+    bool usbMode_{false};
+    int backoffMs_{1000};
     QString autoState_{"idle"};
     bool inMeasureSession_{false};
     bool restarting_{false};  // idle | running | finished

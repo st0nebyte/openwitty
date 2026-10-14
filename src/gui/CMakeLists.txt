@@ -31,5 +31,9 @@ if(LEWITT_BUILD_TESTS)
     target_compile_definitions(lewitt_gui_tests PRIVATE LEWITT_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
     # Qt needs a platform plugin; tests always run offscreen.
     add_test(NAME gui_integration COMMAND lewitt_gui_tests)
-    set_tests_properties(gui_integration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
+    set_tests_properties(gui_integration PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH};LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/lsan.supp")
 endif()
+
+add_executable(lewitt_bench_gui EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tests/bench/bench_gui.cpp)
+target_link_libraries(lewitt_bench_gui PRIVATE lewitt_gui_backend Qt6::Gui)

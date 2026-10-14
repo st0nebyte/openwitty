@@ -8,6 +8,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LEWITT_BUILD_GUI "Build the Qt 6 / QML application" ON)
 option(LEWITT_BUILD_TESTS "Build tests" ON)
+# -DLEWITT_SANITIZE=address|undefined|thread|address,undefined (development builds only)
+set(LEWITT_SANITIZE "" CACHE STRING "Sanitizers to enable")
+if(LEWITT_SANITIZE)
+    add_compile_options(-fsanitize=${LEWITT_SANITIZE} -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=${LEWITT_SANITIZE})
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
@@ -17,7 +23,11 @@ add_library(lewitt_core STATIC
     src/protocol/Messages.cpp
     src/transport/MockTransport.cpp
     src/transport/UsbTransport.cpp
-    src/core/DeviceSession.cpp)
+    src/transport/UsbDiagnostics.cpp
+    src/transport/SerializedTransport.cpp
+    src/protocol/WriteGuard.cpp
+    src/core/DeviceSession.cpp
+    src/core/DeviceManager.cpp)
 target_include_directories(lewitt_core PUBLIC src)
 target_compile_options(lewitt_core PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(lewitt_core PUBLIC PkgConfig::LIBUSB)
@@ -28,7 +38,7 @@ target_link_libraries(lewitt-cli PRIVATE lewitt_core)
 if(LEWITT_BUILD_TESTS)
     enable_testing()
     find_package(GTest REQUIRED)
-    add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp)
+    add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp tests/cpp/test_hardening.cpp)
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)
@@ -54,3 +64,7 @@ if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/.venv/
                      $<TARGET_FILE:lewitt-control-center>)
     set_tests_properties(visual_geometry PROPERTIES ENVIRONMENT "QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
 endif()
+
+# Benchmarks (not part of ctest): cmake --build build --target lewitt_bench
+add_executable(lewitt_bench EXCLUDE_FROM_ALL tests/bench/bench_core.cpp)
+target_link_libraries(lewitt_bench PRIVATE lewitt_core)

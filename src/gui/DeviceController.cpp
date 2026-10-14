@@ -5,6 +5,8 @@
 #include <cmath>
 
 #include "core/Policy.hpp"
+#include <algorithm>
+
 #include "transport/UsbTransport.hpp"
 
 using namespace lewitt;
@@ -39,11 +41,24 @@ void DeviceWorker::startTimer(int ms) {
     timer_->start(ms);
 }
 
+void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t) {
+    auto ser = std::make_unique<SerializedTransport>(std::move(t));
+    serialized_ = ser.get();
+    active_.store(serialized_);
+    session_ = std::make_unique<DeviceSession>(std::move(ser));
+}
+
+void DeviceWorker::cancelAll() {
+    if (auto* t = active_.load()) t->requestCancel();
+}
+
 void DeviceWorker::connectMock() {
     if (session_) session_->disconnect();
+    usbMode_ = false;
+    if (scanTimer_) scanTimer_->stop();
     auto m = std::make_unique<MockTransport>();
     mock_ = m.get();
-    session_ = std::make_unique<DeviceSession>(std::move(m));
+    adoptSession(std::move(m));
     session_->setSampleRateHint(static_cast<std::uint32_t>(sampleRate_));
     last_.clear();
     report(session_->connect());
@@ -54,11 +69,45 @@ void DeviceWorker::connectMock() {
 void DeviceWorker::connectUsb() {
     if (session_) session_->disconnect();
     mock_ = nullptr;
+    usbMode_ = true;
+    backoffMs_ = 1000;
     // Real hardware: default options => no detach, no claim, writes refused.
-    session_ = std::make_unique<DeviceSession>(std::make_unique<UsbTransport>());
+    adoptSession(std::make_unique<UsbTransport>());
     last_.clear();
-    report(session_->connect());
-    startTimer(250);
+    auto s = session_->connect();
+    if (!s) report(s);
+    if (session_->state() == ConnectionState::Connected) startTimer(250);
+    else armRescan();                    // absent / not openable: keep looking, cheaply
+    publish();
+}
+
+void DeviceWorker::armRescan() {
+    if (!scanTimer_) {
+        scanTimer_ = new QTimer(this);
+        scanTimer_->setSingleShot(true);
+        connect(scanTimer_, &QTimer::timeout, this, &DeviceWorker::rescan);
+    }
+    scanTimer_->start(backoffMs_);
+}
+
+// Discovery uses sysfs only (no control traffic). A device that appears, or a link that
+// was declared dead, triggers one reconnect attempt; failures back off 1 s -> 8 s.
+void DeviceWorker::rescan() {
+    if (!usbMode_ || !session_) return;
+    if (session_->state() == ConnectionState::Connected) return;
+    bool present = false;
+    for (const auto& c : manager_.scan())
+        if (c.isConnect2 && c.appMode) present = true;
+    if (!present) { backoffMs_ = 1000; armRescan(); publish(); return; }
+    auto s = session_->reconnect();
+    if (s) {
+        backoffMs_ = 1000;
+        startTimer(250);
+    } else {
+        report(s);
+        backoffMs_ = std::min(backoffMs_ * 2, 8000);
+        armRescan();
+    }
     publish();
 }
 
@@ -78,7 +127,7 @@ void DeviceWorker::simulateUnplug() {
 void DeviceWorker::simulateReplug() {
     if (!mock_ || !session_) return;
     mock_->setPresent(true);
-    report(session_->connect());
+    report(session_->reconnect());
     if (session_->state() == ConnectionState::Connected) startTimer(40);
     publish();
 }
@@ -93,6 +142,7 @@ void DeviceWorker::poll() {
     if (!session_) return;
     if (session_->state() != ConnectionState::Connected) {
         if (timer_) timer_->stop();   // no background activity while disconnected
+        if (usbMode_) armRescan();    // link lost: look again with backoff
         publish();
         return;
     }
@@ -109,6 +159,7 @@ void DeviceWorker::poll() {
     }
     auto s = session_->refreshStatus();
     if (!s) report(s);
+    if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
     // Re-read settings periodically (the original does this every tick): device-side
     // changes (hardware knob, other software) are merged, pending user edits survive.
     if (++pollCount_ % (mock_ ? 10 : 4) == 0) refreshDeviceState();
@@ -156,6 +207,9 @@ void DeviceWorker::injectFault(const QString& kind) {
     if (!mock_) return;   // never on real hardware
     if (kind == "timeout") mock_->injectFault(MockTransport::Fault::Timeout);
     else if (kind == "stall") mock_->injectFault(MockTransport::Fault::Stall);
+    else if (kind == "busy") mock_->injectFault(MockTransport::Fault::Busy);
+    else if (kind == "denied") mock_->injectFault(MockTransport::Fault::AccessDenied);
+    else if (kind == "short") mock_->injectFault(MockTransport::Fault::ShortRead);
 }
 
 void DeviceWorker::simulateExternalChange(const QString& key, const QVariant& v) {
@@ -366,6 +420,7 @@ DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(n
 }
 
 DeviceController::~DeviceController() {
+    worker_->cancelAll();    // wake/abort any in-flight request before asking the worker to stop
     QMetaObject::invokeMethod(worker_, "disconnectDevice", Qt::BlockingQueuedConnection);
     thread_.quit();
     thread_.wait();

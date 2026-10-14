@@ -2,6 +2,8 @@
 
 #include <libusb.h>
 
+#include "protocol/WriteGuard.hpp"
+
 namespace lewitt {
 Error mapLibusbError(int rc, const char* what) {
     Errc c = Errc::Io;
@@ -124,7 +126,9 @@ Result<Bytes> UsbTransport::read(MessageId id) {
     if (!handle_) return makeError(Errc::Disconnected, "not open");
     const MessageInfo* mi = messageInfo(id);
     if (!mi || !mi->readable) return makeError(Errc::NotSupported, "message not readable");
-    if (opt_.allowDetachKernelDriver && !claimed_) {
+    if (cancel_.load()) return makeError(Errc::Cancelled, "request cancelled");
+    const bool detach = opt_.allowDetachKernelDriver || opt_.method == AccessMethod::DetachAndClaim;
+    if (detach && !claimed_) {
         // EXPERIMENTAL / DISRUPTIVE path, off by default.
         if (libusb_kernel_driver_active(handle_, interface_) == 1) {
             if (int rc = libusb_detach_kernel_driver(handle_, interface_); rc != 0) return mapErr(rc, "detach");
@@ -135,7 +139,8 @@ Result<Bytes> UsbTransport::read(MessageId id) {
     }
     Bytes buf(mi->size);
     std::uint8_t req = opt_.request == MemRequest::Uac1Mem ? kReqUac1GetMem : kReqUac2Mem;
-    int rc = libusb_control_transfer(handle_, kBmGet, req, wValueFor(id), wIndexFor(interface_),
+    const std::uint8_t bm = opt_.method == AccessMethod::DeviceRecipient ? std::uint8_t(0xA0) : kBmGet;
+    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(interface_),
                                      buf.data(), static_cast<std::uint16_t>(buf.size()), kTimeoutMs);
     if (rc < 0) return mapErr(rc, "control read");
     if (static_cast<std::size_t>(rc) != mi->size)
@@ -146,13 +151,14 @@ Result<Bytes> UsbTransport::read(MessageId id) {
 Status UsbTransport::write(MessageId id, std::span<const std::uint8_t> data) {
     if (!opt_.allowWrites)
         return makeError(Errc::WritesDisabled, "hardware writes are disabled (unverified protocol)");
+    // Independent of the session: even with allowWrites the destructive words never pass.
+    if (auto g = checkWriteAllowed(id, data, WriteGuardContext{false, false}); !g) return g;
+    if (cancel_.load()) return makeError(Errc::Cancelled, "request cancelled");
     if (!handle_) return makeError(Errc::Disconnected, "not open");
-    const MessageInfo* mi = messageInfo(id);
-    if (!mi || !mi->writable) return makeError(Errc::NotSupported, "message not writable");
-    if (data.size() != mi->size) return makeError(Errc::InvalidArgument, "wrong message size");
     std::uint8_t req = opt_.request == MemRequest::Uac1Mem ? kReqUac1SetMem : kReqUac2Mem;
     Bytes tmp(data.begin(), data.end());
-    int rc = libusb_control_transfer(handle_, kBmSet, req, wValueFor(id), wIndexFor(interface_),
+    const std::uint8_t bm = opt_.method == AccessMethod::DeviceRecipient ? std::uint8_t(0x20) : kBmSet;
+    int rc = libusb_control_transfer(handle_, bm, req, wValueFor(id), wIndexFor(interface_),
                                      tmp.data(), static_cast<std::uint16_t>(tmp.size()), kTimeoutMs);
     if (rc < 0) return mapErr(rc, "control write");
     if (static_cast<std::size_t>(rc) != tmp.size()) return makeError(Errc::ShortTransfer, "short write");
