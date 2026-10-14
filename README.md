@@ -22,20 +22,32 @@ This project is not about criticizing LEWITT or its software. It's about making 
 
 ## Project Status
 
-**Early development — Reverse engineering in progress**
+**Experimental — not hardware validated.**
 
-The initial development target is the **LEWITT CONNECT 2**, with planned support for **CONNECT 6**.
+The initial target is the **LEWITT CONNECT 2**; **CONNECT 6** support is planned but not implemented.
 
-The long-term goal is to provide the same device configuration and control capabilities available through the official CONTROL CENTER, directly on Linux.
+What exists today:
 
-OpenWitty is not yet a functional replacement for CONTROL CENTER.
+- A native **C++20** backend (protocol codecs, transports, device session, write policy) with no Qt dependency.
+- A **Qt 6 / QML** control application and a read-only diagnostic CLI (`openwitty-cli`).
+- A reconstructed **device-control protocol** for the CONNECT 2, derived from static analysis and cross-checked between the macOS and Windows control applications.
+- A **simulated device** (mock mode) that exercises every control in the GUI and is always labelled as simulated.
+- ~100 automated tests (protocol, session, hardening, GUI integration, QML loading, packaging), sanitizer runs and a documented security audit.
+- **Ubuntu/Debian (`.deb`) and Arch/CachyOS (PKGBUILD) packaging**, desktop integration and a udev rule (documented, never installed automatically).
+
+What does **not** exist yet:
+
+- **No validation on real hardware.** The protocol has never been exercised against a physical CONNECT 2.
+- Hardware **writes are disabled** by design until the read-only behaviour has been verified.
+- Firmware update and factory reset are intentionally not implemented.
+- OpenWitty is **not yet a functional replacement** for CONTROL CENTER.
 
 ## Device Support
 
 | Device | Status |
 |---|---|
-| LEWITT CONNECT 2 | Reverse engineering in progress |
-| LEWITT CONNECT 6 | Planned |
+| LEWITT CONNECT 2 | Implemented against the reconstructed protocol; simulated device only — **not hardware validated** |
+| LEWITT CONNECT 6 | Planned (architecture keeps device support separable; nothing implemented) |
 
 ## Goals
 
@@ -46,16 +58,44 @@ OpenWitty is not yet a functional replacement for CONTROL CENTER.
 - Encourage community contributions and knowledge sharing.
 - Keep the project free, transparent, and accessible.
 
-## Planned Features
+## Features (CONNECT 2, simulated; hardware unverified)
 
-The following features are potential development targets, depending on hardware capabilities and reverse engineering progress:
+- Device discovery and connection state, with clear permission/driver diagnostics (`EACCES` vs `EBUSY` vs stall)
+- Input gain, mute, low-cut, Clipguard, 48 V, Clean/Warm/Vivid, Denoise, Compressor
+- Loopback / speaker / headphone volume and mute, input–playback mix, dim, mono
+- LED brightness and colours, custom-button function, settings preservation of unknown device bytes
+- Autosetup / autogain workflow (simulated)
+- Pending-edit tracking and merge with external device changes
 
-- Device discovery and connection
-- Input gain control
-- Audio routing and monitoring
-- Device settings and configuration
-- Access to device-specific features
-- Native Linux integration
+See [FEATURES.md](FEATURES.md) for the exact list and evidence level.
+
+## Quick start (no hardware needed)
+
+```sh
+cmake --preset release && cmake --build --preset release
+ctest --preset release
+build-release/src/gui/openwitty --mock      # simulated device
+```
+
+Rootless build instructions, packaging and the first real-device procedure:
+
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) — Ubuntu `.deb`, Arch/CachyOS, user-local install
+- [DEVELOPMENT.md](DEVELOPMENT.md) — toolchain, presets, sanitizers
+- [docs/USB_PERMISSIONS.md](docs/USB_PERMISSIONS.md) and [docs/USB_ACCESS.md](docs/USB_ACCESS.md) — udev, driver ownership
+- [docs/HARDWARE_TEST_PLAN.md](docs/HARDWARE_TEST_PLAN.md) — ordered, read-only first-device validation
+- [docs/HANDOFF_HARDWARE_TESTING.md](docs/HANDOFF_HARDWARE_TESTING.md) — everything needed to continue on a machine with the device
+- [PROTOCOL.md](PROTOCOL.md), [ARCHITECTURE.md](ARCHITECTURE.md), [docs/AUDIT_PHASE5E.md](docs/AUDIT_PHASE5E.md)
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/protocol`, `src/transport`, `src/core` | Qt-free core: message codecs, transports (libusb, mock), device session and write policy |
+| `src/gui`, `src/cli` | Qt 6 / QML application, diagnostic CLI |
+| `assets/` | OpenWitty branding (icons, banner) |
+| `packaging/` | Debian, Arch, desktop, AppStream, udev |
+| `tests/`, `tools/` | tests; packaging/audit/reverse-engineering tooling |
+| `docs/` | engineering documentation |
 
 ## Philosophy
 
@@ -81,7 +121,7 @@ More detailed contribution guidelines will be added as the project evolves.
 
 OpenWitty is released under the **MIT License**.
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE) for details, and [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md) for dependencies and asset notes.
 
 ## Disclaimer
 
@@ -93,7 +133,7 @@ LEWITT, CONNECT, and CONTROL CENTER are trademarks or product names of their res
 
 All trademarks are used solely for identification and compatibility purposes.
 
-OpenWitty does not distribute proprietary LEWITT software or firmware.
+OpenWitty does not distribute proprietary LEWITT software or firmware, and does not use LEWITT artwork.
 
 ---
 

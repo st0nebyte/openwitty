@@ -1,0 +1,15 @@
+# proprietary installers, extracted binaries and captures -- never commit
+/research/
+*.exe
+*.pkg
+*.dmg
+*.pcap
+*.pcapng
+.venv/
+__pycache__/
+*.egg-info/
+build/
+.sysroot/
+build/
+.tools/
+build-*/

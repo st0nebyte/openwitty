@@ -1,0 +1,14 @@
+# Third-party allocations reported by LeakSanitizer in GUI tests (font engine / platform plugins).
+# Our own code (lewitt::*, DeviceController, DeviceWorker) is NOT suppressed.
+leak:libfontconfig
+leak:libfreetype
+leak:libQt6Gui
+leak:libQt6Core
+leak:libQt6Qml
+leak:libQt6Quick
+leak:libQt6DBus
+leak:libglib
+leak:libdbus
+leak:libxkbcommon
+leak:libX11
+leak:libxcb

@@ -1,0 +1,17 @@
+singleton Theme 1.0 Theme.qml
+singleton Hint 1.0 Hint.qml
+OnboardingOverlay 1.0 OnboardingOverlay.qml
+GlyphIcon 1.0 GlyphIcon.qml
+GainKnob 1.0 GainKnob.qml
+ToggleButton 1.0 ToggleButton.qml
+ToolTip_ 1.0 ToolTip_.qml
+ToggleSwitch 1.0 ToggleSwitch.qml
+LevelMeter 1.0 LevelMeter.qml
+Fader 1.0 Fader.qml
+Fader_h 1.0 Fader_h.qml
+InputStrip 1.0 InputStrip.qml
+OutputStrip 1.0 OutputStrip.qml
+MonitorSection 1.0 MonitorSection.qml
+SettingsView 1.0 SettingsView.qml
+AutosetupWizard 1.0 AutosetupWizard.qml
+DeviceStatusIndicator 1.0 DeviceStatusIndicator.qml

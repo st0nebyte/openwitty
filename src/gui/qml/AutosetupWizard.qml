@@ -1,0 +1,167 @@
+import QtQuick
+
+// Autosetup: chooser with three columns (Microphone / Instrument / Mic + instrument,
+// bullets + estimated duration), then the guided steps (+48 V, preamp character,
+// Denoise, Clipguard, timed measurement, summary). Chooser layout and durations
+// follow public screenshots; step content follows the app's strings. The
+// individual choices are applied through ordinary settings writes; the
+// measurement uses the auto-gain trigger. Not protocol-verified.
+Rectangle {
+    id: root
+    property bool interactive: false
+    signal closeRequested()
+    color: "#262626"
+    property int step: -1                // -1 = chooser
+    property string target: "both"       // mic | inst | both
+    property bool phantom: false
+    property int preamp: 0
+    property bool denoise: false
+    property bool clipguard: true
+    readonly property bool dsp: device.values["dsp.available"] !== false
+    readonly property string autoState: device.values["auto.state"] || "idle"
+    readonly property int progress: device.values["auto.progress"] || 0
+    readonly property int outcome: device.values["auto.resultCode"] === undefined ? 0 : device.values["auto.resultCode"]
+    readonly property bool failed: autoState === "finished" && outcome === 1
+    MouseArea { anchors.fill: parent }
+
+    function apply() {
+        var ins = target === "mic" ? [1] : target === "inst" ? [2] : [1, 2];
+        for (var i = 0; i < ins.length; ++i) {
+            var p = "in" + ins[i] + ".";
+            device.setValue(p + "preamp", preamp);
+            device.setValue(p + "clipguard", clipguard);
+            if (dsp) device.setValue(p + "denoise", denoise);
+        }
+        if (phantom && ins.indexOf(1) >= 0) device.setValue("in1.phantom", true);
+    }
+    onAutoStateChanged: if (step === 5 && autoState === "finished" && outcome !== 1) step = 6
+
+    // title bar of the "wizard window"
+    Rectangle { x: 0; y: 0; width: parent.width; height: 22; color: "#343434"
+        Text { anchors.centerIn: parent; text: "Autosetup wizard"; color: "#cfcfcf"; font.pixelSize: 11; font.bold: true }
+        Text { x: parent.width - 80; anchors.verticalCenter: parent.verticalCenter; color: Theme.sim; font.pixelSize: 9
+               text: device.simulated ? "SIMULATED" : "" }
+        MouseArea { x: 0; y: 0; width: 22; height: 22; onClicked: { root.step = -1; root.closeRequested(); } }
+        Rectangle { x: 8; y: 6; width: 10; height: 10; radius: 5; color: "#ff5f57" }
+    }
+
+    // chooser
+    Item {
+        visible: root.step < 0; x: 0; y: 22; width: parent.width; height: parent.height - 22
+        Rectangle { x: 0; y: 0; width: parent.width; height: 62; color: "#1f1f1f"
+            Text { anchors.centerIn: parent; text: "Apply autosetup to:"; color: "#fff"; font.pixelSize: 22 } }
+        Repeater {
+            model: [
+                { k: "mic", t: "Microphone", icon: "mic", b: "Guided walkthrough of all settings\n45 sec", tag: "+48V" },
+                { k: "inst", t: "Instrument", icon: "guitar", b: "Guided walkthrough of all settings\n45 sec", tag: "" },
+                { k: "both", t: "Mic + instrument", icon: "both", b: "Quick setup of mic and instrument gain\n10 sec", tag: "" }]
+            Rectangle {
+                id: col
+                property var o: modelData
+                x: index * (parent.width / 3); y: 62; width: parent.width / 3; height: parent.height - 62
+                color: index === 1 ? "#222" : "#2a2a2a"
+                Item {
+                    x: 0; y: 28; width: parent.width; height: 90
+                    GlyphIcon { visible: col.o.icon !== "both"; x: parent.width / 2 - 36; y: 0; width: 72; height: 72
+                                kind: col.o.icon; color: "#f4f4f4" }
+                    Row { visible: col.o.icon === "both"; x: parent.width / 2 - 70; spacing: 14
+                        GlyphIcon { width: 60; height: 60; kind: "mic"; color: "#f4f4f4" }
+                        Text { text: "+"; color: "#f4f4f4"; font.pixelSize: 26; anchors.verticalCenter: parent.verticalCenter }
+                        GlyphIcon { width: 60; height: 60; kind: "guitar"; color: "#f4f4f4" } }
+                    Text { visible: col.o.tag !== ""; x: parent.width / 2 + 16; y: 56; color: "#f4f4f4"
+                           font.pixelSize: 11; font.bold: true; text: col.o.tag }
+                }
+                Text { x: 22; y: 138; width: parent.width - 44; color: "#eee"; font.pixelSize: 11; lineHeight: 1.35
+                       wrapMode: Text.WordWrap; text: "•  " + col.o.b.replace("\n", "\n•  ") }
+                ToggleButton { x: parent.width / 2 - 55; y: parent.height - 52; width: 110; height: 26
+                               text: col.o.t; primary: true; enabled: root.interactive
+                               onClicked: { root.target = col.o.k; root.step = col.o.k === "inst" ? 2 : (col.o.k === "mic" ? 1 : 2); } }
+            }
+        }
+    }
+
+    // guided steps
+    Item {
+        visible: root.step >= 0; x: 0; y: 22; width: parent.width; height: parent.height - 22
+        Rectangle { x: 0; y: 0; width: parent.width; height: 48; color: "#1f1f1f"
+            Text { anchors.centerIn: parent; color: "#fff"; font.pixelSize: 18
+                   text: ["", "Does your microphone need +48 V?", "Choose a sound for your preamps",
+                          "Would you like to reduce background noise?", "Would you like to use Clipguard?",
+                          "Let's test your sound!", "Autosetup will apply these settings"][Math.max(0, root.step)] } }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12
+            visible: root.step === 1
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: "#cfcfcf"; font.pixelSize: 12
+                   text: "Condenser microphones need phantom power. Passive dynamic and ribbon microphones do not, and ribbon microphones can be damaged." }
+            Row { spacing: 10
+                ToggleButton { width: 130; height: 30; text: "+48 V OFF"; active: !root.phantom; onClicked: root.phantom = false }
+                ToggleButton { width: 130; height: 30; text: "+48 V ON"; active: root.phantom; activeColor: Theme.warn
+                               onClicked: root.phantom = true } }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12; visible: root.step === 2
+            Row { spacing: 10
+                Repeater { model: [{n: "Clean", d: "Unparalleled clarity"}, {n: "Warm", d: "Smooth high end"}, {n: "Vivid", d: "Open and lively sound"}]
+                    Column { spacing: 6
+                        ToggleButton { width: 130; height: 30; text: modelData.n; active: root.preamp === index
+                                       onClicked: root.preamp = index }
+                        Text { width: 130; horizontalAlignment: Text.AlignHCenter; color: "#a8a8a8"; font.pixelSize: 10; text: modelData.d } } } }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12; visible: root.step === 3
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: root.dsp ? "#cfcfcf" : Theme.warn; font.pixelSize: 12
+                   text: root.dsp ? "Denoise measures your noise floor (stay quiet for a few seconds)."
+                                  : "Denoise is not available at 96 kHz. Choose a lower sample rate first." }
+            Row { spacing: 10
+                ToggleButton { width: 130; height: 30; text: "Denoise OFF"; active: !root.denoise; onClicked: root.denoise = false }
+                ToggleButton { width: 130; height: 30; text: "Denoise ON"; active: root.denoise; unavailable: !root.dsp
+                               onClicked: root.denoise = true } }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12; visible: root.step === 4
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: "#cfcfcf"; font.pixelSize: 12
+                   text: "Protection from distortion. Disable it for the highest possible dynamic range." }
+            Row { spacing: 10
+                ToggleButton { width: 130; height: 30; text: "Clipguard OFF"; active: !root.clipguard; onClicked: root.clipguard = false }
+                ToggleButton { width: 130; height: 30; text: "Clipguard ON"; active: root.clipguard; onClicked: root.clipguard = true } }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12; visible: root.step === 5
+            Text { width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 12
+                   color: root.failed ? Theme.danger : "#cfcfcf"
+                   text: root.failed ? "No signal detected! Please repeat measurement."
+                         : root.autoState === "running" ? "Perform for 10 seconds…"
+                         : "Play or sing at the level you will record. The device measures and sets the gain." }
+            Rectangle { width: parent.width; height: 10; radius: 5; color: Theme.well
+                Rectangle { width: parent.width * Math.min(100, root.progress) / 100; height: parent.height; radius: 5
+                            color: root.failed ? Theme.danger : Theme.meterGreen } }
+            ToggleButton { width: 140; height: 30; text: root.failed ? "Repeat" : "Start measure"; primary: true
+                           enabled: root.interactive && root.autoState !== "running"
+                           onClicked: device.trigger(root.target === "mic" ? "autogain1"
+                                                  : root.target === "inst" ? "autogain2" : "autogainBoth") }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 8; visible: root.step === 6
+            Text { color: "#cfcfcf"; font.pixelSize: 12; lineHeight: 1.5
+                   text: "Inputs: " + (root.target === "both" ? "microphone + instrument" : root.target) +
+                         "\n+48 V: " + (root.phantom && root.target !== "inst" ? "on" : "off") +
+                         "\nPreamp: " + ["Clean", "Warm", "Vivid"][root.preamp] +
+                         "\nDenoise: " + (root.denoise && root.dsp ? "on" : "off") +
+                         "\nClipguard: " + (root.clipguard ? "on" : "off") }
+        }
+        Row {
+            anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+            spacing: 8
+            ToggleButton { width: 70; height: 26; text: "Cancel"; onClicked: { root.step = -1; root.closeRequested(); } }
+            ToggleButton { width: 70; height: 26; text: "Back"; active: true
+                           onClicked: root.step = (root.step <= 1 || (root.step === 2 && root.target !== "mic" && root.target !== "both")) ? -1 : root.step - 1 }
+            ToggleButton { width: 70; height: 26; text: root.step === 6 ? "Apply" : "Next"; primary: true
+                           enabled: root.step !== 6 || root.interactive
+                           onClicked: {
+                               if (root.step === 6) { root.apply(); root.step = -1; root.closeRequested(); }
+                               else if (root.step === 1) root.step = 2;
+                               else root.step += 1;
+                           } }
+        }
+    }
+}

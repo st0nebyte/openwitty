@@ -1,0 +1,15 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: lewitt-connect2-unofficial
+Comment: Independent, unofficial software. Not affiliated with, endorsed by or supported by LEWITT GmbH.
+ "LEWITT" and "CONNECT 2" are names of the products this software is designed to work with and are
+ used only to identify them (nominative use).
+
+Files: *
+Copyright: 2026 st0nebyte and contributors
+License: LicenseRef-proprietary
+ No open-source licence has been chosen for this project yet. Until the author publishes one, all
+ rights are reserved. This package is for private testing only and must not be redistributed.
+ The package contains no LEWITT software, firmware, drivers or artwork.
+
+Comment: Runtime dependencies (not bundled; resolved from the distribution)
+ Qt 6 (LGPL-3.0 / GPL), libusb-1.0 (LGPL-2.1+), the C++ standard library (GPL-3 with runtime exception).
