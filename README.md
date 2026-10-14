@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/github/openwitty-banner.svg" alt="OpenWitty — Native Linux control for LEWITT CONNECT audio interfaces" width="900"></p>
+
 # OpenWitty
 
 **Your interface. Your Linux. Your control.**
