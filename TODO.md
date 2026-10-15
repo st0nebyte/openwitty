@@ -53,6 +53,20 @@
     (offsets 3–4, 12–13, same values across all 3 Panic Mute trials) — not in PROTOCOL.md's
     documented status field map. Worth a dedicated follow-up once there's a hypothesis for what it
     might represent.
+12. ✔ done 2026-10-15 (`phase7-hardware-integration` branch): merged the home-computer Panic Mute
+    work with the work-computer's Phase 6E (instrument-mute write scoping) and Phase 7A
+    (descriptor-driven interface selection, read-only GUI connection states) — 137/137. First
+    real-hardware GUI launch: every gain/mute binding confirmed exact against the CLI; live
+    manual-interaction validation (channel select, gain, mute) also confirmed. See
+    `docs/HARDWARE_TEST_RESULTS.md` §17.
+13. **Next (Phase 7B):** selected-channel (byte 56) has no GUI binding at all — confirmed empirically
+    this session, not just by code inspection. Add `SettingsMessage` accessor + `publish()` key +
+    QML highlight. Also: consolidate `ui.status`/`ui.state` (two overlapping labels that both
+    survived the merge), fix the banner text overlap at narrow window sizes, evidence badges,
+    `ReplayTransport` fixtures, faster settings poll.
+14. **Pending separate approval:** LED brightness regression test (Phase 6E's `commitAndVerify()`
+    path has never itself been hardware-tested for this field) — proposal not yet drafted.
+    Instrument-mute write stays prepared-but-unexecuted per instruction.
 
 ## Needs the user
 * Approve REA MCP registration (`rea setup --dry-run` first; edits ~/.claude.json and ~/.claude/skills).

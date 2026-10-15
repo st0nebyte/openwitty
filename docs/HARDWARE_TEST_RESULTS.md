@@ -822,7 +822,22 @@ here.
 
 ### 17.5 Not yet done, pending explicit guidance (see session report)
 
-Live manual-interaction validation (select channel / adjust gain / toggle mute while watching the
-GUI) and device disconnect/reconnect handling were planned but deliberately **not started** without
-checking first, per instruction not to risk disrupting active audio work. No software SET was sent;
-Panic Mute was not triggered.
+### 17.6 Live manual-interaction validation (read-only; relaunch-and-screenshot methodology)
+
+Each step: physical action on the device, confirm via a fresh `read settings --interface 3`, then
+relaunch the real-mode GUI (`--screenshot`, fresh `connectUsb()`) and compare. No SET was sent at
+any point; Panic Mute was not triggered.
+
+| Action | Device (CLI-confirmed) | GUI response |
+|---|---|---|
+| Select a different channel (speaker -> mic) | byte 56: `03` -> `01` | **No visible change whatsoever** (screenshots pixel-identical) — confirms, empirically, the gap already found in code: byte 56 has zero bindings in `SettingsMessage`, `DeviceController::publish()`, or any `.qml` file |
+| Mic gain turned up | 28 dB -> 45 dB | Knob redrew to **45**, angle and level bar updated — exact match |
+| Instrument unmuted (no input attached, confirmed safe by the owner; speaker was unmuted at 0 dB at the time) | `mute` `1` -> `0` | MUTE button correctly un-highlighted, meter began showing activity — exact match |
+
+Every binding that exists in the GUI today works correctly and matches the real device exactly in
+all three cases. The one gap (channel-selection display) was identified by reading the code first,
+then confirmed empirically — not assumed, not fabricated. End state left as-is at the owner's
+request (mic 45 dB muted, instrument unmuted no-input, speaker unmuted 0 dB, headphone muted); the
+owner will re-mute manually rather than have this session restore it.
+
+Device disconnect/reconnect handling was not tested this session (not requested).
