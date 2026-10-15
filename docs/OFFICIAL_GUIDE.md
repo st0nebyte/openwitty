@@ -48,8 +48,23 @@ onboarding, factory reset.
   same + mic; dim; mono/stereo; toggle brightness settings.
 * Gain lock ("External gain lock") stops third-party apps (e.g. Teams) from
   changing gain (P: ExternalGainControl).
-* MUTE long-press = panic mute (hardware); hidden showcase mode via icon
-  sequence on the hardware (not reproduced).
+* **MUTE button ("Panic Mute"), verified 2026-10-16 against the official online guide**
+  (https://www.lewitt-audio.com/de/support/online-guides/connect2, German original quoted):
+  - Short press: "Drücke die MUTE Taste auf deinem CONNECT 2, um jeden ausgewählten Kanal
+    stummzuschalten oder die Stummschaltung aufzuheben" — toggles mute for the *currently selected*
+    channel only (matches our Phase 6B hardware findings for mic/instrument/speaker/headphone mute).
+  - Long press/hold: "Halte die MUTE-Taste auf deinem Hardware-UI gedrückt, um alle Input und Output
+    Kanäle zu muten" — mutes **all input and output channels simultaneously** ("Panic Mute").
+  - Recovery: "Um den MUTE-Status zu deaktivieren, müsst ihr die Stummschaltung jedes Kanals einzeln
+    aufheben" — **each channel must be unmuted individually**; the guide does not describe holding
+    MUTE again as a way to undo it, so that should not be assumed.
+  - LED: a muted channel, while a *different* channel is selected, "bleibt in der MUTE-Farbe (ab
+    Werk auf Rot eingestellt) schwach beleuchtet" — stays dimly lit in the configured mute colour
+    (factory red).
+  - This is manufacturer-documented behaviour, not yet confirmed against our physical unit — see
+    `docs/HARDWARE_TEST_RESULTS.md` for the hardware-verification status once tested.
+* Hidden showcase mode via icon sequence on the hardware (not reproduced) — separate from the above,
+  still unverified.
 * Firmware updates via Control Center; after an error power-cycle the device.
 
 ## Additional facts from reviews and software captures (2026-10)

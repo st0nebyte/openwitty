@@ -443,9 +443,20 @@ user's ears throughout, per their earlier confirmation in §10.)
 
 ### 12.7 Controls with no physical access on this unit — documented, not invented
 
-The user confirmed (2026-10-14/15): no long-press gesture exists on any front-panel button, and the
-following are CONTROL CENTER (software)/overlay-only on this CONNECT 2 unit, with no hardware path to
-test them:
+**Correction, 2026-10-16**: the line below originally read "no long-press gesture exists on any
+front-panel button" — that overstated what was actually asked and answered. The question at the time
+was specifically whether long-pressing the **mic/instrument select buttons** cycles preamp style, and
+whether any button/combo toggles **Mono or Clipguard**; the owner answered "no" to those specific
+questions. It did not rule out a hold gesture on a *different* button. It has since turned out the
+**MUTE button does have a documented hold gesture ("Panic Mute")** — this was already recorded in
+`docs/OFFICIAL_GUIDE.md` from earlier static analysis (phase 5-era), predating and independent of this
+correction, and has now been independently re-verified against the manufacturer's online guide (see
+`docs/OFFICIAL_GUIDE.md`). It was simply never in scope for the Phase 6B question above, not
+contradicted by it. Not yet tested against our physical unit — see the new experiment below.
+
+The owner confirmed (2026-10-14/15): no long-press gesture that **cycles a value** (preamp style,
+Mono, Clipguard) exists on the mic/instrument select buttons, and the following remain CONTROL CENTER
+(software)/overlay-only on this CONNECT 2 unit, with no hardware path to test them:
 
 * **Mono/stereo toggle** (`kMono`, offset 33)
 * **Clipguard** (offsets 4/14)
@@ -632,3 +643,118 @@ was sent to the real device for the rest of this session. Specifically:
 
 No phantom power, firmware, factory reset, streaming-mode, or arbitrary-trigger code was touched or
 enabled anywhere in this session.
+
+## 16. Panic Mute (MUTE button hold) — hardware-confirmed, 2026-10-16
+
+### 16.1 Background and a documentation correction
+
+The owner pointed out LEWITT's official online guide
+(https://www.lewitt-audio.com/de/support/online-guides/connect2) documents a MUTE-button hold
+gesture ("Panic Mute"). Independently re-fetched and verified (quotes in `docs/OFFICIAL_GUIDE.md`):
+short press toggles the selected channel; holding MUTE mutes all input and output channels
+simultaneously; recovery requires unmuting each channel individually (not a second hold); a muted
+channel stays dimly lit in its configured mute colour when a different channel is selected.
+
+This was already recorded in `docs/OFFICIAL_GUIDE.md` from phase-5-era static analysis, predating
+this project's hardware sessions entirely. What needed correcting was a Phase 6B line in this
+document (§12.7) that over-generalized a narrower answer ("no long-press gesture exists on any
+front-panel button") from a question that only asked about preamp/Mono/Clipguard cycling on the
+*select* buttons — not about MUTE. §12.7 above has been corrected in place to scope that claim
+properly; see it for the full correction note. No prior hardware finding was removed.
+
+### 16.2 Read-only hardware experiment (3 trials, no USB writes)
+
+All reads via `read settings|status --interface 3`. Card present and unchanged throughout.
+
+**Trial 1 (inconclusive by design of the starting state).** Baseline: mic, instrument, speaker,
+headphone all already muted (byte56=`04`, headphone selected). Owner held MUTE; reported the green
+volume LED flashing after about a second. `settings` read back **byte-for-byte identical** to
+baseline — uninformative on its own, since if Panic Mute writes `1` to already-`1` bytes there is
+nothing to see. `status` changed at offsets 3–4 and 12–13 (`00 9c` → `e4 9f` each) — not in
+PROTOCOL.md's documented meter map; flagged as an unidentified observation, not interpreted.
+
+**Trial 2 (clean, single-channel).** Instrument unmuted individually (byte 12 confirmed `0`, byte56
+→ `02`, everything else unchanged) as part of the documented individual-unmute recovery procedure.
+Owner held MUTE again ("panic mode triggered"). Diff against the just-confirmed unmuted state:
+
+```
+offset 12: 00 -> 01
+```
+
+Only byte 12 changed. `status` changed at the *identical* offsets/values as Trial 1 (3–4, 12–13,
+same `e4 9f`) — reproducible across two independent activations, which rules out ordinary metering
+noise as the explanation (independent noise would not land on the same bytes twice). Still not
+interpreted, but now a credible candidate for a real (if unidentified) Panic-Mute-related status
+signal.
+
+Comparing the full state after Trial 2 to the very first pre-experiment baseline (before Trial 1):
+only byte 56 differs (`04`→`02`, headphone→instrument selection — a UI-focus artifact of running the
+test, not a real setting). Every mute/gain/volume byte already matched exactly — Panic Mute's own
+re-muting of instrument had, as a side effect, restored the original state. No further recovery
+action was needed or taken (see §16.3).
+
+**Trial 3 (clean, all four channels, resolves the selection confound).** Owner unmuted all four
+channels individually first ("unmuted all 4 first") — confirmed via read: mic/instrument/speaker/
+headphone all `0`, speaker at 0.00 dB (ceiling), headphone at −22.63 dB, monitor source "both".
+Safety re-confirmed (speaker's own power switch off, per the owner's standing setup from Phase 6A).
+Owner held MUTE ("hold mute and triggered panic"). Diff:
+
+```
+offset 2:  00 -> 01   (kMute[0], microphone)
+offset 12: 00 -> 01   (kMute[1], instrument)
+offset 22: 00 -> 01   (kSpeakerMute)
+offset 29: 00 -> 01   (kHeadphoneMute)
+```
+
+**Exactly these four bytes changed, simultaneously, and nothing else** — not byte 19 (loopback
+mute), not byte 56 (channel-select, unchanged across all three trials), and no new/separate flag
+appeared anywhere in the 128-byte struct. Because the channel selected at the time (byte56
+unaffected, so whichever channel was selected) was not the only one muted, this directly rules out
+"mutes only the selected channel" — Panic Mute mutes all four regardless of selection, matching the
+manufacturer's documentation exactly. `status` again showed the identical offsets-3-4/12-13 shift —
+third independent reproduction.
+
+Post-Trial-3 state exactly matched the original pre-experiment baseline again (all four muted, same
+gain/volume values; only byte 56 differed, for the same UI-focus reason as before).
+
+### 16.3 Recovery
+
+Per the manufacturer's documented procedure (individual unmute, not a second hold — **not tested**,
+deliberately, per instruction not to assume a hold-to-undo mechanism exists): after Trial 2, the
+state already matched the original baseline, so no unmuting was performed — doing so would have
+*introduced* a change rather than recovered one. The same was true after Trial 3. Both times, the
+natural end state of the experiment coincided with the owner's own starting state; "preserve
+intentionally muted channels" was satisfied by not touching anything further, not by additional
+unmute actions.
+
+### 16.4 Answers to the investigation questions
+
+| Question | Answer |
+|---|---|
+| Exactly which bytes change? | **2, 12, 22, 29** — all four primary mute fields, confirmed via Trial 3 (clean) and consistent with Trial 2 (single-channel) |
+| Is loopback (19) affected? | **No** — confirmed unchanged in every trial |
+| Does byte 56 (channel-select) change? | **No** — confirmed unchanged in every trial, regardless of which channel was selected |
+| Does a separate/dedicated Panic Mute flag exist? | **No evidence of one** in the 128-byte settings struct — the mechanism reuses the standard per-channel mute bytes exactly; nothing else in `settings` moved across any trial |
+| How does recovery behave? | Consistent with the manufacturer's documentation: not independently re-tested (would require deliberately unmuting live channels with no new information to gain), but nothing in any trial suggested a second hold undoes it, and no code here assumes that |
+
+An unidentified but **reproducible** `status` signal (offsets 3–4, 12–13) accompanied Panic Mute in
+all three trials with identical values each time — flagged for future investigation, not interpreted.
+
+### 16.5 Software (mock/GUI only — no new hardware writes, no software trigger implemented)
+
+* `MockTransport::simulatePanicMute()` (new): sets exactly bytes 2/12/22/29, mirroring the confirmed
+  hardware mechanism exactly — not a new invented flag.
+* `DeviceWorker`/`DeviceController::simulatePanicMute()` (new, mock-only, no-op on real hardware):
+  lets GUI tests simulate the hardware gesture, picked up through the **existing** poll/merge path
+  (`refreshSettings()` → `mergeExternalChanges`) like any other device-side change — no new sync
+  logic was needed.
+  `values()["mute.allFour"]` (new): purely derived read-only display state (`true` iff all four
+  mute fields happen to be set, by Panic Mute or otherwise) — not a protocol concept, matches the
+  evidence that no dedicated flag exists. No software Panic Mute *trigger* was implemented, per
+  instruction.
+* 2 new core tests (`Session.PanicMuteSetsExactlyTheFourPrimaryMuteFields`,
+  `Session.PanicMutePreservesUnrelatedPendingEditViaExistingMerge`) and 1 new GUI test
+  (`GuiSync.PanicMuteUpdatesAllFourMuteFieldsAndPreservesPendingEdit`) — all confirm the exact byte
+  set, confirm loopback is untouched, and confirm an unrelated pending edit survives via the
+  existing merge algorithm. Full suite: 108/108 (106 + 2 core; the GUI test is counted within the
+  existing `gui_integration` entry), stable across 3 repeated full runs.

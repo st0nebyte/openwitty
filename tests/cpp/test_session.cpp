@@ -101,6 +101,57 @@ TEST(Mock, WriteOnlyAndSizeChecks) {
     EXPECT_EQ(m.write(MessageId::Version, v).error().code, Errc::NotSupported);
 }
 
+// Panic Mute (MUTE button hold), confirmed on real hardware 2026-10-16
+// (docs/HARDWARE_TEST_RESULTS.md): sets exactly the four primary mute bytes (2, 12, 22, 29)
+// simultaneously; loopback mute (19) and the channel-select byte (56) are confirmed untouched;
+// there is no separate dedicated flag. MockTransport::simulatePanicMute() mirrors this exactly.
+TEST(Session, PanicMuteSetsExactlyTheFourPrimaryMuteFields) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    // Start from a known, fully-unmuted state so the transition is unambiguous (mirrors the
+    // "clean" hardware trial, not the first, confounded one).
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) -> Status {
+                     if (auto r = s.setMute(0, false); !r) return r;
+                     if (auto r = s.setMute(1, false); !r) return r;
+                     if (auto r = s.setSpeakerMute(false); !r) return r;
+                     if (auto r = s.setHeadphoneMute(false); !r) return r;
+                     return s.setLoopbackMute(false);
+                 })
+                    .ok());
+    ASSERT_TRUE(f.session->commit().ok());
+    ASSERT_FALSE(f.session->settings()->mute(0));
+    ASSERT_FALSE(f.session->settings()->headphoneMute());
+
+    f.mock->simulatePanicMute();
+    ASSERT_TRUE(f.session->refreshSettings().ok());
+
+    EXPECT_TRUE(f.session->settings()->mute(0));
+    EXPECT_TRUE(f.session->settings()->mute(1));
+    EXPECT_TRUE(f.session->settings()->speakerMute());
+    EXPECT_TRUE(f.session->settings()->headphoneMute());
+    EXPECT_FALSE(f.session->settings()->loopbackMute())
+        << "loopback mute confirmed NOT affected by Panic Mute on real hardware";
+}
+
+// The existing device-wins merge must handle Panic Mute (4 fields changing at once, not just 1)
+// exactly like any other external change: fields Panic Mute touched are adopted from the device;
+// an unrelated pending user edit (gain) survives untouched.
+TEST(Session, PanicMutePreservesUnrelatedPendingEditViaExistingMerge) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setMute(0, false); }).ok());
+    ASSERT_TRUE(f.session->commit().ok());
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setGainDb(0, 55.0); }).ok());
+    ASSERT_TRUE(f.session->dirty());   // mic gain edit staged, not yet sent
+
+    f.mock->simulatePanicMute();   // "hardware button" changes mute fields while our edit is pending
+    ASSERT_TRUE(f.session->refreshSettings().ok());
+
+    ASSERT_TRUE(f.session->dirty());   // our gain edit must survive the merge
+    EXPECT_DOUBLE_EQ(f.session->effectiveSettings()->gainDb(0), 55.0);
+    EXPECT_TRUE(f.session->effectiveSettings()->mute(0));   // device's Panic Mute change adopted
+}
+
 // Real-hardware write policy: UsbTransport refuses writes by default and does
 // not need a device to do so.
 TEST(UsbTransport, WritesRefusedByDefault) {
