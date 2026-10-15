@@ -3,6 +3,7 @@
 #pragma once
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "core/Policy.hpp"
 #include "core/WriteVerification.hpp"
@@ -22,6 +23,12 @@ struct WritePolicy {
     // Real-hardware writes need this AND a transport that allows writes.
     // Simulated transports are always writable.
     bool allowHardwareWrites{false};
+    // Phase 6E: on real (non-simulated) hardware a settings write may only change bytes whose
+    // offsets are listed here, in addition to every other guard. Empty (the default) means "no
+    // settings offset is authorized on hardware": allowHardwareWrites alone is not enough. Each
+    // experiment names exactly the offsets it was approved for (LED brightness: {37};
+    // instrument mute: {12}). Simulated transports ignore this list.
+    std::vector<std::size_t> hardwareWriteOffsets;
 };
 // What the handshake established about the device.
 struct DeviceCapabilities {

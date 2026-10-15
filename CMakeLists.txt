@@ -81,6 +81,7 @@ if(LEWITT_BUILD_TESTS)
     enable_testing()
     find_package(GTest REQUIRED)
     add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp tests/cpp/test_hardening.cpp tests/cpp/test_write_verification.cpp)
+    target_sources(lewitt_tests PRIVATE tests/cpp/test_hardware_scope.cpp)   # Phase 6E
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)
@@ -105,6 +106,12 @@ if(LEWITT_BUILD_TESTS AND LEWITT_BUILD_GUI AND EXISTS ${CMAKE_SOURCE_DIR}/.venv/
              COMMAND ${CMAKE_SOURCE_DIR}/.venv/bin/python ${CMAKE_SOURCE_DIR}/tools/visual/check_geometry.py
                      $<TARGET_FILE:openwitty>)
     set_tests_properties(visual_geometry PROPERTIES ENVIRONMENT "QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH}")
+endif()
+
+# CLI write scope (mock only): exactly two single-field write commands, each separately gated.
+if(LEWITT_BUILD_TESTS AND UNIX AND LEWITT_ENABLE_USB)
+    add_test(NAME cli_write_scope
+             COMMAND ${CMAKE_SOURCE_DIR}/tests/cli/test_cli_write_scope.sh $<TARGET_FILE:openwitty-cli>)
 endif()
 
 # Static guard over every source location that can reach USB hardware.

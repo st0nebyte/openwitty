@@ -41,6 +41,12 @@ struct PollPolicy {
     // Injectable for tests (default: a real sleep). Tests pass a no-op or counting stub so
     // convergence-state-machine behaviour can be exercised without wall-clock delay.
     std::function<void(std::chrono::milliseconds)> sleeper;
+    // Settings SETs carry the whole 128-byte struct and are NOT atomic relative to physical
+    // actions on the device (a hardware button press between our last read and the SET would be
+    // silently reverted for every byte we resend). When true, commitAndVerify() reads the settings
+    // twice back-to-back before writing and refuses to send anything if the two snapshots differ.
+    // This narrows the race window; it cannot close it. Off by default (adds one read).
+    bool requireStableSnapshot{false};
 };
 
 struct WriteResult {

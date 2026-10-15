@@ -46,6 +46,15 @@ if ! grep -q 'LEWITT_ALLOW_HARDWARE_WRITE' src/cli/main.cpp; then
 else
     echo "ok   write command gated by LEWITT_ALLOW_HARDWARE_WRITE"
 fi
+# Phase 6E: the CLI may carry exactly two single-field write specs (LED brightness, instrument
+# mute); each real-hardware execution is scoped by DeviceSession::hardwareWriteOffsets to its own
+# byte, and instrument-mute needs its own authorization variable.
+nspec=$(grep -cE '^\s*\{"[a-z-]+", settings_off::' src/cli/main.cpp)
+if [ "$nspec" -ne 2 ]; then echo "FAIL expected exactly 2 CLI write field specs, found $nspec"; fail=1; else echo "ok   exactly 2 CLI write field specs"; fi
+grep -q 'LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE' src/cli/main.cpp && echo "ok   instrument-mute has its own authorization variable" || { echo "FAIL instrument-mute lacks its own authorization"; fail=1; }
+grep -q 'pol.hardwareWriteOffsets = {f.offset}' src/cli/main.cpp && echo "ok   CLI scopes hardware writes to the field offset" || { echo "FAIL CLI does not scope hardwareWriteOffsets"; fail=1; }
+# the GUI must never enable hardware writes or authorize offsets
+if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src/gui/*.cpp src/gui/*.hpp >/dev/null; then echo "FAIL GUI references hardware write policy"; fail=1; else echo "ok   GUI never enables hardware writes"; fi
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

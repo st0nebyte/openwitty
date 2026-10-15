@@ -8,11 +8,13 @@
 //   probe [--execute]       dry-run (default) or run a small matrix of GET-only experiments
 //   list                    quick libusb enumeration (VID/PID only)
 //   write led-brightness <0-100> [--execute] [--interface N] [--mock]
-//                           EXPERIMENTAL, gated real write (settings byte 37 only; see
-//                           cmdWriteLedBrightness below for the full safety rationale). Without
+//   write instrument-mute <on|off> [--execute] [--interface N] [--mock]
+//                           EXPERIMENTAL, gated single-field writes (settings byte 37 / byte 12
+//                           only; see cmdWriteField below for the full safety rationale). Without
 //                           --execute this only computes and prints a dry-run proposal; no USB
 //                           write is ever sent. With --execute against real hardware it additionally
-//                           requires LEWITT_ALLOW_HARDWARE_WRITE=1. There is no other write command,
+//                           requires LEWITT_ALLOW_HARDWARE_WRITE=1, and instrument-mute also
+//                           LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE=1. There is no other write command,
 //                           no generic field/byte setter, and no trigger-message write here.
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
@@ -226,17 +228,50 @@ int cmdRead(const ReadArgs& a) {
 //   - No detach, no claim beyond what UsbTransport's InterfaceRecipient path already does for reads
 //     (none), no reset, no mode switch, no trigger words, no DFU.
 #ifdef LEWITT_HAVE_USB
-struct WriteLedArgs {
-    int percent{-1};
+// ---- single-field experimental writes ------------------------------------------------------
+// Two fields exist, each approved separately (see docs/HARDWARE_TEST_RESULTS.md):
+//   led-brightness <0-100>   settings byte 37   (executed on hardware 2026-10-14, Phase 6C)
+//   instrument-mute <on|off> settings byte 12   (Phase 6E: PREPARED, never executed on hardware)
+// Both share one implementation so the safety rules cannot drift apart:
+//   * the session's hardwareWriteOffsets contains exactly that field's offset (core-level, not
+//     only here), so even a bug in this file cannot write any other byte on real hardware;
+//   * the byte diff proposed vs. the fresh device snapshot must be exactly {offset}, checked here
+//     again independently of WriteGuard;
+//   * real hardware + --execute additionally needs LEWITT_ALLOW_HARDWARE_WRITE=1 *and* the
+//     per-field variable named in FieldSpec::authEnv (an authorization is never inherited from
+//     another field's experiment);
+//   * commitAndVerify(): fresh snapshot + stability check immediately before the SET, exactly one
+//     SET (never retried), bounded read-only polling afterwards, anything unexpected is reported
+//     as ambiguous rather than "fixed";
+//   * interface 3 only by default; no detach/claim/reset/mode-switch/trigger/DFU anywhere.
+// Not atomic: the 128-byte SET can race physical actions on the device (e.g. a Panic Mute
+// long-press). The stability check narrows but cannot close that window; see HARDWARE_TEST_RESULTS.
+struct FieldSpec {
+    const char* name;            // CLI sub-command
+    std::size_t offset;          // the one settings byte this command may change
+    const char* authEnv;         // extra per-field authorization for real hardware, or nullptr
+};
+
+struct WriteArgs {
+    int value{-1};               // percent for led-brightness, 0/1 for instrument-mute
     bool execute{false};
-    int interfaceNumber{3};   // the only hardware-confirmed working interface for this device
+    int interfaceNumber{3};      // the only hardware-confirmed working interface for this device
     bool mock{false};
     bool bad{false};
 };
 
-WriteLedArgs parseWriteLed(int argc, char** argv, int first) {
-    WriteLedArgs a;
-    if (first < argc) a.percent = std::atoi(argv[first]);
+WriteArgs parseWrite(int argc, char** argv, int first, const std::string& field) {
+    WriteArgs a;
+    if (first < argc) {
+        std::string v = argv[first];
+        if (field == "instrument-mute") {
+            if (v == "on" || v == "1") a.value = 1;
+            else if (v == "off" || v == "0") a.value = 0;
+            else { std::fprintf(stderr, "instrument-mute takes on|off\n"); a.bad = true; }
+        } else {
+            a.value = std::atoi(argv[first]);
+        }
+    }
     for (int i = first + 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--execute")) a.execute = true;
         else if (!std::strcmp(argv[i], "--mock")) a.mock = true;
@@ -254,16 +289,26 @@ const char* modeName(DeviceMode m) {
     }
 }
 
-int cmdWriteLedBrightness(const WriteLedArgs& a) {
-    if (a.percent < 0 || a.percent > 100) {
-        std::fprintf(stderr, "led-brightness must be 0..100\n");
+int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
+    const bool isMute = f.offset == settings_off::kMute[1];
+    if (isMute ? (a.value < 0 || a.value > 1) : (a.value < 0 || a.value > 100)) {
+        std::fprintf(stderr, "%s: value out of range\n", f.name);
         return 64;
     }
-    if (a.execute && !a.mock && !std::getenv("LEWITT_ALLOW_HARDWARE_WRITE")) {
-        std::fprintf(stderr,
-                     "refused: --execute against real hardware needs LEWITT_ALLOW_HARDWARE_WRITE=1 "
-                     "(this sends a real MEM SET to the device; without it, nothing is written)\n");
-        return 2;
+    if (a.execute && !a.mock) {
+        if (!std::getenv("LEWITT_ALLOW_HARDWARE_WRITE")) {
+            std::fprintf(stderr,
+                         "refused: --execute against real hardware needs LEWITT_ALLOW_HARDWARE_WRITE=1 "
+                         "(this sends a real MEM SET to the device; without it, nothing is written)\n");
+            return 2;
+        }
+        if (f.authEnv && !std::getenv(f.authEnv)) {
+            std::fprintf(stderr,
+                         "refused: writing '%s' on real hardware additionally needs %s=1. That "
+                         "authorization is specific to this field and must be given explicitly for "
+                         "each experiment.\n", f.name, f.authEnv);
+            return 2;
+        }
     }
     std::unique_ptr<IDeviceTransport> t;
     WritePolicy pol;
@@ -281,56 +326,69 @@ int cmdWriteLedBrightness(const WriteLedArgs& a) {
         o.allowWrites = a.execute;   // transport-level: no write ioctl is even attempted on a dry run
         t = std::make_unique<UsbTransport>(o);
     }
-    pol.allowHardwareWrites = a.execute;   // session-level gate; irrelevant for mock (always writable)
+    pol.allowHardwareWrites = a.execute;           // session-level gate; irrelevant for mock
+    pol.hardwareWriteOffsets = {f.offset};         // core-level scope: exactly this one byte
     DeviceSession session(std::move(t), pol);
+    // connect(): opens, checks API major == 1 and a recognized CONNECT 2 APP-mode PID, reads settings.
     if (auto s = session.connect(); !s) { printError(s.error(), "connect"); return exitCodeFor(s.error().code); }
     std::printf("device: pid=0x%04x mode=%s api=%u.%u%s\n", session.info().pid, modeName(session.capabilities().mode),
                 session.capabilities().apiMajor, session.capabilities().apiMinor,
                 session.isSimulated() ? "  [SIMULATED]" : "");
+    if (!session.isSimulated() && session.capabilities().mode != DeviceMode::Normal) {
+        std::fprintf(stderr, "abort: the write experiments are only approved for APP mode PID 0x0004\n");
+        return 8;
+    }
+    // Fresh snapshot immediately before the payload is prepared (connect() read one earlier).
+    if (auto s = session.refreshSettings(); !s) { printError(s.error(), "refresh"); return exitCodeFor(s.error().code); }
     if (!session.settings()) { std::fprintf(stderr, "no settings available after connect\n"); return 1; }
     SettingsMessage before = *session.settings();
-    int beforeBrightness = before.ledBrightness();
-    if (auto s = session.edit([&a](SettingsMessage& m) { return m.setLedBrightness(a.percent); }); !s) {
-        printError(s.error(), "edit");
-        return exitCodeFor(s.error().code);
-    }
+    auto editFn = [&](SettingsMessage& m) -> Status {
+        return isMute ? m.setMute(1, a.value != 0) : m.setLedBrightness(a.value);
+    };
+    if (auto s = session.edit(editFn); !s) { printError(s.error(), "edit"); return exitCodeFor(s.error().code); }
     SettingsMessage proposed = *session.pendingSettings();
     auto bb = before.bytes();
     auto pb = proposed.bytes();
     std::vector<std::size_t> diffs;
     for (std::size_t i = 0; i < bb.size(); ++i)
         if (bb[i] != pb[i]) diffs.push_back(i);
+    std::printf("field: %s (settings byte %zu)\n", f.name, f.offset);
     std::printf("request (if sent): bm=0x21 req=0x03 wValue=0x%04x wIndex=0x%04x wLength=0x%02zx timeout=500ms\n",
                 wValueFor(MessageId::Settings), wIndexFor(static_cast<std::uint8_t>(a.interfaceNumber)), bb.size());
-    std::printf("original LED brightness: %d\n", beforeBrightness);
-    std::printf("proposed LED brightness: %d\n", a.percent);
+    std::printf("original byte %zu: 0x%02x\nproposed byte %zu: 0x%02x\n", f.offset, bb[f.offset], f.offset, pb[f.offset]);
     std::printf("changed byte offsets: ");
     for (auto i : diffs) std::printf("%zu ", i);
     std::puts(diffs.empty() ? "(none; already at this value)" : "");
-    std::printf("byte 37: original=0x%02x proposed=0x%02x\n", bb[37], pb[37]);
     std::printf("original raw="); hex(bb);
     std::printf("proposed raw="); hex(pb);
-    // Independent, stricter-than-WriteGuard safety check: refuse to even attempt the write unless
-    // the diff is exactly the one byte we intend to change.
-    if (!diffs.empty() && (diffs.size() != 1 || diffs[0] != 37)) {
-        std::fprintf(stderr, "abort: unexpected byte diff shape (expected only offset 37); refusing to write\n");
+    if (!diffs.empty() && (diffs.size() != 1 || diffs[0] != f.offset)) {
+        std::fprintf(stderr, "abort: unexpected byte diff shape (expected only offset %zu); refusing to write\n", f.offset);
         return 1;
     }
     if (!a.execute) {
-        std::puts("dry run only; no USB write was sent. Pass --execute (and, on real hardware, set "
-                  "LEWITT_ALLOW_HARDWARE_WRITE=1) to actually send this write.");
+        std::puts("dry run only; no USB write was sent. Pass --execute (and, on real hardware, the "
+                  "authorization variables named in the refusal message) to send this write.");
         return 0;
     }
     if (diffs.empty()) {
         std::puts("nothing to write: proposed value equals the current device value");
         return 0;
     }
-    if (auto s = session.commit(); !s) { printError(s.error(), "commit"); return exitCodeFor(s.error().code); }
-    if (!session.settings()) { std::fprintf(stderr, "commit succeeded but post-write read is missing\n"); return 1; }
-    const SettingsMessage& after = *session.settings();
-    std::printf("post-write read-back LED brightness: %d\n", after.ledBrightness());
-    std::printf("post-write raw="); hex(after.bytes());
-    return 0;
+    PollPolicy pp;
+    pp.requireStableSnapshot = true;
+    WriteResult r = session.commitAndVerify(pp);
+    std::printf("write state: %s (convergence polls: %d)\n", writeStateName(r.state), r.pollAttempts);
+    if (!r.unexpectedOffsets.empty()) {
+        std::printf("unexpected offsets changed: ");
+        for (auto i : r.unexpectedOffsets) std::printf("%zu ", i);
+        std::puts("");
+    }
+    if (r.state == WriteState::Failed) { printError(r.error, "write-verify"); return exitCodeFor(r.error.code); }
+    if (session.settings()) {
+        std::printf("post-write byte %zu: 0x%02x\n", f.offset, session.settings()->bytes()[f.offset]);
+        std::printf("post-write raw="); hex(session.settings()->bytes());
+    }
+    return r.state == WriteState::Verified ? 0 : 10;   // 10: sent but not confirmed (timed out / ambiguous)
 }
 #endif  // LEWITT_HAVE_USB
 
@@ -420,6 +478,7 @@ int main(int argc, char** argv) {
                      "                  read <api|version|status|settings> [--method interface|device-recipient|detach]\n"
                      "                       [--request uac2|uac1] [--interface N] [--mock]\n"
                      "                  write led-brightness <0-100> [--execute] [--interface N] [--mock]\n"
+                     "                  write instrument-mute <on|off> [--execute] [--interface N] [--mock]\n"
                      "this tool is read-only by default. --method detach is disruptive and needs\n"
                      "LEWITT_ALLOW_DISRUPTIVE=1. 'write led-brightness' is the ONE narrowly-scoped experimental\n"
                      "write command (nothing else can be written); without --execute it only prints a dry-run\n"
@@ -452,13 +511,21 @@ int main(int argc, char** argv) {
     }
 #ifdef LEWITT_HAVE_USB
     if (cmd == "write") {
-        if (argc < 3 || std::string(argv[2]) != "led-brightness") {
-            std::fprintf(stderr, "write what? only 'led-brightness <0-100>' is implemented\n");
+        static const FieldSpec kFields[] = {
+            {"led-brightness", settings_off::kLedBrightness, nullptr},
+            {"instrument-mute", settings_off::kMute[1], "LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE"},
+        };
+        const FieldSpec* spec = nullptr;
+        if (argc >= 3)
+            for (const auto& f : kFields)
+                if (std::string(argv[2]) == f.name) spec = &f;
+        if (!spec) {
+            std::fprintf(stderr, "write what? only 'led-brightness <0-100>' and 'instrument-mute <on|off>' exist\n");
             return 64;
         }
-        auto a = parseWriteLed(argc, argv, 3);
-        if (a.bad || a.percent < 0) return 64;
-        return cmdWriteLedBrightness(a);
+        auto a = parseWrite(argc, argv, 3, spec->name);
+        if (a.bad || a.value < 0) return 64;
+        return cmdWriteField(*spec, a);
     }
 #endif
     std::fprintf(stderr, "unknown command %s\n", cmd.c_str());

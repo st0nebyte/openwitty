@@ -185,6 +185,16 @@ Status DeviceSession::commit() {
                                                                                  policy_.allowPersistentChanges}); !g)
         return g;
     if (auto g = verifyOnlyKnownFieldsChanged(*current_, *pending_); !g) return g;
+    // Real hardware: only offsets explicitly authorized for this experiment may differ.
+    if (!transport_->isSimulated()) {
+        for (std::size_t off : diffOffsets(*current_, *pending_)) {
+            if (std::find(policy_.hardwareWriteOffsets.begin(), policy_.hardwareWriteOffsets.end(), off) ==
+                policy_.hardwareWriteOffsets.end())
+                return makeError(Errc::WritesDisabled,
+                                 "settings byte " + std::to_string(off) +
+                                     " is not authorized for hardware writes in this build/session");
+        }
+    }
     if (auto s = transport_->write(MessageId::Settings, bytes); !s) { auto st = fail(s.error()); noteResult(st); return st; }
     failures_ = 0;
     return refreshSettings();
@@ -208,6 +218,19 @@ WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
         r.state = WriteState::Failed;
         r.error = makeError(Errc::InvalidArgument, "no device settings read yet; refusing to write");
         return r;
+    }
+    if (pp.requireStableSnapshot) {
+        // Two consecutive reads must agree; otherwise the device is changing under us (physical
+        // control, other software) and a full-struct SET could revert that change. Nothing is sent.
+        const SettingsMessage first = *current_;
+        if (auto rs = refreshSettings(); !rs) { r.state = WriteState::Failed; r.error = rs.error(); return r; }
+        if (!current_ || !(first == *current_)) {
+            r.state = WriteState::Failed;
+            r.error = makeError(Errc::Io, "device settings changed while preparing the write; "
+                                            "nothing was sent - retry when the device is idle");
+            return r;
+        }
+        if (!pending_) { r.state = WriteState::Verified; return r; }
     }
     const SettingsMessage before = *current_;
     const SettingsMessage target = *pending_;
