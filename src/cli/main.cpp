@@ -19,6 +19,9 @@
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
 //           LEWITT_ALLOW_DISRUPTIVE=1 as well).  Requests: uac2 (default) | uac1.
+// --interface auto selects the control interface from the descriptors exactly like the GUI does
+// (unbound vendor-specific ff/f0, never DFU, fails closed). An explicit N pointing at a DFU
+// (class 0xFE) interface is refused by the transport.
 // --interface N overrides which interface number goes in wIndex (default: auto-discover the
 // AudioControl interface). Hardware session 2026-10-14 found the AudioControl interface (0) fails
 // with an IO error while the kernel driver owns it; an unbound vendor-specific interface (3 on the
@@ -126,7 +129,8 @@ struct ReadArgs {
     bool mock{false};
     AccessMethod method{AccessMethod::InterfaceRecipient};
     MemRequest request{MemRequest::Uac2Mem};
-    int interfaceNumber{-1};   // -1 = auto-discover AudioControl interface (default, unchanged)
+    int interfaceNumber{-1};   // -1 = legacy AudioControl discovery (default, unchanged)
+    bool autoInterface{false}; // --interface auto: descriptor-driven vendor control interface, fails closed
     bool bad{false};
 };
 
@@ -147,7 +151,9 @@ ReadArgs parseRead(int argc, char** argv, int first) {
             else if (r == "uac2") a.request = MemRequest::Uac2Mem;
             else { std::fprintf(stderr, "unknown --request %s\n", r.c_str()); a.bad = true; }
         } else if (!std::strcmp(argv[i], "--interface") && i + 1 < argc) {
-            a.interfaceNumber = std::atoi(argv[++i]);
+            std::string v = argv[++i];
+            if (v == "auto") a.autoInterface = true;      // descriptor-driven, fails closed
+            else a.interfaceNumber = std::atoi(v.c_str());
         } else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); a.bad = true; }
     }
     return a;
@@ -177,6 +183,7 @@ int cmdRead(const ReadArgs& a) {
         o.request = a.request;
         o.method = a.method;
         o.interfaceNumber = a.interfaceNumber;
+        if (a.autoInterface) o.interfaceStrategy = InterfaceStrategy::VendorControlAuto;
         o.allowDisruptive = std::getenv("LEWITT_ALLOW_DISRUPTIVE") != nullptr;   // checked above too
         t = std::make_unique<UsbTransport>(o);
     }
@@ -476,7 +483,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "usage: openwitty-cli devices | diagnose | list | probe [--execute] |\n"
                      "                  read <api|version|status|settings> [--method interface|device-recipient|detach]\n"
-                     "                       [--request uac2|uac1] [--interface N] [--mock]\n"
+                     "                       [--request uac2|uac1] [--interface N|auto] [--mock]\n"
                      "                  write led-brightness <0-100> [--execute] [--interface N] [--mock]\n"
                      "                  write instrument-mute <on|off> [--execute] [--interface N] [--mock]\n"
                      "this tool is read-only by default. --method detach is disruptive and needs\n"

@@ -57,6 +57,7 @@ add_library(lewitt_core STATIC
     src/transport/MockTransport.cpp
     ${LEWITT_USB_SOURCES}
     src/transport/UsbErrors.cpp
+    src/transport/InterfaceSelection.cpp
     src/transport/UsbDiagnostics.cpp
     src/transport/SerializedTransport.cpp
     src/protocol/WriteGuard.cpp
@@ -82,6 +83,7 @@ if(LEWITT_BUILD_TESTS)
     find_package(GTest REQUIRED)
     add_executable(lewitt_tests tests/cpp/test_protocol.cpp tests/cpp/test_session.cpp tests/cpp/test_outputs.cpp tests/cpp/test_recovered.cpp tests/cpp/test_hardening.cpp tests/cpp/test_write_verification.cpp)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_hardware_scope.cpp)   # Phase 6E
+    target_sources(lewitt_tests PRIVATE tests/cpp/test_interface_selection.cpp tests/cpp/test_retry_policy.cpp)   # Phase 7A
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)

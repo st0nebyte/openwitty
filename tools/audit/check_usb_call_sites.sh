@@ -55,6 +55,11 @@ grep -q 'LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE' src/cli/main.cpp && echo "ok   inst
 grep -q 'pol.hardwareWriteOffsets = {f.offset}' src/cli/main.cpp && echo "ok   CLI scopes hardware writes to the field offset" || { echo "FAIL CLI does not scope hardwareWriteOffsets"; fail=1; }
 # the GUI must never enable hardware writes or authorize offsets
 if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src/gui/*.cpp src/gui/*.hpp >/dev/null; then echo "FAIL GUI references hardware write policy"; fail=1; else echo "ok   GUI never enables hardware writes"; fi
+# Phase 7A: the GUI may build a UsbTransport only from the fixed read-only option set, and the
+# control interface may never be a hard-coded number or a DFU (class 0xFE) interface.
+if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -v 'readOnlyHardwareOptions()' >/dev/null; then echo "FAIL GUI constructs a UsbTransport without readOnlyHardwareOptions()"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() only"; fi
+if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
+grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

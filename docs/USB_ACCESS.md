@@ -146,3 +146,24 @@ stack in `WriteGuard.cpp`/`DeviceSession.cpp`, which refuses factory reset and m
   already in the kernel completes within its timeout (libusb sync transfers cannot be
   interrupted — documented limit).
 * Discovery and diagnostics use sysfs only.
+
+## 3d. Phase 7A: descriptor-driven control-interface selection (not yet run on hardware)
+
+The GUI previously opened the first class 01/01 interface (interface 0), which fails with EIO on a
+real CONNECT 2 (§3b). `selectControlInterface()` (`src/transport/InterfaceSelection.cpp`) now
+chooses the control interface from the descriptors, as a pure function:
+
+1. VID/PID must be 29c2:0004 or 29c2:0002 (0x000A is named as a probable bootloader and refused).
+2. Candidates are altsetting-0 interfaces with class `0xFF`, subclass `0xF0`, **no endpoints** —
+   the signature recorded on the real unit (`ff/f0/00`). A generic vendor-specific interface is
+   not assumed safe.
+3. Class `0x01` (audio) and class `0xFE` (DFU) are always rejected.
+4. Exactly one candidate must remain (zero → `NotFound` with the list of interfaces and reasons;
+   several → refuses to guess).
+5. The candidate must be *known* to be unbound (`libusb_kernel_driver_active == 0`, a read-only
+   query); bound or unknown → `Busy`. No detach, no claim, no reset.
+
+An explicit `--interface N` (CLI experiments) is still honoured, except that an interface whose
+descriptor class is `0xFE` is refused. `openwitty-cli read … --interface auto` runs the same
+selection as the GUI, so the selection can be checked read-only on the next hardware session.
+Interface numbers are never assumed (3 is what the descriptors yield on the tested unit).

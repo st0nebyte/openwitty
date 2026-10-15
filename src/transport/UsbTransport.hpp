@@ -27,9 +27,17 @@ enum class AccessMethod {
     DetachAndClaim,       // DISRUPTIVE: detaches snd-usb-audio (sound card disappears), claims, reattaches.
 };
 
+// How the interface number for wIndex is chosen when no explicit number is given.
+enum class InterfaceStrategy {
+    AudioControl,        // legacy: first class 01/01 interface (kernel-owned; EIO on a real CONNECT 2)
+    VendorControlAuto,   // descriptor-driven: the unbound vendor-specific ff/f0 control interface
+                         // (see InterfaceSelection.hpp); fails closed, never DFU, never kernel-bound
+};
+
 struct UsbOptions {
     MemRequest request{MemRequest::Uac2Mem};
     AccessMethod method{AccessMethod::InterfaceRecipient};
+    InterfaceStrategy interfaceStrategy{InterfaceStrategy::AudioControl};
     std::uint16_t pid{0};            // 0 = first matching Connect 2 PID
     int interfaceNumber{-1};         // -1 = discover AudioControl interface
     // Legacy alias for method == DetachAndClaim.
@@ -41,6 +49,20 @@ struct UsbOptions {
     // Only an explicit, user-confirmed action (CLI: LEWITT_ALLOW_DISRUPTIVE=1) may set it.
     bool allowDisruptive{false};
 };
+
+// The one configuration the GUI is allowed to use on real hardware: reads only, interface chosen
+// from the descriptors, no detach/claim, no disruptive path. Kept as a function so tests can pin it.
+inline UsbOptions readOnlyHardwareOptions() {
+    UsbOptions o;
+    o.request = MemRequest::Uac2Mem;
+    o.method = AccessMethod::InterfaceRecipient;
+    o.interfaceStrategy = InterfaceStrategy::VendorControlAuto;
+    o.interfaceNumber = -1;
+    o.allowDetachKernelDriver = false;
+    o.allowWrites = false;
+    o.allowDisruptive = false;
+    return o;
+}
 
 // libusb transport. Default behaviour issues control transfers WITHOUT
 // claiming or detaching anything: if the kernel driver owns the interface

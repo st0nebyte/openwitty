@@ -64,3 +64,13 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 41 | Touch-surface channel selection (LED-ring focus state) | front-panel LEDs (hardware), not yet surfaced in GUI | settings byte 56 (new; not in `settings_off`) | not implemented in OpenWitty | the 4 channel-select values are confirmed; mute/custom/mix/autogain button states unobserved (those are action-trigger buttons, not pure selectors, so may not populate this byte the same way — untested to avoid side effects) | **yes** — all 4 values confirmed 2026-10-14: `0x01` mic, `0x02` instrument, `0x03` speaker, `0x04` headphone, each via a select-only press with zero value change; see `docs/HARDWARE_TEST_RESULTS.md` §§10.5, 12 and PROTOCOL.md |
 | 42 | Write-state verification (`commitAndVerify`): distinguishes transfer-ok from device-confirmed | n/a (backend + GUI status label) | `core/WriteVerification.hpp`; bounded read-only polling, never retries the SET | core (11 new tests, all mock); GUI wired for `setValue`/`retryPending` | not yet exercised against any field but LED brightness on real hardware | n/a — this is infrastructure, not a device setting; see PROTOCOL.md's progressive-control-policy table for per-field status |
 | 43 | GUI status label distinguishing Disconnected / Connecting / Hardware error / Mock mode / Connected read-only / Connected with authorized controls / Pending verification | header / status area (`values()["ui.status"]`, not yet bound in QML) | derived from existing `ConnectionState`/`isSimulated`/`writesEnabled` plus the new `verifying_` flag | GUI backend done, QML binding not added this session | "Pending verification" is tracked but not externally observable mid-flight with the current synchronous `commitAndVerify()` call (see code comment on `DeviceWorker::retryPending`) | n/a |
+
+## Phase 7A additions (mock/unit-tested; not hardware-verified)
+
+* GUI connects to a real CONNECT 2 read-only through the descriptor-selected vendor control
+  interface (`InterfaceSelection`), no detach/claim/write; **never opened on real hardware yet**.
+* Distinct connection presentation: disconnected, simulated, real read-only, connecting,
+  communication error, connection lost; transport errors with next-step hints are visible.
+* Sample rate shown as "Unknown" unless simulated; persistent open errors are not retried until
+  the device list or permissions change.
+* `openwitty-cli read … --interface auto` (same selection as the GUI).

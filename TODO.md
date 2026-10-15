@@ -80,7 +80,7 @@
 - Owner decision: remove `build-asan/`/`build-tsan/` from history (commits eb2956b..91fdefd);
   see docs/AUDIT_PHASE5E.md section 6. Not done without approval.
 - Run namcap and `makepkg -s` on Arch/CachyOS; clang-tidy/cppcheck when obtainable rootless.
-- USB mode: stop retrying after EACCES/EBUSY until the device list changes.
+- ~~USB mode: stop retrying after EACCES/EBUSY until the device list changes.~~ (Phase 7A, unit-tested)
 - Re-examine autogain completion inference before any write test.
 - Auto-select UAC1/UAC2 request variant from bcdDevice once known.
 - Licence: MIT (repository LICENSE, by the owner). Review third-party notes in docs/THIRD_PARTY.md.
@@ -92,3 +92,11 @@
 - Install the udev rule manually only after review (docs/USB_PERMISSIONS.md).
 - AppImage/Flatpak: deferred (see docs/PACKAGING.md).
 - Add `developer`/screenshots to metainfo once a licence and hosting exist.
+
+## Phase 7B (after the Panic Mute commits are integrated)
+
+- `SettingsMessage::selectedChannel()` + `selected.channel` + strip highlight (byte 56 is hardware-confirmed).
+- Evidence badges for unverified fields in QML; `ReplayTransport` with serial-redacted real fixtures.
+- Settings poll rate on USB (≥ 2 Hz) and a `mute.allFour`-aware Panic Mute indicator.
+- Hardware session: GUI read-only against the real unit (`--interface auto` first), compare with CLI.
+- Re-run packaging checks (`packaging_staging`) — unchanged by 7A but not re-verified on `.deb`.

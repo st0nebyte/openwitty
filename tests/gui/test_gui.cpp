@@ -366,3 +366,47 @@ TEST(GuiAudit, EveryQmlWritableKeyIsAcceptedByTheBackend) {
     EXPECT_TRUE(waitFor([&] { return c.values()["in1.preamp"].toInt() == 1 && c.values()["set.customButton"].toInt() == 8; }));
     EXPECT_EQ(errors.count(), 0) << "backend rejected a key the UI sends: " << c.lastError().toStdString();
 }
+
+// ---- Phase 7A: connection presentation state ------------------------------------------------
+TEST(GuiState, SimulatedDeviceIsLabelledSimulated) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "simulated"; }));
+    EXPECT_TRUE(c.values().value("ui.device").toString().contains("Simulated"));
+    EXPECT_TRUE(c.values().contains("sampleRate"));     // only the simulator has a (fake) rate
+}
+
+TEST(GuiState, UnplugIsConnectionLostNotDisconnected) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "simulated"; }));
+    c.simulateUnplug();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "connection-lost"; }, 5000));
+    EXPECT_FALSE(c.values().contains("ui.device"));
+    EXPECT_FALSE(c.values().value("ui.error").toString().isEmpty());   // visible reason
+}
+
+TEST(GuiState, ExplicitDisconnectIsPlainDisconnected) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "simulated"; }));
+    c.disconnectDevice();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "disconnected"; }));
+    EXPECT_FALSE(c.values().contains("sampleRate"));
+}
+
+TEST(GuiState, UsbModeNeverClaimsSimulationOrWritability) {
+    app();
+    DeviceController c;
+    c.connectUsb();
+    c.flush();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("ui.state"); }));
+    const QString st = c.values().value("ui.state").toString();
+    EXPECT_NE(st, "simulated");
+    EXPECT_NE(st, "real-writable");
+    EXPECT_FALSE(c.writable());
+    EXPECT_FALSE(c.values().contains("sampleRate")) << "no fabricated sample rate on a non-simulated session";
+}

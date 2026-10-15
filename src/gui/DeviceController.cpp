@@ -7,6 +7,8 @@
 #include "core/Policy.hpp"
 #include <algorithm>
 
+#include "core/RetryPolicy.hpp"
+#include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 
 using namespace lewitt;
@@ -73,6 +75,10 @@ void DeviceWorker::cancelAll() {
 }
 
 void DeviceWorker::connectMock() {
+    intentionalDisconnect_ = true;
+    lostLink_ = false;
+    lastTransportError_.clear();
+    lastOpenError_ = Errc::Ok;
     endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
     if (timer_) timer_->stop();
@@ -89,15 +95,21 @@ void DeviceWorker::connectMock() {
 }
 
 void DeviceWorker::connectUsb() {
+    intentionalDisconnect_ = true;   // the old session ends by our choice, not by link loss
     endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
     if (timer_) timer_->stop();
     usbMode_ = true;
     backoffMs_ = 1000;
-    // Real hardware: default options => no detach, no claim, writes refused.
-    adoptSession(std::make_unique<UsbTransport>());
+    // Real hardware: read-only options (descriptor-driven interface selection, no detach, no
+    // claim, writes refused at transport level; the session policy keeps hardware writes off).
+    adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
+    intentionalDisconnect_ = false;
+    lostLink_ = false;
+    lastOpenError_ = Errc::Ok;
+    lastTransportError_.clear();
     auto s = session_->connect();
-    if (!s) report(s);
+    if (!s) { report(s); noteOpenFailure(s); }
     if (session_->state() == ConnectionState::Connected) startTimer(250);
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
@@ -120,13 +132,25 @@ void DeviceWorker::rescan() {
     bool present = false;
     for (const auto& c : manager_.scan())
         if (c.isConnect2 && c.appMode) present = true;
-    if (!present) { backoffMs_ = 1000; armRescan(); publish(); return; }
+    if (!present) { backoffMs_ = 1000; lastOpenError_ = Errc::Ok; armRescan(); publish(); return; }
+    // A persistent failure (permissions, kernel-owned, unsupported layout) is not retried until the
+    // device list or node permissions change; this keeps a stuck device from being poked forever.
+    const QString sig = deviceListSignature();
+    if (!shouldRetryOpen(lastOpenError_, sig != scanSignature_)) {
+        backoffMs_ = 8000;
+        armRescan();
+        publish();
+        return;
+    }
     auto s = session_->reconnect();
     if (s) {
         backoffMs_ = 1000;
+        lastOpenError_ = Errc::Ok;
+        lastTransportError_.clear();
         startTimer(250);
     } else {
         report(s);
+        noteOpenFailure(s);
         backoffMs_ = std::min(backoffMs_ * 2, 8000);
         armRescan();
     }
@@ -149,12 +173,34 @@ void DeviceWorker::disconnectDevice() {
     pendingKeys_.clear();
     autoState_ = "idle";
     restarting_ = false;
+    intentionalDisconnect_ = true;
+    lostLink_ = false;
+    lastTransportError_.clear();
     usbMode_ = false;                   // no automatic re-connection after an explicit disconnect
     publish();
 }
 
 void DeviceWorker::report(const Status& s) {
-    if (!s) emit errorOccurred(QString::fromStdString(s.error().message));
+    if (!s) {
+        emit errorOccurred(QString::fromStdString(s.error().message));
+        lastTransportError_ = QString::fromStdString(s.error().message);
+        const auto hint = suggestionFor(s.error());
+        if (!hint.empty()) lastTransportError_ += "\n" + QString::fromStdString(hint);
+    }
+}
+
+QString DeviceWorker::deviceListSignature() {
+    QString sig;
+    for (const auto& c : manager_.scan())
+        sig += QString("%1:%2:%3:%4:%5;").arg(c.usb.bus).arg(c.usb.address).arg(c.usb.pid)
+                   .arg(QString::fromStdString(c.usb.sysfsPath)).arg(c.usb.nodeWritable);
+    return sig;
+}
+
+void DeviceWorker::noteOpenFailure(const Status& s) {
+    if (s) return;
+    lastOpenError_ = s.error().code;
+    scanSignature_ = deviceListSignature();
 }
 
 // Translates a commitAndVerify() outcome into the existing error-reporting / pending-retry UX.
@@ -306,8 +352,33 @@ void DeviceWorker::publish() {
                                                                  ? "usb" : session_->info().backend)
                                     : QString(),
                            session_ && session_->writesEnabled(), session_ && session_->isSimulated());
-    v["sampleRate"] = sampleRate_;
+    // The sample rate comes from the audio stack, which this backend does not read yet: only the
+    // simulator has a value. On real hardware the key is absent (the UI shows "Unknown").
+    if (session_ && session_->isSimulated() && cs == ConnectionState::Connected) v["sampleRate"] = sampleRate_;
     v["restarting"] = restarting_;
+    // Phase 7A connection presentation. One state, derived only from facts the worker knows.
+    if (cs == ConnectionState::Connected) { lostLink_ = false; intentionalDisconnect_ = false; }
+    else if (prevState_ == ConnectionState::Connected && !intentionalDisconnect_) lostLink_ = true;
+    prevState_ = cs;
+    QString uiState;
+    switch (cs) {
+        case ConnectionState::Connected:
+            uiState = session_->isSimulated() ? "simulated" : session_->writesEnabled() ? "real-writable" : "real-readonly";
+            break;
+        case ConnectionState::Connecting: uiState = "connecting"; break;
+        case ConnectionState::Error: uiState = lostLink_ ? "connection-lost" : "error"; break;
+        case ConnectionState::Disconnected: uiState = lostLink_ ? "connection-lost" : "disconnected"; break;
+    }
+    v["ui.state"] = uiState;
+    v["ui.error"] = (cs == ConnectionState::Connected) ? QString() : lastTransportError_;
+    if (session_ && cs == ConnectionState::Connected) {
+        const auto& caps = session_->capabilities();
+        v["ui.device"] = session_->isSimulated()
+            ? QString("Simulated CONNECT 2 (not a real device)")
+            : QString("CONNECT 2 · USB %1:%2 · API %3.%4")
+                  .arg(session_->info().vid, 4, 16, QChar('0')).arg(session_->info().pid, 4, 16, QChar('0'))
+                  .arg(caps.apiMajor).arg(caps.apiMinor);
+    }
     v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
     v["write.verifying"] = verifying_;
     // One label distinguishing the states the GUI needs to react to: whether there's a device at

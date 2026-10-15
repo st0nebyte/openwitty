@@ -10,6 +10,24 @@ and diffing real reads (`docs/HARDWARE_TEST_RESULTS.md` §§10, 12); **HW-SET** 
 sent and verified (only LED brightness, §13/§15); **bin** = static analysis only; **none** = no
 evidence of any kind.
 
+## Phase 7A status (implemented on `phase7a-interface-discovery`, mock/unit-tested only)
+
+| Plan item | State |
+|---|---|
+| §5.1 descriptor-driven interface selection | **Done** — `src/transport/InterfaceSelection.{hpp,cpp}` (pure), `UsbOptions::interfaceStrategy`, 15 table tests incl. the exact real CONNECT 2 layout |
+| §5.1 GUI uses it | **Done** — `DeviceWorker::connectUsb()` builds `UsbTransport(readOnlyHardwareOptions())`; audit script enforces this |
+| §5.2 `ui.state` + banner | **Done (minimal)** — `ui.state` ∈ disconnected / simulated / real-readonly / real-writable / connecting / error / connection-lost, `ui.error`, `ui.device`; banner and indicator in `Main.qml` rewritten; "protocol not verified" text removed |
+| §4.6 sample rate honesty | **Done** — key published only for a connected simulation; UI shows "Unknown" |
+| §5.7 stop-retry after persistent errors | **Done** — `core/RetryPolicy.hpp`; reads are not re-attempted until the device list/node permissions change |
+| §5.3 `selectedChannel()` / highlight | Deferred to 7B (touches `Messages.*`, `publish()`, strips) |
+| §5.4 evidence badges | Deferred to 7B (QML-wide) |
+| §5.6 `ReplayTransport` fixtures | Deferred to 7B |
+| §4.8 faster settings poll | Deferred to 7B (avoids `poll()` overlap with Panic Mute work) |
+| Meter floor | Not a defect: values below −60 dB display at the meter floor; documented only |
+
+Everything above is **unverified on real hardware**: the selection rule reproduces the descriptor
+layout recorded on 2026-10-14, but the GUI has never opened the device.
+
 ## 1. Existing architectural readiness
 
 | Component | Real-hardware ready? | Notes |

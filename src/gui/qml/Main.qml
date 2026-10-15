@@ -8,6 +8,10 @@ Window {
     color: Theme.footer
     minimumWidth: 720; minimumHeight: 440
 
+    // One presentation state from the backend (see DeviceWorker::publish): disconnected |
+    // simulated | real-readonly | real-writable | connecting | error | connection-lost
+    readonly property string uiState: device.values["ui.state"] || "disconnected"
+    readonly property string uiError: (device.values["ui.error"] || "").split("\n")[0]
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
     property bool showSettings: false
@@ -46,7 +50,12 @@ Window {
             GlyphIcon { x: 14; y: 13; width: 24; height: 24; kind: "headphones"; color: Theme.accent
                         visible: false }
             DeviceStatusIndicator { x: 262; anchors.verticalCenter: parent.verticalCenter
-                state: device.connection; detail: device.simulated ? "simulated" : device.backend }
+                state: device.connection
+                detail: win.uiState === "simulated" ? "simulated"
+                      : win.uiState === "real-readonly" ? "real device · read-only"
+                      : win.uiState === "real-writable" ? "real device"
+                      : win.uiState === "connection-lost" ? "connection lost"
+                      : device.backend }
             Text { x: 461; anchors.verticalCenter: parent.verticalCenter; color: Theme.textDim; font.pixelSize: 11
                    text: "Sample rate:" }
             Rectangle {   // sample-rate dropdown (simulation only; real rate comes from the audio stack)
@@ -55,7 +64,8 @@ Window {
                 border.color: "#5a5a5a"
                 opacity: device.simulated ? 1 : 0.55
                 Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: "#f0f0f0"; font.pixelSize: 11
-                       text: ((device.values["sampleRate"] || 0) / 1000).toString().replace(".", ".") + " kHz" }
+                       text: device.values["sampleRate"] === undefined ? "Unknown"
+                             : (device.values["sampleRate"] / 1000).toString() + " kHz" }
                 Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter
                        color: "#777"; font.pixelSize: 9; text: "▴\n▾"; lineHeight: 0.75 }
                 MouseArea { anchors.fill: parent; enabled: device.simulated; onClicked: rateMenu.visible = !rateMenu.visible }
@@ -126,12 +136,27 @@ Window {
     // simulation banner + development controls (outside the design space)
     Rectangle {
         id: banner
-        width: parent.width; height: 28; color: device.simulated ? "#2e2813" : "#2b1d1d"
+        width: parent.width; height: 28
+        color: win.uiState === "simulated" ? "#2e2813"
+             : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#162633"
+             : win.uiState === "error" || win.uiState === "connection-lost" ? "#2b1d1d" : "#232323"
         Text { anchors.verticalCenter: parent.verticalCenter; x: 10; font.pixelSize: 11
-               color: device.simulated ? Theme.sim : Theme.bad
-               text: device.simulated
+               width: parent.width - 330; elide: Text.ElideRight
+               color: win.uiState === "simulated" ? Theme.sim
+                    : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#9ec7ff"
+                    : win.uiState === "error" || win.uiState === "connection-lost" ? Theme.bad : Theme.textDim
+               text: win.uiState === "simulated"
                      ? "SIMULATED DEVICE — no hardware is controlled; values shown are not device data."
-                     : "Hardware writes are DISABLED: the control protocol is not verified on a real CONNECT 2." }
+                     : win.uiState === "real-readonly"
+                     ? "REAL DEVICE, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")
+                       + ". Showing device state; changing settings from this window is intentionally disabled."
+                     : win.uiState === "real-writable"
+                     ? "REAL DEVICE — individually authorized controls enabled."
+                     : win.uiState === "connecting" ? "Connecting to the device…"
+                     : win.uiState === "connection-lost"
+                     ? "Connection to the device was lost — retrying when it reappears. " + win.uiError
+                     : win.uiState === "error" ? "Cannot communicate with the device. " + win.uiError
+                     : "No device connected. Use “USB (read-only)” to look for a CONNECT 2." }
         Row { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 6
             ToggleButton { width: 90; height: 20; text: "Mock device"; onClicked: device.connectMock() }
             ToggleButton { width: 100; height: 20; text: "USB (read-only)"; onClicked: device.connectUsb() }

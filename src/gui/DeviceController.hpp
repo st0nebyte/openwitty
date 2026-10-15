@@ -78,6 +78,15 @@ private:
     // (worker) thread - never on the GUI thread, so it can't freeze the UI.
     lewitt::WriteState lastWriteState_{lewitt::WriteState::Prepared};
     bool verifying_{false};
+    // Phase 7A: connection presentation + persistent-error retry suppression.
+    lewitt::ConnectionState prevState_{lewitt::ConnectionState::Disconnected};
+    bool lostLink_{false};               // was Connected, then the link dropped (not user-initiated)
+    bool intentionalDisconnect_{false};
+    QString lastTransportError_;         // last open/read error text incl. next-step suggestion
+    lewitt::Errc lastOpenError_{lewitt::Errc::Ok};
+    QString scanSignature_;              // device list + node permissions at the last failed open
+    QString deviceListSignature();
+    void noteOpenFailure(const lewitt::Status& s);
 };
 
 class DeviceController : public QObject {

@@ -3,7 +3,9 @@
 #include <libusb.h>
 
 #include <string>
+#include <vector>
 
+#include "InterfaceSelection.hpp"
 #include "protocol/WriteGuard.hpp"
 
 namespace lewitt {
@@ -78,16 +80,45 @@ Status UsbTransport::open() {
 }
 
 Status UsbTransport::ensureInterface() {
-    if (opt_.interfaceNumber >= 0) { interface_ = opt_.interfaceNumber; return okStatus(); }
     libusb_config_descriptor* cfg = nullptr;
-    if (int rc = libusb_get_active_config_descriptor(libusb_get_device(handle_), &cfg); rc != 0)
+    if (int rc = libusb_get_active_config_descriptor(libusb_get_device(handle_), &cfg); rc != 0) {
+        // Explicit numbers keep working as before when descriptors cannot be read (no DFU check
+        // possible then); automatic selection has nothing to decide from and fails.
+        if (opt_.interfaceNumber >= 0) { interface_ = opt_.interfaceNumber; return okStatus(); }
         return mapErr(rc, "get_active_config_descriptor");
-    interface_ = -1;
-    for (int i = 0; i < cfg->bNumInterfaces && interface_ < 0; ++i) {
+    }
+    // Descriptor facts for the pure selection logic (altsetting 0 of each interface). The kernel
+    // driver query is read-only: it neither claims nor detaches anything.
+    std::vector<InterfaceDescriptor> ifs;
+    for (int i = 0; i < cfg->bNumInterfaces; ++i) {
         const auto& alt = cfg->interface[i].altsetting[0];
-        if (alt.bInterfaceClass == 1 && alt.bInterfaceSubClass == 1) interface_ = alt.bInterfaceNumber;
+        InterfaceDescriptor d;
+        d.number = alt.bInterfaceNumber;
+        d.klass = alt.bInterfaceClass;
+        d.subclass = alt.bInterfaceSubClass;
+        d.protocol = alt.bInterfaceProtocol;
+        d.numEndpoints = alt.bNumEndpoints;
+        int active = libusb_kernel_driver_active(handle_, d.number);
+        d.driverKnown = active == 0 || active == 1;
+        d.driverBound = active == 1;
+        ifs.push_back(d);
     }
     libusb_free_config_descriptor(cfg);
+
+    if (opt_.interfaceNumber >= 0) {
+        if (auto s = checkExplicitInterface(opt_.interfaceNumber, ifs); !s) return s;
+        interface_ = opt_.interfaceNumber;
+        return okStatus();
+    }
+    if (opt_.interfaceStrategy == InterfaceStrategy::VendorControlAuto) {
+        auto sel = selectControlInterface(info_.vid, info_.pid, ifs);
+        if (!sel) return sel.error();
+        interface_ = sel.value();
+        return okStatus();
+    }
+    interface_ = -1;
+    for (const auto& d : ifs)
+        if (d.klass == 1 && d.subclass == 1) { interface_ = d.number; break; }
     if (interface_ < 0) return makeError(Errc::NotFound, "no AudioControl interface");
     return okStatus();
 }
