@@ -758,3 +758,71 @@ all three trials with identical values each time — flagged for future investig
   set, confirm loopback is untouched, and confirm an unrelated pending edit survives via the
   existing merge algorithm. Full suite: 108/108 (106 + 2 core; the GUI test is counted within the
   existing `gui_integration` entry), stable across 3 repeated full runs.
+
+## 17. Phase 7 integration — first real-hardware GUI launch, 2026-10-15
+
+Branch `phase7-hardware-integration` (merge of `hardware-validation-2026-10-14` @ `868331c` into
+`phase7a-interface-discovery` @ `be0d3f3`, which itself sits on `phase6e-work-preparation` @
+`7d8a4c0`). Full history/branch verification and merge conflict resolution recorded in the merge
+commit message; not repeated here. Build: 54/54 targets. Full suite: 137/137, stable across 3
+repeated runs (exceeds the expected 135 Phase-7A baseline + 3 Panic Mute tests).
+
+### 17.1 Pre-flight (read-only, sysfs/ALSA only, no USB I/O)
+
+Device present (`29c2:0004`, normal mode), interface 3 still class `ff/f0/00` and unbound
+(`driver: none/unknown`), ALSA still shows card `C2`, usbfs node already has the `uaccess` ACL
+from the earlier session (`write=yes`, no fresh udev step needed).
+
+### 17.2 CLI auto-discovery validation (read-only)
+
+```
+openwitty-cli read api --interface auto       -> api major=1 minor=0, same payload as every prior session
+openwitty-cli read status --interface auto    -> succeeds
+openwitty-cli read settings --interface auto  -> succeeds, decodes to plausible values
+```
+
+`--interface auto` vs explicit `--interface 3`: **byte-for-byte identical** `read settings`
+output — confirms descriptor-driven auto-discovery (`InterfaceSelection`, Phase 7A) selects
+interface 3 on this real device, not interface 0. Card present and unchanged throughout.
+
+### 17.3 First real-hardware GUI launch (read-only, no `--mock`)
+
+`QT_QPA_PLATFORM=offscreen openwitty --screenshot …` (no `--mock` → `connectUsb()`). Launched
+clean, no crash, exited cleanly (exit 0), no lingering process. Device settings read immediately
+before and after the GUI session are byte-for-byte identical — the GUI session performed reads
+only.
+
+**Every visible value matched the independently-captured CLI read exactly**: mic gain 28 dB,
+instrument gain 16 dB, both preamps "Vivid", mic Comp/low-cut/Clipguard/48V all correctly
+highlighted on (instrument's low-cut/Clipguard correctly off), mic/instrument/headphone/loopback
+MUTE shown red (muted), speaker MUTE correctly *not* highlighted (unmuted), direct-monitoring
+icons for both mic and instrument lit (monitor source "both"). This is the first end-to-end
+confirmation that `UsbTransport` → `DeviceSession` → `DeviceController` → QML bindings agree with
+the CLI's independently-verified decode, on real hardware, with zero writes.
+
+Banner and status text: "REAL DEVICE, READ-ONLY — CONNECT 2 · USB 29c2:0004 · API 1.0…" and
+"Connected · real device · read-only" — the Phase 7A fix replacing the old, more alarming "Hardware
+writes are DISABLED: the control protocol is not verified" framing, which read as an error. Sample
+rate correctly shows "Unknown" (previously a hard-coded fake 48 kHz default) — confirms that Phase
+7A fix too.
+
+**UI bug found**: the top banner's trailing text ("…changing settings from this window is in[ert]")
+is visually truncated/overlapped by the "Mock device"/"USB (read-only)" buttons in the top-right at
+this window size. Cosmetic only — no functional or safety impact, nothing was hidden that mattered
+(the read-only state itself is also shown unambiguously in the status line below). Noted for Phase
+7B.
+
+### 17.4 Known redundancy carried into this branch (not a bug)
+
+`values()["ui.status"]` (added with the write-verification work) and `values()["ui.state"]`
+(Phase 7A) are two independently-computed, overlapping status labels that both survived the merge
+working correctly but duplicating each other's purpose. `Main.qml`'s banner uses `ui.state`;
+`ui.status` has no QML consumer at all currently. Left for Phase 7B consolidation, not touched
+here.
+
+### 17.5 Not yet done, pending explicit guidance (see session report)
+
+Live manual-interaction validation (select channel / adjust gain / toggle mute while watching the
+GUI) and device disconnect/reconnect handling were planned but deliberately **not started** without
+checking first, per instruction not to risk disrupting active audio work. No software SET was sent;
+Panic Mute was not triggered.
