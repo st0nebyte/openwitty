@@ -22,7 +22,7 @@ This project is not about criticizing LEWITT or its software. It's about making 
 
 ## Project Status
 
-**Experimental — not hardware validated.**
+**Experimental — partially validated on real CONNECT 2 hardware.**
 
 The initial target is the **LEWITT CONNECT 2**; **CONNECT 6** support is planned but not implemented.
 
@@ -32,13 +32,16 @@ What exists today:
 - A **Qt 6 / QML** control application and a read-only diagnostic CLI (`openwitty-cli`).
 - A reconstructed **device-control protocol** for the CONNECT 2, derived from static analysis and cross-checked between the macOS and Windows control applications.
 - A **simulated device** (mock mode) that exercises every control in the GUI and is always labelled as simulated.
-- ~100 automated tests (protocol, session, hardening, GUI integration, QML loading, packaging), sanitizer runs and a documented security audit.
+- 137 automated tests (protocol, session, hardening, GUI integration, QML loading, packaging), sanitizer runs and a documented security audit.
 - **Ubuntu/Debian (`.deb`) and Arch/CachyOS (PKGBUILD) packaging**, desktop integration and a udev rule (documented, never installed automatically).
 
 What does **not** exist yet:
 
-- **No validation on real hardware.** The protocol has never been exercised against a physical CONNECT 2.
-- Hardware **writes are disabled** by design until the read-only behaviour has been verified.
+- Read-only transport, automatic control-interface discovery, and the real GUI have been validated
+  against one CONNECT 2. The documented evidence and scope are in
+  [docs/HARDWARE_TEST_RESULTS.md](docs/HARDWARE_TEST_RESULTS.md).
+- The real-device GUI remains read-only. Broad hardware writes remain disabled by design; the only
+  exercised write is the separately gated, narrowly scoped CLI LED-brightness validation.
 - Firmware update and factory reset are intentionally not implemented.
 - OpenWitty is **not yet a functional replacement** for CONTROL CENTER.
 
@@ -46,7 +49,7 @@ What does **not** exist yet:
 
 | Device | Status |
 |---|---|
-| LEWITT CONNECT 2 | Implemented against the reconstructed protocol; simulated device only — **not hardware validated** |
+| LEWITT CONNECT 2 | Read-only transport and GUI validated on one device; most controls remain simulated or individually unvalidated |
 | LEWITT CONNECT 6 | Planned (architecture keeps device support separable; nothing implemented) |
 
 ## Goals
@@ -58,7 +61,7 @@ What does **not** exist yet:
 - Encourage community contributions and knowledge sharing.
 - Keep the project free, transparent, and accessible.
 
-## Features (CONNECT 2, simulated; hardware unverified)
+## Features (CONNECT 2; mixed evidence levels)
 
 - Device discovery and connection state, with clear permission/driver diagnostics (`EACCES` vs `EBUSY` vs stall)
 - Input gain, mute, low-cut, Clipguard, 48 V, Clean/Warm/Vivid, Denoise, Compressor

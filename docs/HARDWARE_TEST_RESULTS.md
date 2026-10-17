@@ -759,7 +759,10 @@ all three trials with identical values each time — flagged for future investig
   existing merge algorithm. Full suite: 108/108 (106 + 2 core; the GUI test is counted within the
   existing `gui_integration` entry), stable across 3 repeated full runs.
 
-## 17. Phase 7 integration — first real-hardware GUI launch, 2026-10-15
+## 17. Phase 7 integration — recorded prior-session real-hardware GUI validation, 2026-10-15
+
+The observations in this section were recorded during the preceding validation session; they are
+preserved here as that session's evidence and are not claims of a later independent retest.
 
 Branch `phase7-hardware-integration` (merge of `hardware-validation-2026-10-14` @ `868331c` into
 `phase7a-interface-discovery` @ `be0d3f3`, which itself sits on `phase6e-work-preparation` @
@@ -819,8 +822,6 @@ this window size. Cosmetic only — no functional or safety impact, nothing was 
 working correctly but duplicating each other's purpose. `Main.qml`'s banner uses `ui.state`;
 `ui.status` has no QML consumer at all currently. Left for Phase 7B consolidation, not touched
 here.
-
-### 17.5 Not yet done, pending explicit guidance (see session report)
 
 ### 17.6 Live manual-interaction validation (read-only; relaunch-and-screenshot methodology)
 

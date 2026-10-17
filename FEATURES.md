@@ -67,10 +67,11 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 44 | Showcase mode (hidden icon sequence) | hardware only | device-side | not applicable | icon sequence not reproduced | n/a |
 | 45 | `mute.allFour` derived display state (purely computed, no protocol concept) | not yet bound in QML | `s.mute(0) && s.mute(1) && s.speakerMute() && s.headphoneMute()` | GUI backend done (`publish()`), `MockTransport::simulatePanicMute()` for tests | QML binding not added this session | n/a — confirmed by evidence that real hardware has no dedicated flag (§16 of `docs/HARDWARE_TEST_RESULTS.md`), so this is deliberately computed, not a new stored field |
 
-## Phase 7A additions (mock/unit-tested; not hardware-verified)
+## Phase 7A additions (mock/unit-tested and subsequently read-only hardware-validated)
 
 * GUI connects to a real CONNECT 2 read-only through the descriptor-selected vendor control
-  interface (`InterfaceSelection`), no detach/claim/write; **never opened on real hardware yet**.
+  interface (`InterfaceSelection`), no detach/claim/write. This was exercised against the CONNECT 2
+  recorded in `docs/HARDWARE_TEST_RESULTS.md` §17; it selected interface 3 and performed no writes.
 * Distinct connection presentation: disconnected, simulated, real read-only, connecting,
   communication error, connection lost; transport errors with next-step hints are visible.
 * Sample rate shown as "Unknown" unless simulated; persistent open errors are not retried until
