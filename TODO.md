@@ -167,6 +167,11 @@
   ratio and firmware-general range remain unknown. Never broaden the write setter from this read.
 - ✔ Separate settings-failure threshold prevents good meter reads from hiding a stale settings
   stream; reconnect clears old status frames. Mock-tested, hardware-fault validation pending.
-- Single non-escalating settings errors (stall/busy/permission) are reported through `lastError`
-  but are not yet surfaced in the connected banner as a freshness warning; add a concise stale
-  data indicator before treating displayed settings as reliably live under such faults.
+- ✔ Phase 7E: independent settings/status monotonic freshness and concise delayed/stale banner
+  warnings, including a non-escalating failed stream while the other keeps succeeding. Mock/QML
+  tested; real-device fault/visual validation pending (no deliberate USB failure induced).
+- Obtain an externally timestamped physical-action and screen-presentation marker for true
+  end-to-end latency; internal monotonic stage timings alone cannot establish it. Preserve
+  2 Hz settings / 4 Hz status until a read-only hardware comparison supports a change.
+- Visually reconfirm the compact `Connected · read-only` header and Phase 7E freshness-warning
+  layout on the real device; the automated geometry checks do not replace a screenshot.

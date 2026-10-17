@@ -99,6 +99,29 @@ Persistent settings-read failure can no longer be masked by successful meter rea
 unresponsive settings refreshes the session enters Error and reconnects, and old status frames are dropped
 at reconnect. This transition is mock-tested; no hardware fault was induced.
 
+## Phase 7E addendum (independent data freshness, 2026-10-17)
+
+The GUI now classifies settings and status separately from monotonic successful-GET times:
+settings fresh ≤750 ms, delayed ≤1500 ms, stale afterward; status fresh ≤375 ms, delayed
+≤750 ms, stale afterward. Missing/disconnected data are unavailable. These are 1.5× and 3×
+the unchanged 500/250 ms schedules, allowing jitter while warning after missed reads.
+Connected stale/delayed data remain visible as last-known readings with a warning in the top
+banner. A successful GET of the affected stream is required to clear its warning; the other
+stream cannot mask it. Reconnect resets both timestamps. Mock/QML and exact-boundary tests
+cover these transitions, including failure of one stream while the other succeeds. Real-device
+fault behavior and the warning's physical-screen appearance have not yet been validated.
+
+Level 1 `OPENWITTY_TRACE_LATENCY` now samples changed settings polls and every 20th poll
+(about five seconds for USB, 0.8 seconds for mock);
+level 2 retains per-poll detail. USB GET, decode/merge, publication, QML observation and frame
+swap remain separate internal stages. Phase 7D's single-client stage measurements remain the
+last real-device data; no true action-to-visible latency is claimed. A future externally marked,
+time-synchronized physical-control/video test is needed. Retain 2 Hz settings and 4 Hz status;
+4 Hz settings would add two scheduled GETs/second and requires hardware evidence before adoption.
+The `f793ab7` compact header remains code-tested but not visually reconfirmed. Audio and
+front-panel readiness still cannot be inferred from control GET success. All real GUI controls
+remain read-only.
+
 ## 1. Existing architectural readiness
 
 | Component | Real-hardware ready? | Notes |

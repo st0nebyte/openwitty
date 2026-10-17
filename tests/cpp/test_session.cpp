@@ -42,6 +42,18 @@ TEST(Session, SettingsTimingSeparatesDelayedTransportFromDecodeAndNeverWrites) {
     EXPECT_TRUE(f.mock->writeLog().empty());
 }
 
+TEST(Session, StatusTimingSeparatesDelayedTransportFromDecodeAndNeverWrites) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->setReadHook([] { std::this_thread::sleep_for(std::chrono::milliseconds(8)); });
+    StatusRefreshTiming timing;
+    ASSERT_TRUE(f.session->refreshStatus(&timing).ok());
+    EXPECT_LE(timing.started, timing.transportDone);
+    EXPECT_LE(timing.transportDone, timing.decoded);
+    EXPECT_GE(timing.transportDone - timing.started, std::chrono::milliseconds(8));
+    EXPECT_TRUE(f.mock->writeLog().empty());
+}
+
 TEST(Session, FailedSettingsReadLeavesDecodeTimingUnsetAndNoWrite) {
     Fixture f;
     ASSERT_TRUE(f.session->connect().ok());

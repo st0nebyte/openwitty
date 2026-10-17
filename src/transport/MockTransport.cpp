@@ -63,6 +63,10 @@ Result<Bytes> MockTransport::read(MessageId id) {
         if (f.value().size() > 0x100) return makeError(Errc::Malformed, "simulated oversized response");
         return makeError(Errc::ShortTransfer, "simulated short transfer");
     }
+    if (id == rejectedId_ && rejectedReads_ > 0) {
+        --rejectedReads_;
+        return makeError(Errc::Stall, "simulated message-specific GET rejection");
+    }
     // Settling-delay / external-change simulation applies to any read call (settings or status),
     // same as the real device, which answers both kinds of GET regardless of write staleness.
     if (externalChangeAfterReads_ == 0) {

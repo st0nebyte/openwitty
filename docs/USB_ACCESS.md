@@ -186,3 +186,14 @@ the process exits, so a stale file alone never blocks reconnection. A non-privat
 runtime directory or lock file fails closed. This is process coordination, **not** a udev/ACL
 permission fix, and unrelated software or older OpenWitty versions will not honor it. No daemon,
 driver detachment, reset, DFU access, or hardware write was added.
+
+## 3f. Phase 7E freshness versus access (2026-10-17)
+
+The GUI now timestamps successful settings and status GETs independently using a monotonic
+clock. At the unchanged 2/4 Hz schedules it warns when settings exceed 750 ms (delayed) or
+1500 ms (stale), and status exceeds 375 ms or 750 ms. A successful status GET does not make
+old settings current. These are GUI age-policy thresholds, not new USB requests or device-ready
+flags. On reconnect, both timestamps reset; a fresh response of each type clears only its own
+warning. Last-known values may remain visible but are explicitly labeled. The cooperative
+lease still reports `ControlInUse` before USB control I/O when another current OpenWitty owns
+it. No physical concurrency test or permission change was made in Phase 7E.

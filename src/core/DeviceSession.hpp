@@ -43,6 +43,9 @@ struct DeviceCapabilities {
 struct SettingsRefreshTiming {
     std::chrono::steady_clock::time_point started{}, transportDone{}, decoded{}, merged{};
 };
+struct StatusRefreshTiming {
+    std::chrono::steady_clock::time_point started{}, transportDone{}, decoded{};
+};
 
 class DeviceSession {
 public:
@@ -70,7 +73,7 @@ public:
     int consecutiveFailures() const { return failures_; }
     bool needsReconnect() const { return state_ == ConnectionState::Error || state_ == ConnectionState::Disconnected; }
     Status refreshSettings(SettingsRefreshTiming* timing = nullptr);  // read settings -> current & pending
-    Status refreshStatus();    // read status (meters)
+    Status refreshStatus(StatusRefreshTiming* timing = nullptr);    // read status (meters)
 
     const std::optional<SettingsMessage>& settings() const { return current_; }
     const std::optional<StatusMessage>& status() const { return status_; }

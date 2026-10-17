@@ -186,10 +186,13 @@ Status DeviceSession::refreshSettings(SettingsRefreshTiming* timing) {
     return okStatus();
 }
 
-Status DeviceSession::refreshStatus() {
+Status DeviceSession::refreshStatus(StatusRefreshTiming* timing) {
+    if (timing) { *timing = {}; timing->started = std::chrono::steady_clock::now(); }
     auto r = transport_->read(MessageId::Status);
+    if (timing) timing->transportDone = std::chrono::steady_clock::now();
     if (!r) { auto st = fail(r.error()); noteResult(st); return st; }
     auto m = StatusMessage::fromBytes(r.value());
+    if (timing) timing->decoded = std::chrono::steady_clock::now();
     if (!m) { auto st = fail(m.error()); noteResult(st); return st; }
     failures_ = 0;
     status_ = m.value();

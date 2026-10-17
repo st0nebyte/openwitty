@@ -9,6 +9,7 @@
 
 #include "core/RetryPolicy.hpp"
 #include "transport/ControlLease.hpp"
+#include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 
 using namespace lewitt;
@@ -37,6 +38,9 @@ TEST(ControlLease, OnlyOneOpenWittyOwnerAndReleaseOnClose) {
     EXPECT_TRUE(ControlLease::acquireInDirectory(dir.path).ok());
     EXPECT_FALSE(isPersistentOpenError(Errc::ControlInUse));
     EXPECT_TRUE(shouldRetryOpen(Errc::ControlInUse, false));
+    const auto message = suggestionFor(makeError(Errc::ControlInUse, "held"));
+    EXPECT_NE(message.find("OpenWitty"), std::string::npos);
+    EXPECT_NE(message.find("not a USB permission problem"), std::string::npos);
 }
 
 TEST(ControlLease, ProcessExitReleasesLeaseDespiteExistingFile) {

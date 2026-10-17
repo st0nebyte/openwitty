@@ -36,6 +36,9 @@ public:
 
     // test / GUI hooks
     void injectFault(Fault f, int count = 1) { fault_ = f; faultCount_ = count; }
+    // Test-only: reject one GET message type repeatedly while other GETs still succeed.
+    void rejectReads(MessageId id, int count) { rejectedId_ = id; rejectedReads_ = count; }
+    void clearReadRejection() { rejectedReads_ = 0; }
     void setPresent(bool present) { present_ = present; if (!present) open_ = false; }
     void setStatusBytes(Bytes b) { status_ = std::move(b); }
     // Simulated auto-gain: progress 0..100 advances by 10 per status read.
@@ -81,6 +84,8 @@ private:
     bool open_{false};
     Fault fault_{Fault::None};
     int faultCount_{0};
+    MessageId rejectedId_{MessageId::Status};
+    int rejectedReads_{0};
     Bytes settings_;
     Bytes status_;
     Bytes version_;

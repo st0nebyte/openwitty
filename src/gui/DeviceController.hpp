@@ -12,6 +12,7 @@
 #include <mutex>
 
 #include "core/DeviceManager.hpp"
+#include "core/ReadFreshness.hpp"
 #include "core/DeviceSession.hpp"
 #include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
@@ -61,6 +62,7 @@ private:
     double phase_{0};
     int sampleRate_{48000};
     int pollCount_{0};
+    lewitt::ReadFreshness freshness_;
     bool traceEnabled_{false};
     qint64 lastPollNs_{0};
     qint64 traceSequence_{0};
@@ -71,6 +73,7 @@ private:
     std::mutex activeM_;
     lewitt::IDeviceTransport* active_{nullptr};
     void resetWorkflowState();
+    void markInitialReads();
     void endMeasurementSessionBestEffort();
     lewitt::DeviceManager manager_;
     QTimer* scanTimer_{nullptr};
@@ -144,6 +147,8 @@ private:
     bool writable_{false}, simulated_{false};
     QVariantMap values_;
     bool traceEnabled_{false};
+    int traceLevel_{0};
+    qint64 lastLoggedTraceSequence_{0};
     qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};
     qint64 activeTraceSequence_{0}, activeGuiNs_{0}, activeQmlNs_{0};
 };

@@ -24,6 +24,9 @@ qint64 nowNs() {
 qint64 usBetween(std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
     return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
 }
+qint64 nsBetween(std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(b - a).count();
+}
 QString changedKinds(const SettingsMessage& before, const SettingsMessage& after) {
     const auto a = before.bytes(), b = after.bytes();
     auto differs = [&](std::size_t i, std::size_t n = 1) {
@@ -56,7 +59,7 @@ Rgb parseHex(const QString& s) {
 }
 }  // namespace
 
-DeviceWorker::DeviceWorker() : traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") == 1) {}
+DeviceWorker::DeviceWorker() : traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") > 0) {}
 
 void DeviceWorker::startTimer(int ms) {
     if (!timer_) {
@@ -89,8 +92,18 @@ void DeviceWorker::resetWorkflowState() {
     inMeasureSession_ = false;
     restarting_ = false;
     pollCount_ = 0;
+    freshness_.reset();
+    lastPollNs_ = 0;
     mock_ = nullptr;
     serialized_ = nullptr;
+}
+
+void DeviceWorker::markInitialReads() {
+    freshness_.reset();
+    if (!session_ || session_->state() != ConnectionState::Connected) return;
+    const auto now = ReadFreshness::Clock::now();
+    if (session_->settings()) freshness_.markSettings(now);
+    if (session_->status()) freshness_.markStatus(now);
 }
 
 void DeviceWorker::cancelAll() {
@@ -114,6 +127,7 @@ void DeviceWorker::connectMock() {
     mock_ = raw;
     session_->setSampleRateHint(static_cast<std::uint32_t>(sampleRate_));
     report(session_->connect());
+    markInitialReads();
     startTimer(40);  // ~25 Hz meters; stopped again on disconnect
     publish();
 }
@@ -135,6 +149,7 @@ void DeviceWorker::connectUsb() {
     lastTransportError_.clear();
     auto s = session_->connect();
     if (!s) { report(s); noteOpenFailure(s); }
+    markInitialReads();
     if (session_->state() == ConnectionState::Connected) startTimer(250);
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
@@ -167,8 +182,10 @@ void DeviceWorker::rescan() {
         publish();
         return;
     }
+    freshness_.reset();
     auto s = session_->reconnect();
     if (s) {
+        markInitialReads();
         backoffMs_ = 1000;
         lastOpenError_ = Errc::Ok;
         lastTransportError_.clear();
@@ -195,6 +212,7 @@ void DeviceWorker::disconnectDevice() {
     if (scanTimer_) scanTimer_->stop();
     endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
+    freshness_.reset();
     pendingKeys_.clear();
     autoState_ = "idle";
     restarting_ = false;
@@ -257,6 +275,7 @@ void DeviceWorker::simulateReplug() {
     if (!mock_ || !session_) return;
     mock_->setPresent(true);
     report(session_->reconnect());
+    markInitialReads();
     if (session_->state() == ConnectionState::Connected) startTimer(40);
     publish();
 }
@@ -289,10 +308,10 @@ void DeviceWorker::poll() {
         put(0x1A, -22 + 10 * std::sin(phase_ * 0.8)); put(0x1C, -23 + 10 * std::sin(phase_ * 0.8 + 0.2));
         mock_->setStatusBytes(st);
     }
-    const qint64 statusStart = traceEnabled_ ? nowNs() : 0;
-    auto s = session_->refreshStatus();
-    const qint64 statusUs = traceEnabled_ ? (nowNs() - statusStart) / 1000 : 0;
+    StatusRefreshTiming statusTiming;
+    auto s = session_->refreshStatus(traceEnabled_ ? &statusTiming : nullptr);
     if (!s) report(s);
+    else freshness_.markStatus();
     if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
     // merged and pending simulated edits survive. USB status remains 4 Hz; settings are 2 Hz
@@ -310,11 +329,14 @@ void DeviceWorker::poll() {
     if (traceEnabled_) {
         sequence = ++traceSequence_;
         emit pollTrace(QVariantMap{{"seq", sequence}, {"poll_gap_us", pollGapUs},
-            {"status_us", statusUs}, {"read_us", settingsTick ? usBetween(timing.started, timing.transportDone) : -1},
-            {"decode_us", settingsTick && timing.decoded != std::chrono::steady_clock::time_point{}
-                              ? usBetween(timing.transportDone, timing.decoded) : -1},
-            {"merge_us", settingsTick && timing.merged != std::chrono::steady_clock::time_point{}
-                             ? usBetween(timing.decoded, timing.merged) : -1},
+            {"status_get_us", usBetween(statusTiming.started, statusTiming.transportDone)},
+            {"status_decode_ns", statusTiming.decoded != std::chrono::steady_clock::time_point{}
+                                     ? nsBetween(statusTiming.transportDone, statusTiming.decoded) : -1},
+            {"settings_get_us", settingsTick ? usBetween(timing.started, timing.transportDone) : -1},
+            {"settings_decode_ns", settingsTick && timing.decoded != std::chrono::steady_clock::time_point{}
+                                        ? nsBetween(timing.transportDone, timing.decoded) : -1},
+            {"settings_merge_ns", settingsTick && timing.merged != std::chrono::steady_clock::time_point{}
+                                       ? nsBetween(timing.decoded, timing.merged) : -1},
             {"worker_ns", nowNs()}, {"changed", kinds}});
     }
     const qint64 publishStart = traceEnabled_ ? nowNs() : 0;
@@ -327,6 +349,7 @@ Status DeviceWorker::refreshDeviceState(SettingsRefreshTiming* timing) {
         return makeError(Errc::Disconnected, "not connected");
     auto s = session_->refreshSettings(timing);
     if (!s) report(s);
+    else freshness_.markSettings();
     return s;
 }
 
@@ -342,7 +365,7 @@ void DeviceWorker::setDeviceMode(bool macos) {
     publish();
     QTimer::singleShot(1500, this, [this] {
         restarting_ = false;
-        if (mock_) { mock_->setPresent(true); report(session_->connect()); startTimer(40); }
+        if (mock_) { mock_->setPresent(true); report(session_->connect()); markInitialReads(); startTimer(40); }
         publish();
     });
 }
@@ -379,6 +402,10 @@ void DeviceWorker::injectFault(const QString& kind) {
     else if (kind == "busy") mock_->injectFault(MockTransport::Fault::Busy);
     else if (kind == "denied") mock_->injectFault(MockTransport::Fault::AccessDenied);
     else if (kind == "short") mock_->injectFault(MockTransport::Fault::ShortRead);
+    else if (kind == "stall-repeated") mock_->injectFault(MockTransport::Fault::Stall, 100);
+    else if (kind == "settings-stall-repeated") mock_->rejectReads(MessageId::Settings, 100);
+    else if (kind == "status-stall-repeated") mock_->rejectReads(MessageId::Status, 100);
+    else if (kind == "clear") { mock_->injectFault(MockTransport::Fault::None, 0); mock_->clearReadRejection(); }
 }
 
 void DeviceWorker::simulateExternalChange(const QString& key, const QVariant& v) {
@@ -420,6 +447,9 @@ void DeviceWorker::simulatePanicMute() {
 void DeviceWorker::publish() {
     QVariantMap v;
     ConnectionState cs = session_ ? session_->state() : ConnectionState::Disconnected;
+    const auto now = ReadFreshness::Clock::now();
+    v["fresh.settings"] = QString::fromUtf8(freshnessName(freshness_.settings(now, cs == ConnectionState::Connected)));
+    v["fresh.status"] = QString::fromUtf8(freshnessName(freshness_.status(now, cs == ConnectionState::Connected)));
     emit connectionChanged(stateName(cs),
                            session_ ? QString::fromStdString(session_->info().backend.empty()
                                                                  ? "usb" : session_->info().backend)
@@ -641,7 +671,8 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
 }
 
 DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(new DeviceWorker) {
-    traceEnabled_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") == 1;
+    traceLevel_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY");
+    traceEnabled_ = traceLevel_ > 0;
     qRegisterMetaType<QVariantMap>("QVariantMap");
     worker_->moveToThread(&thread_);
     connect(&thread_, &QThread::finished, worker_, &QObject::deleteLater);
@@ -649,21 +680,28 @@ DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(n
         if (!traceEnabled_) return;
         const auto sequence = t.value("seq").toLongLong();
         const QString changed = t.value("changed").toString();
-        std::fprintf(stderr,
-            "latency seq=%lld poll_gap_us=%lld status_us=%lld settings_get_us=%lld decode_us=%lld merge_us=%lld changed=%s\n",
+        // Level 1: changed reads plus every 20th poll (~5 s USB, ~0.8 s mock);
+        // level 2: every poll. No trace output unless explicitly enabled.
+        // Neither mode records payload bytes, serials, or device-unique identifiers.
+        const bool logThisPoll = traceLevel_ >= 2 || !changed.isEmpty() || sequence % 20 == 0;
+        if (logThisPoll) std::fprintf(stderr,
+            "latency seq=%lld poll_gap_us=%lld status_get_us=%lld status_decode_ns=%lld settings_get_us=%lld settings_decode_ns=%lld settings_merge_ns=%lld changed=%s\n",
             static_cast<long long>(sequence), static_cast<long long>(t.value("poll_gap_us").toLongLong()),
-            static_cast<long long>(t.value("status_us").toLongLong()),
-            static_cast<long long>(t.value("read_us").toLongLong()),
-            static_cast<long long>(t.value("decode_us").toLongLong()),
-            static_cast<long long>(t.value("merge_us").toLongLong()), changed.toUtf8().constData());
+            static_cast<long long>(t.value("status_get_us").toLongLong()),
+            static_cast<long long>(t.value("status_decode_ns").toLongLong()),
+            static_cast<long long>(t.value("settings_get_us").toLongLong()),
+            static_cast<long long>(t.value("settings_decode_ns").toLongLong()),
+            static_cast<long long>(t.value("settings_merge_ns").toLongLong()), changed.toUtf8().constData());
+        lastLoggedTraceSequence_ = logThisPoll ? sequence : 0;
         if (!changed.isEmpty()) {
             pendingTraceSequence_ = sequence;
             pendingWorkerNs_ = t.value("worker_ns").toLongLong();
         }
     });
-    connect(worker_, &DeviceWorker::pollTracePublished, this, [](qint64 sequence, qint64 durationUs) {
-        std::fprintf(stderr, "latency seq=%lld publish_us=%lld\n",
-            static_cast<long long>(sequence), static_cast<long long>(durationUs));
+    connect(worker_, &DeviceWorker::pollTracePublished, this, [this](qint64 sequence, qint64 durationUs) {
+        if (traceEnabled_ && sequence == lastLoggedTraceSequence_)
+            std::fprintf(stderr, "latency seq=%lld publish_us=%lld\n",
+                static_cast<long long>(sequence), static_cast<long long>(durationUs));
     });
     connect(worker_, &DeviceWorker::stateChanged, this, [this](const QVariantMap& v) {
         if (traceEnabled_ && pendingTraceSequence_) {

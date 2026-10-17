@@ -91,3 +91,13 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   readiness. USB cadence remains 4 Hz status, 2 Hz settings; normal hardware writes stay off.
 * The monitoring-mix high-end label is `0:100` rather than `50:50` following the owner's
   observation. The raw high stop was 0.00 on this unit; the acoustic ratio is not calibrated.
+
+## Phase 7E read-only freshness
+
+* Independent monotonic settings/status freshness is exposed to QML. After the unchanged 2 Hz
+  settings / 4 Hz status schedules miss their age windows, the GUI labels last-known values
+  delayed or stale; one successful message type cannot refresh the other. Reconnect resets both.
+  This is mock/QML tested; no real-device fault was induced.
+* Lease contention reports a specific `ControlInUse` explanation before USB I/O. Level 1
+  latency tracing is sampled; level 2 gives per-poll stages. Neither is a measured physical
+  action-to-visible latency. Real GUI hardware writes remain disabled.

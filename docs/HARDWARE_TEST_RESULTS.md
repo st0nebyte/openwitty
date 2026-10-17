@@ -1032,3 +1032,58 @@ The USB call-site audit passed without new write sites; `git diff --check` was c
 USB SET, detach, reset, DFU operation, or streaming-mode change was used in Phase 7D. The old
 Phase 7C concurrent EIO remains un-reproduced here pending specific approval for a physical
 multi-client test.
+
+### 20. Phase 7E — independent data freshness (2026-10-17)
+
+The Phase 7E software work starts from `f793ab7` on `phase7-hardware-integration` with a clean
+worktree. At inspection time a previously launched read-only GUI owned the control lease and the
+CONNECT 2 was enumerated. **No new physical fault, concurrent-client, unplug/replug or manual
+control experiment was performed for this section.** Phase 7D's physical observations and
+stage timings above remain the last real-device measurements. The `f793ab7` compact-header fix
+still has an automated layout check, but has not been reconfirmed by a new real-device screenshot.
+
+Settings and status now carry independent monotonic last-success timestamps. At the production
+500 ms settings / 250 ms status schedules, readings are **fresh** through 750/375 ms,
+**delayed** through 1500/750 ms, then **stale**. An absent reading, disconnected session or
+new connection without a successful read is **unavailable**. These boundaries allow ordinary
+timer jitter before warning and flag more than three periods without success; they are policy
+thresholds, not measured firmware limits. A good meter/status GET cannot refresh the settings
+timestamp, or vice versa. The GUI retains last-known values but places a concise, explicit
+SETTINGS/METERS DELAYED, STALE or UNAVAILABLE warning in the top banner instead of claiming
+they are current. Each warning clears only after a successful read of its own message type.
+Reconnect resets both timestamps, including when old settings values are retained during a
+failed connection attempt. The compact `Connected · read-only` header and `Unknown` real sample
+rate remain unchanged. The warning/banner and Panic Mute notice have automated geometry checks;
+their appearance on the physical screen is pending direct inspection.
+
+Mock/QML tests exercise independently failed settings and status GETs, stale-to-fresh recovery,
+reconnect reset, retained Panic Mute notice, boundary timestamps and write refusal. Lease tests
+exercise contention, explicit `ControlInUse` guidance, release on close and after process exit;
+the lease remains cooperative among current OpenWitty processes only. No physical multi-client
+test was run. Opt-in trace level 1 now samples changed settings polls plus every 20th poll
+(about five seconds in USB mode, 0.8 seconds in mock mode);
+level 2 logs every poll. Status/settings transport time and decode/merge stages are separately
+named, with nanosecond reporting for short in-process stages. Tracing is off by default and
+records no payload or identifiers. No new physical-action-to-photon latency was measured:
+internal stage timing cannot supply the physical action or actual pixel-presentation timestamp.
+For a later owner-approved test, record a time-synchronized view of the physical control and GUI
+at high frame rate, identify the first physical motion and first changed visible frame, and report
+a distribution with frame-time uncertainty alongside the monotonic internal trace.
+
+The production polling cadence stays 2 Hz settings / 4 Hz status. A hypothetical settings
+increase to 4 Hz would raise scheduled GETs from six to eight per second (+33%) and reduce
+the idealized uniform-arrival wait from 250 to 125 ms on average; these are arithmetic
+projections, **not** hardware traffic or latency measurements. The faster cadence needs a
+single-client real-device trial and owner-visible benefit before adoption. No new USB SET,
+kernel-driver detach, reset, DFU or streaming-mode operation was introduced.
+
+Final Phase 7E validation: Release **156/156 CTests**; ASan/UBSan **155/155 CTests** (that
+configuration omits packaging staging); standalone USB call-site audit **PASS**; whitespace
+check (`git diff --check`) clean. The mock/replay GUI integration test is included in both suites. Passive
+enumeration still found the CONNECT 2 and an older read-only GUI process; the new binary was
+not run against hardware while that process owned the lease. Consequently, Phase 7E freshness
+thresholds and warning presentation are software-tested, not independently real-device-tested.
+An opt-in offscreen `--mock` smoke run of the new trace emitted four sampled heartbeats:
+mock poll gaps 39.1–40.1 ms, publication calls 24–82 µs, and sub-microsecond mock decoding.
+Mock GET timing rounds to zero at microsecond resolution; these values are trace-functionality
+checks, **not** real USB or physical-control latency measurements.

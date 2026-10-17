@@ -16,6 +16,16 @@ Window {
     readonly property bool interactive: live && device.writable
     readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
     readonly property bool panicMuted: win.live && device.values["mute.allFour"] === true
+    readonly property string settingsFreshness: device.values["fresh.settings"] || "unavailable"
+    readonly property string statusFreshness: device.values["fresh.status"] || "unavailable"
+    readonly property bool dataStale: win.live && (settingsFreshness === "stale" || statusFreshness === "stale")
+    readonly property string settingsWarning: settingsFreshness === "fresh" ? ""
+        : "SETTINGS " + settingsFreshness.toUpperCase()
+    readonly property string statusWarning: statusFreshness === "fresh" ? ""
+        : "METERS " + statusFreshness.toUpperCase()
+    readonly property string freshnessWarning: !win.live || (!settingsWarning && !statusWarning) ? ""
+        : (settingsWarning && statusWarning ? settingsWarning + " · " + statusWarning
+           : settingsWarning || statusWarning) + " — last known data; not confirmed current."
     property bool showSettings: false
     property bool showWizard: false
     property bool showOnboarding: false
@@ -145,16 +155,23 @@ Window {
     Rectangle {
         id: banner
         width: parent.width; height: 28
-        color: win.uiState === "simulated" ? "#2e2813"
+        color: win.dataStale ? "#3a231f"
+             : win.freshnessWarning.length ? "#3a301d"
+             : win.uiState === "simulated" ? "#2e2813"
              : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#162633"
              : win.uiState === "error" || win.uiState === "connection-lost" ? "#2b1d1d" : "#232323"
         Text { objectName: "connectionBannerText"; anchors.verticalCenter: parent.verticalCenter; x: 10; font.pixelSize: 11
                width: Math.max(0, (panicMuteIndicator.visible ? panicMuteIndicator.x : controls.x) - x - 10)
                elide: Text.ElideRight
-               color: win.uiState === "simulated" ? Theme.sim
+               color: win.dataStale ? "#ffb4a8"
+                    : win.freshnessWarning.length ? Theme.warn
+                    : win.uiState === "simulated" ? Theme.sim
                     : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#9ec7ff"
                     : win.uiState === "error" || win.uiState === "connection-lost" ? Theme.bad : Theme.textDim
-               text: win.uiState === "simulated"
+               text: win.freshnessWarning.length
+                     ? (win.uiState === "simulated" ? "SIMULATED DEVICE" : "CONTROL LINK, READ-ONLY")
+                       + " — " + win.freshnessWarning
+                     : win.uiState === "simulated"
                      ? "SIMULATED DEVICE — no hardware is controlled; values shown are not device data."
                      : win.uiState === "real-readonly"
                      ? "CONTROL LINK, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")

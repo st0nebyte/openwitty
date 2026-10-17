@@ -88,6 +88,7 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_interface_selection.cpp tests/cpp/test_retry_policy.cpp)   # Phase 7A
     target_sources(lewitt_tests PRIVATE tests/cpp/test_replay_transport.cpp)   # Phase 7B read-only fixtures
     target_sources(lewitt_tests PRIVATE tests/cpp/test_control_lease.cpp)       # Phase 7D process ownership
+    target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)

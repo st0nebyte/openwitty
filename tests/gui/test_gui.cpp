@@ -205,6 +205,63 @@ TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {
     EXPECT_FALSE(indicator->property("visible").toBool());
 }
 
+TEST(Qml, FreshnessWarningTracksStaleRecoveryAndReconnect) {
+    app();
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* banner = root->findChild<QObject*>("connectionBannerText");
+    ASSERT_TRUE(banner);
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "fresh" &&
+                                  c.values().value("fresh.status") == "fresh"; }));
+    c.injectFault("settings-stall-repeated");  // status GETs continue to succeed
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "stale" &&
+                                  c.values().value("fresh.status") == "fresh"; }, 4000));
+    EXPECT_TRUE(banner->property("text").toString().contains("SETTINGS STALE"));
+    EXPECT_EQ(c.connection(), "Connected");
+    c.injectFault("clear");
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "fresh" &&
+                                  c.values().value("fresh.status") == "fresh"; }, 2000));
+    EXPECT_FALSE(banner->property("text").toString().contains("STALE"));
+    c.simulatePanicMute();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("mute.allFour").toBool(); }, 2000));
+    c.injectFault("status-stall-repeated");  // settings GETs continue to succeed
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.status") == "stale" &&
+                                  c.values().value("fresh.settings") == "fresh"; }, 3000));
+    EXPECT_TRUE(banner->property("text").toString().contains("METERS STALE"));
+    auto* mutedNotice = root->findChild<QObject*>("panicMuteIndicator");
+    ASSERT_TRUE(mutedNotice);
+    ASSERT_TRUE(mutedNotice->property("visible").toBool());
+    EXPECT_LE(banner->property("x").toDouble() + banner->property("width").toDouble(),
+              mutedNotice->property("x").toDouble());
+    c.injectFault("clear");
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "fresh" &&
+                                  c.values().value("fresh.status") == "fresh"; }, 2000));
+    c.injectFault("stall-repeated");  // neither stream can mask the other in the banner
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "stale" &&
+                                  c.values().value("fresh.status") == "stale"; }, 3000));
+    EXPECT_TRUE(banner->property("text").toString().contains("SETTINGS STALE"));
+    EXPECT_TRUE(banner->property("text").toString().contains("METERS STALE"));
+    c.injectFault("clear");
+    ASSERT_TRUE(waitFor([&] { return c.values().value("fresh.settings") == "fresh" &&
+                                  c.values().value("fresh.status") == "fresh"; }, 2000));
+    c.simulateUnplug();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Disconnected" &&
+                                  c.values().value("fresh.settings") == "unavailable" &&
+                                  c.values().value("fresh.status") == "unavailable"; }));
+    EXPECT_EQ(c.values().value("fresh.settings"), "unavailable");
+    EXPECT_EQ(c.values().value("fresh.status"), "unavailable");
+    c.simulateReplug();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected" &&
+                                  c.values().value("fresh.settings") == "fresh" &&
+                                  c.values().value("fresh.status") == "fresh"; }));
+}
+
 TEST(Qml, RealReadOnlyMixUsesObservedPhysicalScale) {
     app();
     QQmlEngine engine;
