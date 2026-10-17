@@ -20,6 +20,12 @@ Window {
     property bool showWizard: false
     property bool showOnboarding: false
     readonly property bool hasPending: Object.keys(device.values).some(function (k) { return k.indexOf("pending.") === 0; })
+    Connections {
+        target: device
+        function onValuesChanged() {
+            if (device.traceEnabled) Qt.callLater(device.traceQmlObserved)
+        }
+    }
 
     // Design space = the official window's proportions (720 x 373); scaled uniformly.
     Item {
@@ -54,7 +60,7 @@ Window {
             DeviceStatusIndicator { x: 262; anchors.verticalCenter: parent.verticalCenter
                 state: device.connection
                 detail: win.uiState === "simulated" ? "simulated"
-                      : win.uiState === "real-readonly" ? "real device · read-only"
+                      : win.uiState === "real-readonly" ? "control data · read-only"
                       : win.uiState === "real-writable" ? "real device"
                       : win.uiState === "connection-lost" ? "connection lost"
                       : device.backend }
@@ -151,8 +157,8 @@ Window {
                text: win.uiState === "simulated"
                      ? "SIMULATED DEVICE — no hardware is controlled; values shown are not device data."
                      : win.uiState === "real-readonly"
-                     ? "REAL DEVICE, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")
-                       + ". Showing device state; changing settings from this window is intentionally disabled."
+                     ? "CONTROL LINK, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")
+                       + ". Audio and front-panel readiness not verified."
                      : win.uiState === "real-writable"
                      ? "REAL DEVICE — individually authorized controls enabled."
                      : win.uiState === "connecting" ? "Connecting to the device…"

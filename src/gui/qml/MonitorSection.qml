@@ -19,7 +19,7 @@ Item {
         from: device.simulated ? -1 : -100; to: device.simulated ? 1 : 0
         step: device.simulated ? 0.05 : 1
         value: root.v("mon.mix", 0)
-        minLabel: "100:0"; maxLabel: device.simulated ? "0:100" : "50:50"
+        minLabel: "100:0"; maxLabel: "0:100"
         onMoved: (nv) => device.setValue("mon.mix", nv)
     }
     Text { x: 3; y: 186; horizontalAlignment: Text.AlignHCenter; width: 78; color: Theme.textDim

@@ -77,3 +77,17 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 * Sample rate shown as "Unknown" unless simulated; persistent open errors are not retried until
   the device list or permissions change.
 * `openwitty-cli read … --interface auto` (same selection as the GUI).
+
+## Phase 7D read-only reliability
+
+* Updated GUI/CLI real-control sessions use a cooperative, per-user process lease, preventing
+  competing OpenWitty GET streams; the lock releases automatically on exit. It does not govern
+  other applications, old binaries, or USB permissions. Physical concurrent EIO cause remains
+  unproven; no new multi-client device test has been performed.
+* Opt-in `OPENWITTY_TRACE_LATENCY=1` prints payload-free monotonic poll, GET, decode, publication,
+  QML-event and frame-swap timings. A read-only physical-control run measured these stages
+  (§19 of `docs/HARDWARE_TEST_RESULTS.md`); it cannot alone time an action to visible pixels.
+* Real GUI wording now reports control-data availability, not unverified audio/front-panel
+  readiness. USB cadence remains 4 Hz status, 2 Hz settings; normal hardware writes stay off.
+* The monitoring-mix high-end label is `0:100` rather than `50:50` following the owner's
+  observation. The raw high stop was 0.00 on this unit; the acoustic ratio is not calibrated.

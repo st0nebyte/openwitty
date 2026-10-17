@@ -2,7 +2,10 @@
 
 #include <QColor>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 #include "core/Policy.hpp"
 #include <algorithm>
@@ -14,6 +17,27 @@
 using namespace lewitt;
 
 namespace {
+qint64 nowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+qint64 usBetween(std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+}
+QString changedKinds(const SettingsMessage& before, const SettingsMessage& after) {
+    const auto a = before.bytes(), b = after.bytes();
+    auto differs = [&](std::size_t i, std::size_t n = 1) {
+        for (std::size_t j = 0; j < n; ++j) if (a[i + j] != b[i + j]) return true;
+        return false;
+    };
+    QStringList kinds;
+    if (differs(0, 2) || differs(10, 2)) kinds << "gain";
+    if (differs(2) || differs(12) || differs(19) || differs(22) || differs(29)) kinds << "mute";
+    if (differs(20, 2) || differs(27, 2)) kinds << "volume";
+    if (differs(35, 2)) kinds << "mix";
+    if (differs(56)) kinds << "selection";
+    return kinds.join('+');
+}
 QString stateName(ConnectionState s) {
     switch (s) {
         case ConnectionState::Disconnected: return "Disconnected";
@@ -32,7 +56,7 @@ Rgb parseHex(const QString& s) {
 }
 }  // namespace
 
-DeviceWorker::DeviceWorker() = default;
+DeviceWorker::DeviceWorker() : traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") == 1) {}
 
 void DeviceWorker::startTimer(int ms) {
     if (!timer_) {
@@ -101,8 +125,9 @@ void DeviceWorker::connectUsb() {
     if (timer_) timer_->stop();
     usbMode_ = true;
     backoffMs_ = 1000;
-    // Real hardware: read-only options (descriptor-driven interface selection, no detach, no
-    // claim, writes refused at transport level; the session policy keeps hardware writes off).
+    // Real hardware: read-only options (descriptor-driven interface selection, no explicit
+    // claim/detach, writes refused at transport level; usbfs can claim implicitly for
+    // interface-recipient GETs and the session policy keeps hardware writes off).
     adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
     intentionalDisconnect_ = false;
     lostLink_ = false;
@@ -244,6 +269,9 @@ void DeviceWorker::setSampleRate(int hz) {
 
 void DeviceWorker::poll() {
     if (!session_) return;
+    const qint64 pollStart = traceEnabled_ ? nowNs() : 0;
+    const qint64 pollGapUs = lastPollNs_ ? (pollStart - lastPollNs_) / 1000 : 0;
+    if (traceEnabled_) lastPollNs_ = pollStart;
     if (session_->state() != ConnectionState::Connected) {
         if (timer_) timer_->stop();   // no background activity while disconnected
         if (usbMode_) armRescan();    // link lost: look again with backoff
@@ -261,21 +289,45 @@ void DeviceWorker::poll() {
         put(0x1A, -22 + 10 * std::sin(phase_ * 0.8)); put(0x1C, -23 + 10 * std::sin(phase_ * 0.8 + 0.2));
         mock_->setStatusBytes(st);
     }
+    const qint64 statusStart = traceEnabled_ ? nowNs() : 0;
     auto s = session_->refreshStatus();
+    const qint64 statusUs = traceEnabled_ ? (nowNs() - statusStart) / 1000 : 0;
     if (!s) report(s);
     if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
     // merged and pending simulated edits survive. USB status remains 4 Hz; settings are 2 Hz
     // (one additional read every 500 ms, serialized with status) to keep physical controls live
     // without speculative high-rate polling. Mock retains its prior 4 Hz settings cadence.
-    if (++pollCount_ % (mock_ ? 10 : 2) == 0) refreshDeviceState();
+    const bool settingsTick = ++pollCount_ % (mock_ ? 10 : 2) == 0;
+    SettingsRefreshTiming timing;
+    QString kinds;
+    if (settingsTick) {
+        const auto before = session_->settings();
+        auto result = refreshDeviceState(traceEnabled_ ? &timing : nullptr);
+        if (result && before && session_->settings()) kinds = changedKinds(*before, *session_->settings());
+    }
+    qint64 sequence = 0;
+    if (traceEnabled_) {
+        sequence = ++traceSequence_;
+        emit pollTrace(QVariantMap{{"seq", sequence}, {"poll_gap_us", pollGapUs},
+            {"status_us", statusUs}, {"read_us", settingsTick ? usBetween(timing.started, timing.transportDone) : -1},
+            {"decode_us", settingsTick && timing.decoded != std::chrono::steady_clock::time_point{}
+                              ? usBetween(timing.transportDone, timing.decoded) : -1},
+            {"merge_us", settingsTick && timing.merged != std::chrono::steady_clock::time_point{}
+                             ? usBetween(timing.decoded, timing.merged) : -1},
+            {"worker_ns", nowNs()}, {"changed", kinds}});
+    }
+    const qint64 publishStart = traceEnabled_ ? nowNs() : 0;
     publish();
+    if (traceEnabled_) emit pollTracePublished(sequence, (nowNs() - publishStart) / 1000);
 }
 
-void DeviceWorker::refreshDeviceState() {
-    if (!session_ || session_->state() != ConnectionState::Connected) return;
-    auto s = session_->refreshSettings();
+Status DeviceWorker::refreshDeviceState(SettingsRefreshTiming* timing) {
+    if (!session_ || session_->state() != ConnectionState::Connected)
+        return makeError(Errc::Disconnected, "not connected");
+    auto s = session_->refreshSettings(timing);
     if (!s) report(s);
+    return s;
 }
 
 void DeviceWorker::setDeviceMode(bool macos) {
@@ -408,7 +460,7 @@ void DeviceWorker::publish() {
     // for verification and never grant write permission.
     v["ui.detail"] = verifying_ ? "Pending verification"
                    : uiState == "simulated" ? "Mock mode"
-                   : uiState == "real-readonly" ? "Connected read-only"
+                   : uiState == "real-readonly" ? "Control data available; read-only (audio/front panel not verified)"
                    : uiState == "real-writable" ? "Connected with authorized controls"
                    : uiState == "connection-lost" ? "Connection lost"
                    : uiState == "error" ? "Hardware error"
@@ -589,10 +641,40 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
 }
 
 DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(new DeviceWorker) {
+    traceEnabled_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") == 1;
     qRegisterMetaType<QVariantMap>("QVariantMap");
     worker_->moveToThread(&thread_);
     connect(&thread_, &QThread::finished, worker_, &QObject::deleteLater);
+    connect(worker_, &DeviceWorker::pollTrace, this, [this](const QVariantMap& t) {
+        if (!traceEnabled_) return;
+        const auto sequence = t.value("seq").toLongLong();
+        const QString changed = t.value("changed").toString();
+        std::fprintf(stderr,
+            "latency seq=%lld poll_gap_us=%lld status_us=%lld settings_get_us=%lld decode_us=%lld merge_us=%lld changed=%s\n",
+            static_cast<long long>(sequence), static_cast<long long>(t.value("poll_gap_us").toLongLong()),
+            static_cast<long long>(t.value("status_us").toLongLong()),
+            static_cast<long long>(t.value("read_us").toLongLong()),
+            static_cast<long long>(t.value("decode_us").toLongLong()),
+            static_cast<long long>(t.value("merge_us").toLongLong()), changed.toUtf8().constData());
+        if (!changed.isEmpty()) {
+            pendingTraceSequence_ = sequence;
+            pendingWorkerNs_ = t.value("worker_ns").toLongLong();
+        }
+    });
+    connect(worker_, &DeviceWorker::pollTracePublished, this, [](qint64 sequence, qint64 durationUs) {
+        std::fprintf(stderr, "latency seq=%lld publish_us=%lld\n",
+            static_cast<long long>(sequence), static_cast<long long>(durationUs));
+    });
     connect(worker_, &DeviceWorker::stateChanged, this, [this](const QVariantMap& v) {
+        if (traceEnabled_ && pendingTraceSequence_) {
+            activeTraceSequence_ = pendingTraceSequence_;
+            activeGuiNs_ = nowNs();
+            activeQmlNs_ = 0;
+            std::fprintf(stderr, "latency seq=%lld worker_to_gui_us=%lld\n",
+                static_cast<long long>(activeTraceSequence_),
+                static_cast<long long>((activeGuiNs_ - pendingWorkerNs_) / 1000));
+            pendingTraceSequence_ = 0;
+        }
         for (auto it = v.begin(); it != v.end(); ++it) {
             if (it.value().isValid()) values_[it.key()] = it.value(); else values_.remove(it.key());
         }
@@ -638,4 +720,18 @@ void DeviceController::trigger(const QString& n) {
 }
 void DeviceController::setValue(const QString& k, const QVariant& v) {
     QMetaObject::invokeMethod(worker_, "setValue", Q_ARG(QString, k), Q_ARG(QVariant, v));
+}
+void DeviceController::traceQmlObserved() {
+    if (!traceEnabled_ || !activeTraceSequence_ || activeQmlNs_) return;
+    activeQmlNs_ = nowNs();
+    std::fprintf(stderr, "latency seq=%lld gui_to_qml_event_us=%lld\n",
+        static_cast<long long>(activeTraceSequence_),
+        static_cast<long long>((activeQmlNs_ - activeGuiNs_) / 1000));
+}
+void DeviceController::traceFrameSwapped() {
+    if (!traceEnabled_ || !activeTraceSequence_) return;
+    std::fprintf(stderr, "latency seq=%lld gui_to_frame_swapped_us=%lld\n",
+        static_cast<long long>(activeTraceSequence_),
+        static_cast<long long>((nowNs() - activeGuiNs_) / 1000));
+    activeTraceSequence_ = 0;
 }

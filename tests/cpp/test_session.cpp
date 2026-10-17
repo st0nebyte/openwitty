@@ -1,5 +1,7 @@
 // Session + mock-transport behaviour. All simulated; no hardware.
 #include <gtest/gtest.h>
+#include <chrono>
+#include <thread>
 
 #include "core/DeviceSession.hpp"
 #include "transport/MockTransport.hpp"
@@ -25,6 +27,64 @@ TEST(Session, ConnectSyncsSettings) {
     EXPECT_EQ(f.session->state(), ConnectionState::Connected);
     ASSERT_TRUE(f.session->settings().has_value());
     EXPECT_DOUBLE_EQ(f.session->settings()->gainDb(0), 25.0);
+}
+
+TEST(Session, SettingsTimingSeparatesDelayedTransportFromDecodeAndNeverWrites) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->setReadHook([] { std::this_thread::sleep_for(std::chrono::milliseconds(8)); });
+    SettingsRefreshTiming timing;
+    ASSERT_TRUE(f.session->refreshSettings(&timing).ok());
+    EXPECT_LE(timing.started, timing.transportDone);
+    EXPECT_LE(timing.transportDone, timing.decoded);
+    EXPECT_LE(timing.decoded, timing.merged);
+    EXPECT_GE(timing.transportDone - timing.started, std::chrono::milliseconds(8));
+    EXPECT_TRUE(f.mock->writeLog().empty());
+}
+
+TEST(Session, FailedSettingsReadLeavesDecodeTimingUnsetAndNoWrite) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->injectFault(MockTransport::Fault::Timeout);
+    SettingsRefreshTiming timing;
+    ASSERT_FALSE(f.session->refreshSettings(&timing).ok());
+    EXPECT_LE(timing.started, timing.transportDone);
+    EXPECT_EQ(timing.decoded, std::chrono::steady_clock::time_point{});
+    EXPECT_TRUE(f.mock->writeLog().empty());
+}
+
+TEST(Session, ReconnectDoesNotReuseOldStatusAsReadinessEvidence) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    ASSERT_TRUE(f.session->status().has_value());
+    int readNumber = 0;
+    f.mock->setReadHook([&] {
+        if (++readNumber == 3) f.mock->injectFault(MockTransport::Fault::Timeout);
+    });
+    // API and settings respond; initial status GET fails. Control connection is available,
+    // but the pre-reconnect status frame must not be presented as current.
+    ASSERT_TRUE(f.session->reconnect().ok());
+    EXPECT_EQ(f.session->state(), ConnectionState::Connected);
+    EXPECT_FALSE(f.session->status().has_value());
+    ASSERT_TRUE(f.session->refreshStatus().ok());
+    EXPECT_TRUE(f.session->status().has_value());
+    EXPECT_TRUE(f.mock->writeLog().empty());
+}
+
+TEST(Session, PersistentSettingsFailuresAreNotHiddenBySuccessfulMeterReads) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    for (int i = 1; i <= DeviceSession::kMaxConsecutiveFailures; ++i) {
+        f.mock->injectFault(MockTransport::Fault::Timeout);
+        ASSERT_FALSE(f.session->refreshSettings().ok());
+        if (i < DeviceSession::kMaxConsecutiveFailures) {
+            ASSERT_TRUE(f.session->refreshStatus().ok());
+            EXPECT_EQ(f.session->state(), ConnectionState::Connected);
+        }
+    }
+    EXPECT_EQ(f.session->state(), ConnectionState::Error);
+    EXPECT_FALSE(f.mock->isOpen());
+    EXPECT_TRUE(f.mock->writeLog().empty());
 }
 
 TEST(Session, EditCommitRoundTrip) {

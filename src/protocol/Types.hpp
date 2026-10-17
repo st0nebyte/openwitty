@@ -28,6 +28,7 @@ enum class Errc {
     NotFound,
     Io,
     Cancelled,       // request aborted by the application (shutdown, user cancel)
+    ControlInUse,    // cooperative OpenWitty process lease, distinct from kernel-driver Busy
     Internal,        // bug / impossible state inside our own code
 };
 
@@ -48,6 +49,7 @@ constexpr const char* errcName(Errc c) {
         case Errc::NotFound: return "not-found";
         case Errc::Io: return "io-error";
         case Errc::Cancelled: return "cancelled";
+        case Errc::ControlInUse: return "control-in-use";
         case Errc::Internal: return "internal-error";
     }
     return "unknown";

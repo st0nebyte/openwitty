@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
+#include <optional>
 
+#include "ControlLease.hpp"
 #include "IDeviceTransport.hpp"
 
 struct libusb_context;
@@ -20,8 +22,9 @@ enum class MemRequest { Uac2Mem, Uac1Mem };
 // How the control request is addressed. Only `InterfaceRecipient` has a known-good
 // shape (it is what both official apps send). The others are experiments.
 enum class AccessMethod {
-    InterfaceRecipient,   // bmRequestType 0xA1/0x21, no claim, no detach (default). On a kernel-bound
-                          // interface usbfs answers EBUSY (verified in devio.c: checkintf->claimintf).
+    InterfaceRecipient,   // bmRequestType 0xA1/0x21, no *explicit* claim or detach. Linux usbfs
+                          // implicitly claims an unbound interface on first class GET; another
+                          // process cannot use that interface until the handle closes.
     DeviceRecipient,      // bmRequestType 0xA0/0x20: usbfs skips the claim check (verified), but whether
                           // the firmware accepts a class request addressed to the device is UNKNOWN.
     DetachAndClaim,       // DISRUPTIVE: detaches snd-usb-audio (sound card disappears), claims, reattaches.
@@ -64,9 +67,9 @@ inline UsbOptions readOnlyHardwareOptions() {
     return o;
 }
 
-// libusb transport. Default behaviour issues control transfers WITHOUT
-// claiming or detaching anything: if the kernel driver owns the interface
-// the transfer fails (usbfs refuses) and an Errc::Busy is reported.
+// libusb transport. No explicit claim or detachment in the default path; usbfs may implicitly
+// claim the selected interface for this handle. A cooperative per-user lease keeps two OpenWitty
+// processes from competing for it. It does not coordinate unrelated software.
 class UsbTransport final : public IDeviceTransport {
 public:
     explicit UsbTransport(UsbOptions o = {});
@@ -94,6 +97,7 @@ private:
     int interface_{-1};
     bool claimed_{false};
     bool detached_{false};
+    std::optional<ControlLease> lease_;
 };
 
 }  // namespace lewitt

@@ -26,8 +26,8 @@
 // AudioControl interface). Hardware session 2026-10-14 found the AudioControl interface (0) fails
 // with an IO error while the kernel driver owns it; an unbound vendor-specific interface (3 on the
 // CONNECT 2) answers read-only GETs instead (docs/USB_ACCESS.md §3b). This never claims or detaches
-// anything regardless of the interface number — same no-claim GET-only behaviour `probe` already
-// uses. Never pass the DFU interface (4 on the CONNECT 2) here beyond a one-off confirmatory check.
+// anything explicitly regardless of interface number. usbfs can still claim implicitly for an
+// interface-recipient GET. Never pass the DFU interface (4 on the tested CONNECT 2) here.
 #ifdef LEWITT_HAVE_USB
 #include <libusb.h>
 #endif
@@ -36,12 +36,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "core/DeviceManager.hpp"
 #include "core/DeviceSession.hpp"
 #include "transport/MockTransport.hpp"
+#include "transport/ControlLease.hpp"
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 #include "lewitt/version.hpp"
@@ -72,6 +74,7 @@ int exitCodeFor(Errc c) {
     switch (c) {
         case Errc::AccessDenied: return 3;
         case Errc::Busy: return 4;
+        case Errc::ControlInUse: return 4;
         case Errc::Stall: return 5;
         case Errc::Timeout: return 6;
         case Errc::Disconnected: case Errc::NotFound: return 7;
@@ -408,6 +411,14 @@ int cmdProbe(bool) {
 // Read-only experiment matrix (GET of the 0x0A handshake). Dry run unless --execute.
 int cmdProbe(bool execute) {
     struct Variant { const char* what; std::uint8_t bm; int ifnum; };
+    // Dry-run discovery is passive. Executed control GETs share the same cooperative owner
+    // as the normal CLI and GUI transport; unrelated clients are not covered by this lease.
+    std::optional<ControlLease> lease;
+    if (execute) {
+        auto acquired = ControlLease::acquireForCurrentSession();
+        if (!acquired) { printError(acquired.error(), "probe"); return exitCodeFor(acquired.error().code); }
+        lease.emplace(std::move(acquired.value()));
+    }
     libusb_context* ctx = nullptr;
     if (libusb_init(&ctx) != 0) return 1;
     libusb_device** list = nullptr;

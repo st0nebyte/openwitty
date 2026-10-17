@@ -71,6 +71,30 @@ by a mock unplug test but not a second physical unplug. The GUI's control connec
 before the device's flashing/front-panel startup finished; audio readiness was not proven.
 Hardware unknown-selection states and precise display-latency measurements remain open.
 
+## Phase 7D addendum (read-only reliability work, 2026-10-17)
+
+Source review found independent libusb handles across GUI/CLI processes and no cross-process
+serialization. A cooperative, per-user `flock` lease now protects normal USB control sessions
+and executed CLI probes; it fails fast when another updated OpenWitty process owns control and
+releases on close/process exit. It cannot coordinate with third-party clients or old binaries.
+The precise source of Phase 7C's concurrent EIO remains unproven without an approved controlled
+multi-client read; no such Phase 7D hardware experiment has been run yet.
+
+The read-only banner now states “control link” and disclaims unobserved audio/front-panel
+readiness. `OPENWITTY_TRACE_LATENCY=1` enables payload-free monotonic stage measurements for
+poll, GET, decode/merge, GUI delivery, QML event and frame swap. A new single-client read-only GUI
+run measured ~250 ms status-poll spacing, ~500 ms settings cadence, ~2.6–2.9 ms status GET,
+~4 ms settings GET, and ~0.86–2.29 ms GUI-publication-to-frame-swap on observed control changes.
+This does not supply a physical action timestamp, so precise physical-to-visible latency remains
+pending. Poll rates stay 4/2 Hz.
+The owner's mix-endpoint observation corrected the real display's maximum label from `50:50` to
+`0:100`; the owner saw `50:50` at a physical halfway position and confirmed that the headphone
+slider stayed fixed. The acoustic ratio and mapping across firmware versions remain unverified.
+All real GUI writes remain disabled.
+Persistent settings-read failure can no longer be masked by successful meter reads: after three
+unresponsive settings refreshes the session enters Error and reconnects, and old status frames are dropped
+at reconnect. This transition is mock-tested; no hardware fault was induced.
+
 ## 1. Existing architectural readiness
 
 | Component | Real-hardware ready? | Notes |

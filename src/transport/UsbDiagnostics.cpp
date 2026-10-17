@@ -153,6 +153,9 @@ std::string suggestionFor(const Error& e) {
                    "permissions are not the cause and cannot fix it. Options: try "
                    "`--method device-recipient` (read-only experiment), or see docs/USB_ACCESS.md for the "
                    "kernel-side alternative. Do NOT detach the driver unless you accept losing audio.";
+        case Errc::ControlInUse:
+            return "Another OpenWitty GUI or CLI process owns the per-user control lease. Close it or wait "
+                   "for it to exit; this is not a USB permission problem. OpenWitty will retry read-only.";
         case Errc::Stall:
             return "The device rejected the request (EPIPE/stall). The link is fine and the device is still "
                    "connected: the request variant, recipient or wValue is probably not what this firmware "

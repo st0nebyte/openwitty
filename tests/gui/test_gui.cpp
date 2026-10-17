@@ -213,7 +213,7 @@ TEST(Qml, RealReadOnlyMixUsesObservedPhysicalScale) {
         EXPECT_FALSE(knob->property("enabled").toBool());
         EXPECT_DOUBLE_EQ(knob->property("from").toDouble(), -100.0);
         EXPECT_DOUBLE_EQ(knob->property("to").toDouble(), 0.0);
-        EXPECT_EQ(knob->property("maxLabel").toString(), "50:50");
+        EXPECT_EQ(knob->property("maxLabel").toString(), "0:100");
         return knob->property("frac").toDouble();
     };
     EXPECT_DOUBLE_EQ(fractionAt(-100.0), 0.0);

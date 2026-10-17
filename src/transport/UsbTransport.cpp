@@ -43,9 +43,13 @@ std::vector<DeviceInfo> UsbTransport::enumerate() {
 
 Status UsbTransport::open() {
     if (handle_) return okStatus();
-    if (int rc = libusb_init(&ctx_); rc != 0) return mapErr(rc, "libusb_init");
+    auto lease = ControlLease::acquireForCurrentSession();
+    if (!lease) return lease.error();
+    lease_.emplace(std::move(lease.value()));
+    if (int rc = libusb_init(&ctx_); rc != 0) { lease_.reset(); return mapErr(rc, "libusb_init"); }
     libusb_device** list = nullptr;
     ssize_t n = libusb_get_device_list(ctx_, &list);
+    if (n < 0) { close(); return mapErr(static_cast<int>(n), "libusb_get_device_list"); }
     libusb_device* found = nullptr;
     libusb_device_descriptor fd{};
     for (ssize_t i = 0; i < n && !found; ++i) {
@@ -58,12 +62,12 @@ Status UsbTransport::open() {
     }
     if (!found) {
         if (n >= 0) libusb_free_device_list(list, 1);
-        libusb_exit(ctx_); ctx_ = nullptr;
+        close();
         return makeError(Errc::NotFound, "no LEWITT CONNECT 2 found");
     }
     int rc = libusb_open(found, &handle_);
     libusb_free_device_list(list, 1);
-    if (rc != 0) { libusb_exit(ctx_); ctx_ = nullptr; handle_ = nullptr; return mapErr(rc, "libusb_open"); }
+    if (rc != 0) { close(); return mapErr(rc, "libusb_open"); }
     info_ = DeviceInfo{fd.idVendor, fd.idProduct, "", "", "usb"};
     unsigned char buf[128];
     // Use the returned length: never rely on the buffer being NUL-terminated.
@@ -132,6 +136,7 @@ void UsbTransport::close() {
     claimed_ = detached_ = false;
     handle_ = nullptr;
     if (ctx_) { libusb_exit(ctx_); ctx_ = nullptr; }
+    lease_.reset();
 }
 
 Result<Bytes> UsbTransport::read(MessageId id) {

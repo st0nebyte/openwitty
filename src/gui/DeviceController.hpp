@@ -39,6 +39,8 @@ public slots:
     void simulatePanicMute();                                     // simulation only
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
+    void pollTrace(const QVariantMap& stages);       // opt-in, monotonic timestamps only
+    void pollTracePublished(qint64 sequence, qint64 durationUs);
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
     void errorOccurred(const QString& message);
 public:
@@ -48,7 +50,7 @@ private:
     void publish();
     void armRescan();
     void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t);
-    void refreshDeviceState();
+    lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
     void report(const lewitt::Status& s);
     void reportWrite(const lewitt::WriteResult& r);
     void startTimer(int ms);
@@ -59,6 +61,9 @@ private:
     double phase_{0};
     int sampleRate_{48000};
     int pollCount_{0};
+    bool traceEnabled_{false};
+    qint64 lastPollNs_{0};
+    qint64 traceSequence_{0};
     QSet<QString> pendingKeys_;
     lewitt::SerializedTransport* serialized_{nullptr};
     // cancelAll() runs on the GUI thread; the pointer is only dereferenced under this lock and
@@ -98,6 +103,7 @@ class DeviceController : public QObject {
     Q_PROPERTY(bool simulated READ simulated NOTIFY connectionChanged)
     Q_PROPERTY(QVariantMap values READ values NOTIFY valuesChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
+    Q_PROPERTY(bool traceEnabled READ traceEnabled CONSTANT)
 public:
     explicit DeviceController(QObject* parent = nullptr);
     ~DeviceController() override;
@@ -107,6 +113,7 @@ public:
     bool simulated() const { return simulated_; }
     QVariantMap values() const { return values_; }
     QString lastError() const { return lastError_; }
+    bool traceEnabled() const { return traceEnabled_; }
 
     Q_INVOKABLE void connectMock();
     Q_INVOKABLE void connectUsb();
@@ -124,6 +131,8 @@ public:
     Q_INVOKABLE void simulatePanicMute();
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
+    Q_INVOKABLE void traceQmlObserved();  // opt-in measurement marker; never touches hardware
+    void traceFrameSwapped();
 signals:
     void connectionChanged();
     void valuesChanged();
@@ -134,4 +143,7 @@ private:
     QString connection_{"Disconnected"}, backend_, lastError_;
     bool writable_{false}, simulated_{false};
     QVariantMap values_;
+    bool traceEnabled_{false};
+    qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};
+    qint64 activeTraceSequence_{0}, activeGuiNs_{0}, activeQmlNs_{0};
 };

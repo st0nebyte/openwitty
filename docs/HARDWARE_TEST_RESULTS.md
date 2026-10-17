@@ -901,7 +901,7 @@ respectively, again with headphone volume unchanged. These are observed position
 not a claim about every firmware or a newly authorized SET range.
 
 The defect was the GUI's `−1…+1` mix-knob drawing range, which clamped most real values to an
-endpoint. The real read-only display now uses the observed `−100…0` span, with 100:0 and 50:50
+endpoint. The real read-only display now uses the observed `−100…0` span, with 100:0 and 0:100
 endpoint labels; mock mode retains its old `−1…+1` behavior and hardware writes remain disabled.
 In the reopened real GUI, the owner confirmed that the knob reached the correct end and moved
 through intermediate positions while the headphone slider stayed fixed. The owner estimated mix
@@ -955,3 +955,75 @@ corrected real GUI exited cleanly; its trace contained 9 vendor GETs, zero SETs,
 The screenshot showed a real read-only connection, `Unknown` sample rate, and current state
 consistent with a subsequent CLI read. The post-reconnect stale-notice correction itself remains
 mock-tested, not physically unplugged a second time.
+
+### 19. Phase 7D source investigation and read-only stage measurement (2026-10-17)
+
+The Phase 7C record is the hardware evidence: GUI-only reads worked; CLI-only reads worked;
+two CLI settings GETs while the GUI held the device returned `LIBUSB_ERROR_IO`. Phase 7D has
+**not** repeated that multi-client experiment; owner approval was requested before any new
+physical concurrent GET. Source inspection found separate libusb contexts/handles in each process
+and in-process-only `SerializedTransport` serialization. On this running system, passive sysfs
+inspection showed usbfs bound to vendor interface 3 while the older GUI was open. Linux usbfs can
+implicitly claim an interface-recipient control target; this is a plausible contribution to
+contention, **not** proof that the firmware supports only one client or an explanation of EIO's
+exact origin. No driver was detached and no hardware write occurred in this investigation.
+
+Phase 7D adds a private per-user, nonblocking `flock` lease before normal OpenWitty control
+sessions and executed CLI probes. It is a cooperative safeguard among new OpenWitty processes,
+not a USB permission rule or protection against unrelated clients/older OpenWitty binaries.
+Mock/process tests cover exclusivity and automatic release after owner exit. The older GUI found
+at the start of the phase did not acquire this new lock; with owner approval it was closed and
+replaced by the new read-only traced build. The GUI's banner now says **control link** and explicitly does not
+assert audio or front-panel readiness; no reliable front-panel-ready bit has been identified in
+the decoded API/status/settings data. This wording is code-tested, not yet visually rechecked on
+the physical device.
+
+The owner later noticed that the corrected mix knob's maximum was mislabeled `50:50` and judged
+the physical high stop to correspond to playback-only. The endpoint label is corrected to
+`0:100` in read-only display and mock QML tests; the low/high raw reads remain −100.00/0.00.
+The acoustic ratio and intermediate mixing law were **not** measured, so the label reflects the
+owner's interpretation, not a calibrated firmware percentage. No setter range was changed.
+
+An opt-in `OPENWITTY_TRACE_LATENCY=1` trace now records monotonic poll spacing, status/settings
+GET duration, decode/merge time, worker-to-GUI delivery, QML-event observation, and frame swap.
+It logs no payloads or identifiers. None of these timestamps alone marks the instant of a
+physical wheel/button action or photon emission; physical-to-visible latency still needs an
+owner-coordinated external action timestamp. The conservative 4 Hz status / 2 Hz settings cadence
+was kept.
+
+In that new single-client GUI session, the owner physically selected speaker then headphone,
+changed mic gain, selected and muted speaker, and adjusted monitoring mix. The trace classified
+the expected selected-channel, gain, mute, and mix settings changes; the owner reported that the
+mic gain and speaker mute displays followed. Eight successive mix changes appeared at the
+half-second settings cadence, without a classified headphone-volume change. The owner confirmed
+the headphone slider stayed fixed and the GUI showed `50:50` at the physical halfway mix position;
+motion looked smoother than Phase 7C but not continuously smooth. These are new Phase 7D observations;
+no CLI GET was run concurrently and no software setting was changed.
+
+Representative monotonic trace ranges from those changed polls: poll spacing approximately
+249.8–250.8 ms after startup; status GET 2.6–2.9 ms; settings GET 3.98–4.02 ms; worker-to-GUI
+delivery 61–73 µs; GUI-to-QML callback 0.30–1.42 ms; GUI publication to next frame swap
+0.86–2.29 ms. Decode/merge were below the trace's 1 µs display resolution in these samples.
+These are **backend and display-pipeline stages**, not action-to-pixel latency. Physical action
+could occur anywhere between 500 ms settings reads, and firmware/front-panel behavior may add
+delay. The running GUI process showed approximately 0.1% cumulative CPU and 174–176 MiB RSS
+after startup. `snd-usb-audio` remained bound to the audio interface. No transport error was
+reported during these observed transitions.
+
+Source review also found that a good 4 Hz meter/status read could reset the generic failure
+counter between bad 2 Hz settings reads. A separate consecutive-settings failure counter now
+declares an error/reconnect after three unresponsive settings refreshes (timeout/I/O/short or
+malformed) even if status keeps working; stalls, busy and permission errors still do not escalate;
+old status frames are cleared at reconnect. This is covered by mock tests, **not** a deliberately
+induced hardware failure. After the owner's later computer restart, a new usbfs node and Wayland
+session were observed; the GUI from the timing run was no longer running. The new read-only GUI
+was launched again with user-visible confirmation pending. No unplug/replug experiment was
+performed in Phase 7D.
+
+The final Release build passed **149/149 CTests**, including the GUI integration suite, lease
+lifecycle/cross-process tests, timing tests, and the interleaved-settings-failure regression.
+The ASan/UBSan configuration passed **148/148** (its configuration omits packaging staging).
+The USB call-site audit passed without new write sites; `git diff --check` was clean. No software
+USB SET, detach, reset, DFU operation, or streaming-mode change was used in Phase 7D. The old
+Phase 7C concurrent EIO remains un-reproduced here pending specific approval for a physical
+multi-client test.

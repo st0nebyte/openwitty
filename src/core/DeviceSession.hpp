@@ -1,6 +1,7 @@
 // Device session: owns a transport, tracks state, enforces the write policy.
 // Qt-free; synchronous (callers run it on a worker thread).
 #pragma once
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -38,6 +39,11 @@ struct DeviceCapabilities {
     bool simulated{false};
 };
 
+// Optional monotonic stage markers for a settings GET. No payload or identifier is recorded.
+struct SettingsRefreshTiming {
+    std::chrono::steady_clock::time_point started{}, transportDone{}, decoded{}, merged{};
+};
+
 class DeviceSession {
 public:
     // Consecutive timeouts / I/O failures before the link is declared dead (state Error,
@@ -63,7 +69,7 @@ public:
     const DeviceCapabilities& capabilities() const { return caps_; }
     int consecutiveFailures() const { return failures_; }
     bool needsReconnect() const { return state_ == ConnectionState::Error || state_ == ConnectionState::Disconnected; }
-    Status refreshSettings();  // read settings -> current & pending
+    Status refreshSettings(SettingsRefreshTiming* timing = nullptr);  // read settings -> current & pending
     Status refreshStatus();    // read status (meters)
 
     const std::optional<SettingsMessage>& settings() const { return current_; }
@@ -110,6 +116,7 @@ private:
     std::optional<ApiVersionMessage> api_;
     DeviceCapabilities caps_;
     int failures_{0};
+    int settingsFailures_{0};  // status success must not hide repeated settings-read failure
     Status handshake();       // open + api version + capability checks (no settings)
     void noteResult(const Status& s);
     std::uint32_t sampleRate_{0};

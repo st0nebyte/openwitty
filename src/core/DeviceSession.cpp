@@ -7,6 +7,10 @@
 namespace lewitt {
 
 namespace {
+bool indicatesUnresponsiveSettings(Errc code) {
+    return code == Errc::Timeout || code == Errc::Io ||
+           code == Errc::ShortTransfer || code == Errc::Malformed;
+}
 std::vector<std::size_t> diffOffsets(const SettingsMessage& a, const SettingsMessage& b) {
     std::vector<std::size_t> out;
     auto ab = a.bytes(), bb = b.bytes();
@@ -89,7 +93,8 @@ Status DeviceSession::handshake() {
 
 Status DeviceSession::connect() {
     state_ = ConnectionState::Connecting;
-    failures_ = 0;
+    failures_ = settingsFailures_ = 0;
+    status_.reset();  // an earlier status frame is not evidence of this connection's readiness
     if (auto s = handshake(); !s) {
         api_.reset();
         auto e = s.error();
@@ -110,7 +115,8 @@ Status DeviceSession::reconnect() {
     auto oldCurrent = current_;
     transport_->close();
     state_ = ConnectionState::Connecting;
-    failures_ = 0;
+    failures_ = settingsFailures_ = 0;
+    status_.reset();  // do not publish pre-disconnect meter/status data as current
     if (auto s = handshake(); !s) {
         auto e = s.error();
         state_ = (e.code == Errc::Disconnected || e.code == Errc::NotFound) ? ConnectionState::Disconnected
@@ -130,15 +136,42 @@ Status DeviceSession::reconnect() {
 void DeviceSession::disconnect() {
     transport_->close();
     state_ = ConnectionState::Disconnected;
-    current_.reset(); pending_.reset(); status_.reset(); api_.reset(); caps_ = {}; failures_ = 0;
+    current_.reset(); pending_.reset(); status_.reset(); api_.reset(); caps_ = {};
+    failures_ = settingsFailures_ = 0;
 }
 
-Status DeviceSession::refreshSettings() {
+Status DeviceSession::refreshSettings(SettingsRefreshTiming* timing) {
+    if (timing) { *timing = {}; timing->started = std::chrono::steady_clock::now(); }
     auto r = transport_->read(MessageId::Settings);
-    if (!r) { auto st = fail(r.error()); noteResult(st); return st; }
+    if (timing) timing->transportDone = std::chrono::steady_clock::now();
+    if (!r) {
+        auto st = fail(r.error());
+        noteResult(st);
+        settingsFailures_ = indicatesUnresponsiveSettings(st.error().code) ? settingsFailures_ + 1 : 0;
+        if (state_ == ConnectionState::Connected && settingsFailures_ >= kMaxConsecutiveFailures) {
+            state_ = ConnectionState::Error;
+            lastError_ = makeError(st.error().code, "settings not refreshing after " +
+                std::to_string(settingsFailures_) + " consecutive attempts; reconnect required");
+            transport_->close();
+        }
+        return st;
+    }
     auto m = SettingsMessage::fromBytes(r.value());
-    if (!m) { auto st = fail(m.error()); noteResult(st); return st; }
+    if (timing) timing->decoded = std::chrono::steady_clock::now();
+    if (!m) {
+        auto st = fail(m.error());
+        noteResult(st);
+        settingsFailures_ = indicatesUnresponsiveSettings(st.error().code) ? settingsFailures_ + 1 : 0;
+        if (state_ == ConnectionState::Connected && settingsFailures_ >= kMaxConsecutiveFailures) {
+            state_ = ConnectionState::Error;
+            lastError_ = makeError(st.error().code, "settings not decoding after " +
+                std::to_string(settingsFailures_) + " consecutive attempts; reconnect required");
+            transport_->close();
+        }
+        return st;
+    }
     failures_ = 0;
+    settingsFailures_ = 0;
     // Same merge as the original app: user edits survive, fields that changed on the
     // device (hardware button, other software) win. Unedited pending state is dropped.
     if (pending_ && current_) {
@@ -149,6 +182,7 @@ Status DeviceSession::refreshSettings() {
         pending_.reset();
     }
     current_ = m.value();
+    if (timing) timing->merged = std::chrono::steady_clock::now();
     return okStatus();
 }
 

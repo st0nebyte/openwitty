@@ -42,7 +42,7 @@ needs the device. Nothing here is hardware-verified.
 
 | Option | Works without disturbing audio? | Needs root? | Evidence | Verdict |
 |---|---|---|---|---|
-| **A. libusb, interface recipient, no claim** (default `--method interface`) | Does no harm, but **fails** while the AC interface is bound and in use (F2) — hardware-verified `LIBUSB_ERROR_IO`, not the predicted `EBUSY` | udev rule for the node (F9) | [src]; [sys] 2026-10-14 | **confirmed non-working**; useful to *prove* the failure mode |
+| **A. libusb, interface recipient, no explicit claim** (default `--method interface`) | Does no harm, but **fails** while the AC interface is bound and in use (F2) — hardware-verified `LIBUSB_ERROR_IO`, not the predicted `EBUSY` | udev rule for the node (F9) | [src]; [sys] 2026-10-14 | **confirmed non-working**; useful to *prove* the failure mode |
 | **B. libusb, device recipient** (`--method device-recipient`) | Not blocked by usbfs (F3). Firmware **actively rejects** it (`EPIPE`/stall) | udev rule (F9) | usbfs [src]; firmware [sys] 2026-10-14 | **confirmed non-working**; device says no |
 | **C. Unbound interface** (probe lists them) | Claimable without touching audio; the CONNECT 2 exposes one (vendor-specific, interface 3, 0 endpoints) in addition to a DFU interface (4) | udev rule | [sys] 2026-10-14: hardware-verified GET success on interface 3, no audio disruption | **confirmed working** — current recommended path |
 | **D. ALSA mixer / `amixer`** | n/a — MEM is not reachable (F4) | no | [src] | **not possible** |
@@ -82,7 +82,7 @@ First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what c
   exposes interface 3, class `ff/f0/00` (vendor-specific, 0 endpoints), unbound to any driver. A
   read-only GET (`req=0x03`, `wValue=0x000A`, `wIndex=0x3303`) addressed to it succeeded: 64 bytes
   back, byte0/1 matching the documented API-handshake shape (major=1), with additional structured
-  data in bytes 2–63 including the device's own serial number in ASCII. No claim, no driver
+  data in bytes 2–63 including the device's own serial number in ASCII. No explicit claim, no driver
   conflict, no audio disruption (card stayed enumerated throughout; no kernel teardown messages).
 * **Option A (interface 0, kernel-owned) fails, but not the way F2 predicted.** Both GET variants
   (`req=0x03` and `req=0x85`) returned `LIBUSB_ERROR_IO`, not `EBUSY`. `dmesg` showed only an
@@ -108,7 +108,7 @@ First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what c
 `docs/HARDWARE_TEST_RESULTS.md` §13. A real `bm=0x21 req=0x03` MEM SET (the write counterpart of the
 already-verified GET) against interface 3, changing exactly one byte of the full 128-byte settings
 struct (LED brightness), was accepted by the device and produced a visible, confirmed effect — then
-reversed. No driver conflict, no claim needed, no audio disruption (card present throughout). This is
+reversed. No driver conflict, no explicit claim needed, no audio disruption (card present throughout). This is
 the first real-hardware write on this project and confirms option C is not read-only: the same
 userspace, no-kernel-patch access path works for SET as well as GET, at least for this one field.
 
@@ -161,9 +161,28 @@ chooses the control interface from the descriptors, as a pure function:
 4. Exactly one candidate must remain (zero → `NotFound` with the list of interfaces and reasons;
    several → refuses to guess).
 5. The candidate must be *known* to be unbound (`libusb_kernel_driver_active == 0`, a read-only
-   query); bound or unknown → `Busy`. No detach, no claim, no reset.
+   query); bound or unknown → `Busy`. No detach, no explicit claim, no reset.
 
 An explicit `--interface N` (CLI experiments) is still honoured, except that an interface whose
 descriptor class is `0xFE` is refused. `openwitty-cli read … --interface auto` runs the same
 selection as the GUI, so the selection can be checked read-only on the next hardware session.
 Interface numbers are never assumed (3 is what the descriptors yield on the tested unit).
+
+## 3e. Phase 7D OpenWitty process coordination (2026-10-17)
+
+Phase 7C saw two CLI settings GETs fail with `LIBUSB_ERROR_IO` while the GUI was open; both
+single-client modes worked. Each process has its own libusb context/handle and
+`SerializedTransport` only serializes within one process. With the old GUI open, sysfs showed
+`usbfs` bound to vendor interface 3. Linux usbfs can implicitly claim an interface for
+interface-recipient control transfers; see [kernel devio.c](https://github.com/torvalds/linux/blob/master/drivers/usb/core/devio.c).
+This could contribute to contention, but does not establish the exact EIO cause or a firmware
+one-client rule. A new controlled multi-client hardware test has not been run in Phase 7D.
+
+`ControlLease` now acquires a nonblocking `flock` on a private file in `XDG_RUNTIME_DIR` (or
+`/run/user/<uid>`) **before** a real `UsbTransport` opens. Executed CLI probes share the lock;
+passive enumeration/dry runs do not need it. A held lock reports `ControlInUse` and performs no
+USB control I/O. The file remains on disk; the kernel releases ownership when the fd closes or
+the process exits, so a stale file alone never blocks reconnection. A non-private/misowned
+runtime directory or lock file fails closed. This is process coordination, **not** a udev/ACL
+permission fix, and unrelated software or older OpenWitty versions will not honor it. No daemon,
+driver detachment, reset, DFU access, or hardware write was added.

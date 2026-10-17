@@ -56,6 +56,7 @@ add_library(lewitt_core STATIC
     src/protocol/Messages.cpp
     src/transport/MockTransport.cpp
     src/transport/ReplayTransport.cpp
+    src/transport/ControlLease.cpp
     ${LEWITT_USB_SOURCES}
     src/transport/UsbErrors.cpp
     src/transport/InterfaceSelection.cpp
@@ -86,6 +87,7 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_hardware_scope.cpp)   # Phase 6E
     target_sources(lewitt_tests PRIVATE tests/cpp/test_interface_selection.cpp tests/cpp/test_retry_policy.cpp)   # Phase 7A
     target_sources(lewitt_tests PRIVATE tests/cpp/test_replay_transport.cpp)   # Phase 7B read-only fixtures
+    target_sources(lewitt_tests PRIVATE tests/cpp/test_control_lease.cpp)       # Phase 7D process ownership
     target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)

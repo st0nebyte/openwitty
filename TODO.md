@@ -149,3 +149,24 @@
   presentation, hardware unknown-selection behavior, and other unverified fields.
 - Evidence badges for unverified fields remain deferred; prefer a compact advanced-details panel.
 - Re-run packaging checks (`packaging_staging`) — unchanged by 7A but not re-verified on `.deb`.
+
+## Phase 7D (read-only reliability)
+
+- Cooperative per-user OpenWitty control lease and opt-in monotonic latency trace implemented;
+  validation details in `docs/HARDWARE_TEST_RESULTS.md` §19. No polling-rate increase or new
+  hardware write path.
+- Pending owner-approved controlled concurrent GET to characterize Phase 7C EIO; compare with
+  lease behavior using the newly built GUI. Do not treat the lock as a device-permission fix or
+  third-party exclusion mechanism.
+- ✔ Single-client real GUI stage-timing run covered physical gain, mute, selection, and mix;
+  details in `docs/HARDWARE_TEST_RESULTS.md` §19. Still pending an external physical-action marker
+  to measure end-to-end action-to-visible latency; current trace cannot infer it.
+- Find independent evidence of audio/front-panel readiness if exposed; otherwise keep control
+  readiness explicitly separate. Do not invent a status bit.
+- Verify the corrected mix `0:100` endpoint label by listening if safe; intermediate acoustic
+  ratio and firmware-general range remain unknown. Never broaden the write setter from this read.
+- ✔ Separate settings-failure threshold prevents good meter reads from hiding a stale settings
+  stream; reconnect clears old status frames. Mock-tested, hardware-fault validation pending.
+- Single non-escalating settings errors (stall/busy/permission) are reported through `lastError`
+  but are not yet surfaced in the connected banner as a freshness warning; add a concise stale
+  data indicator before treating displayed settings as reliably live under such faults.
