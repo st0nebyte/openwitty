@@ -178,6 +178,37 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     root.reset();
 }
 
+TEST(Qml, EightMetersBindToObservedPresentationAndClearOnDisconnect) {
+    app();
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    const char* names[] = {"meterMic", "meterInstrument", "meterLoopback", "meterSpeaker", "meterHeadphone"};
+    const int indices[] = {0, 1, 2, 4, 6};
+    for (int i = 0; i < 5; ++i) {
+        auto* meter = root->findChild<QObject*>(names[i]);
+        ASSERT_TRUE(meter) << names[i];
+        EXPECT_EQ(meter->property("meterL").value<QObject*>(), c.meters()->channel(indices[i]));
+        if (i >= 2) EXPECT_EQ(meter->property("meterR").value<QObject*>(), c.meters()->channel(indices[i] + 1));
+    }
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.meters()->freshness() == "fresh" &&
+        static_cast<MeterChannel*>(c.meters()->channel(7))->valid(); }));
+    for (int i = 0; i < 8; ++i) EXPECT_TRUE(static_cast<MeterChannel*>(c.meters()->channel(i))->valid());
+    c.disconnectDevice();
+    ASSERT_TRUE(waitFor([&] { return c.meters()->freshness() == "unavailable"; }));
+    for (int i = 0; i < 8; ++i) {
+        auto* channel = static_cast<MeterChannel*>(c.meters()->channel(i));
+        EXPECT_FALSE(channel->valid());
+        EXPECT_DOUBLE_EQ(channel->displayDb(), -60);
+    }
+    EXPECT_FALSE(c.meters()->needsFrames());
+}
+
 TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {
     app();
     DeviceController c;

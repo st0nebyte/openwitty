@@ -1,7 +1,9 @@
 # Phase 7G plan — smooth, honest, read-only audio meters
 
-Status: **planning only** (Phase 7F). Do not enable hardware writes, change the production
-poll schedule, capture audio, or run a high-rate GET experiment from this document alone.
+Status: **initial implementation complete; hardware visual review in progress** (Phase 7G).
+Do not enable hardware writes, change the production poll schedule, capture audio, or run a
+high-rate GET experiment from this document alone. The sections below preserve the original
+Phase 7F design rationale; implementation details follow at the end.
 
 ## Evidence and current pipeline
 
@@ -114,3 +116,43 @@ frames with no benefit, GET latency/errors rise, audio glitches/XRUNs appear, fr
 CPU/frame-time gates fail, or the display suggests peaks the sampled data cannot support.
 Before any physical signal experiment, concurrent-client test, or unplug/replug, request the
 owner's explicit approval and agree on the exact safe actions.
+
+## Phase 7G first implementation (2026-10-17)
+
+`DeviceWorker` now emits a monotonic timestamp with the eight decoded values after each
+successful status read. It emits no new sample for a failed GET. The existing serialized
+4 Hz real status / 2 Hz settings schedules and the single-owner lease are unchanged; mock
+status remains 25 Hz. The old `values` keys remain available for diagnostics, but the bars
+bind to eight persistent `MeterChannel` objects instead of whole-map state changes.
+
+`MeterDynamics` is Qt-free and deterministic under injected steady-clock timestamps. Each
+channel keeps the last **observed** dB, a presentation target/envelope, an observed-sample
+peak marker, and validity. QML runs one `FrameAnimation` only while the visible, active,
+connected window has moving envelopes. No frame callback performs I/O. A successful status
+sample can start motion; no predicted future samples or random motion are generated.
+
+Initial visual parameters: 20 ms exponential attack, 450 ms exponential release, 750 ms
+observed-peak hold and 24 dB/s peak-marker decay. The display is clamped to −60…0 dB and
+cannot overshoot the latest observed target. A frame gap of at least one second snaps the
+bar to the last observed target instead of animating an obsolete transition. These are
+presentation choices, **not** measurements of the CONNECT 2's signal dynamics. A peak marker
+represents the highest *sampled* value; it cannot reveal an inter-sample transient.
+
+Status freshness gates the presentation independently of settings freshness. Delayed status
+freezes/dims meters; stale or unavailable status clears their visible level and validity.
+Recovery and reconnection require a new successful sample. No old nonzero bar or peak is
+presented as live after a disconnect. The existing readiness/freshness banner remains the
+primary textual warning.
+
+Release unit/QML tests cover attack, release, hold, decay, time-step independence, long pauses,
+invalid and clamped inputs, eight independent channels, stale/recovery/disconnect, all eight
+QML bindings, and mock operation. Existing replay/read-only tests remain in the full suite.
+`OPENWITTY_TRACE_METER_FRAMES=1` opt-in logging summarizes 240 active frame-swap gaps
+(mean, median, p95, p99) without payloads; idle or hidden periods must not be interpreted
+as a 60 FPS measurement. Two offscreen mock runs yielded median gaps 15.43–15.53 ms and
+p99 17.18–17.48 ms; these are not physical-screen measurements. Production
+animation targets the display refresh (~60 FPS on a 60 Hz screen), not a fixed USB rate.
+
+The 8 Hz/16 Hz status-GET comparison is **still pending separate approval**. Its measurements
+must distinguish rendered cadence from 4 Hz hardware sampling, and must check GET errors,
+audio coexistence, CPU/RSS, and whether repeated frames indicate a slower firmware source.

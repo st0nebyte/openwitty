@@ -1149,3 +1149,48 @@ unchanged.
 Phase 7F automated checks: Release **156/156 CTests**, including the mock/QML fault suite;
 ASan/UBSan **155/155**; standalone USB call-site audit **PASS**. These validate the unchanged
 read-only software baseline and plan documentation, not the pending real-screen acceptance.
+
+### 22. Phase 7G — initial read-only meter rendering (2026-10-17)
+
+Starting branch `phase7-hardware-integration` at
+`2ed45798179595351bf547e65b9e2a3f0a89c097` was clean. The older GUI had been closed
+normally; no OpenWitty process held the control lease. Passive enumeration found the CONNECT 2
+in application mode and ALSA listed its USB-Audio card. The new eight-channel presentation
+model was first exercised by deterministic unit/QML tests and an offscreen mock screenshot.
+That screenshot showed all eight bars and their sampled-peak markers without a geometry shift;
+offscreen rendering is **not** evidence of physical-display frame cadence.
+
+A single instance of the new read-only GUI then acquired the lease and connected to the real
+device. Its opt-in payload-free trace showed repeated ~250 ms status-poll gaps, status GETs
+around 2.6–2.7 ms and alternating settings GETs around 4.0 ms. Those individual trace samples
+support the unchanged 4 Hz/2 Hz schedule; they are not a statistical latency distribution.
+No transport error was reported in the observed trace. ALSA still listed the device. An idle
+process snapshot at roughly 33 s showed 0.4% cumulative CPU and 160,688 KiB RSS for the
+whole GUI; no before/after incremental-memory or active-meter CPU conclusion follows. The
+device was quiet during this measurement, so an active **real-device** meter frame-cadence distribution and
+owner judgment of meter motion remain pending. No genuine physical-sound-to-screen latency
+was measured. No USB SET, driver detach, reset, DFU, or polling-rate increase was performed.
+
+Two separate seven-second **offscreen mock** runs with opt-in frame tracing produced 240-gap
+summaries with median gaps 15.43–15.53 ms, p95 16.78–16.86 ms and p99 17.18–17.48 ms
+(median-rate estimate 64.4–64.8 FPS). This confirms the frame clock can advance simulated
+envelopes smoothly under that test setup; it is not a physical-screen or real-USB measurement.
+During a separate offscreen mock run, the mock process showed 5.6% cumulative CPU and
+66,524 KiB RSS at three seconds. This whole-process snapshot includes simulated 25 Hz
+status generation and software offscreen rendering; it is not the meter feature's incremental
+cost and must not be compared directly with the real GUI's idle snapshot.
+
+The 4 Hz status payload has eight signed Q8.8 meter fields clamped to −60…0 dB by the
+existing codec. The new 20 ms attack / 450 ms release / 750 ms sampled-peak hold / 24 dB/s
+peak decay are **presentation parameters**, not measured device dynamics. A missed transient
+between GETs cannot be recovered or asserted as a peak. Delayed status freezes/dims the bars;
+stale/unavailable clears them until a fresh sample. Those fault transitions are mock/unit
+tested, not deliberately induced on the physical USB connection.
+
+Automated validation after the last code change: Release **163/163 CTests**; ASan/UBSan
+**162/162 CTests**; standalone USB call-site audit **PASS**; `git diff --check` clean.
+The full suites include the pre-existing replay tests and read-only refusal checks, plus
+seven new deterministic meter-dynamics CTests and a new eight-channel QML integration check.
+An active, externally observed ~60 FPS cadence and owner visual judgment were not yet
+available when this note was written. The 8 Hz/16 Hz read-only acquisition trial remains
+separately approval-gated.

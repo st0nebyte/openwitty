@@ -101,3 +101,12 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 * Lease contention reports a specific `ControlInUse` explanation before USB I/O. Level 1
   latency tracing is sampled; level 2 gives per-poll stages. Neither is a measured physical
   action-to-visible latency. Real GUI hardware writes remain disabled.
+
+## Phase 7G meter presentation
+
+* Eight status-derived audio meters now have independent, frame-synchronized display envelopes
+  and sampled-peak markers. The real device remains at 4 status GETs/s and 2 settings GETs/s;
+  ~60 FPS rendering does not create or imply additional hardware samples.
+* Delayed status freezes/dims the meters; stale status or disconnection clears their live
+  display until a new successful sample. This is software-tested; exact real-device signal
+  semantics and any faster acquisition rate remain unverified. No GUI hardware writes were added.

@@ -182,8 +182,8 @@
   compact header/sample-rate spacing and readiness banner confirmed by a current screenshot;
   owner confirmed matching live selection, gain, volume, mute and mix. Deliberately induced
   real-USB freshness faults and externally marked action-to-screen latency remain pending.
-- **High priority:** implement the separate Phase 7G audio-meter plan in
-  `docs/PHASE7G_AUDIO_METER_PLAN.md` only after Phase 7F acceptance. Target responsive 60 FPS
-  rendering without equating animation rate to USB GET rate. No new GUI hardware writes.
+- ✔ Phase 7G first implementation: independently frame-animated eight meters, observed-sample
+  peak hold, status-freshness gating and deterministic unit/QML coverage. Review real-device
+  visual motion and measure active frame cadence before calling the 60 FPS target accepted.
 - Do not increase the 4 Hz status GET default without a separately approved, measured
   single-client hardware trial; establish actual meter-data freshness and peak semantics first.

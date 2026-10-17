@@ -106,6 +106,14 @@ void DeviceWorker::markInitialReads() {
     if (session_->status()) freshness_.markStatus(now);
 }
 
+void DeviceWorker::publishMeterSample() {
+    if (!session_ || session_->state() != ConnectionState::Connected || !session_->status()) return;
+    const auto& st = *session_->status();
+    emit meterSample(QVariantList{st.input1LevelDb(), st.input2LevelDb(), st.loopbackLevelDb(0),
+        st.loopbackLevelDb(1), st.speakerLevelDb(0), st.speakerLevelDb(1),
+        st.headphoneLevelDb(0), st.headphoneLevelDb(1)}, nowNs());
+}
+
 void DeviceWorker::cancelAll() {
     std::lock_guard lk(activeM_);
     if (active_) active_->requestCancel();
@@ -130,6 +138,7 @@ void DeviceWorker::connectMock() {
     markInitialReads();
     startTimer(40);  // ~25 Hz meters; stopped again on disconnect
     publish();
+    publishMeterSample();
 }
 
 void DeviceWorker::connectUsb() {
@@ -153,6 +162,7 @@ void DeviceWorker::connectUsb() {
     if (session_->state() == ConnectionState::Connected) startTimer(250);
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
+    publishMeterSample();
 }
 
 void DeviceWorker::armRescan() {
@@ -197,6 +207,7 @@ void DeviceWorker::rescan() {
         armRescan();
     }
     publish();
+    if (s) publishMeterSample();
 }
 
 // If a measurement bracket is open, close it before the link goes away (only possible
@@ -278,6 +289,7 @@ void DeviceWorker::simulateReplug() {
     markInitialReads();
     if (session_->state() == ConnectionState::Connected) startTimer(40);
     publish();
+    publishMeterSample();
 }
 
 void DeviceWorker::setSampleRate(int hz) {
@@ -310,6 +322,7 @@ void DeviceWorker::poll() {
     }
     StatusRefreshTiming statusTiming;
     auto s = session_->refreshStatus(traceEnabled_ ? &statusTiming : nullptr);
+    const bool statusOk = static_cast<bool>(s);
     if (!s) report(s);
     else freshness_.markStatus();
     if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
@@ -341,6 +354,7 @@ void DeviceWorker::poll() {
     }
     const qint64 publishStart = traceEnabled_ ? nowNs() : 0;
     publish();
+    if (statusOk) publishMeterSample();
     if (traceEnabled_) emit pollTracePublished(sequence, (nowNs() - publishStart) / 1000);
 }
 
@@ -367,6 +381,7 @@ void DeviceWorker::setDeviceMode(bool macos) {
         restarting_ = false;
         if (mock_) { mock_->setPresent(true); report(session_->connect()); markInitialReads(); startTimer(40); }
         publish();
+        publishMeterSample();
     });
 }
 
@@ -716,12 +731,16 @@ DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(n
         for (auto it = v.begin(); it != v.end(); ++it) {
             if (it.value().isValid()) values_[it.key()] = it.value(); else values_.remove(it.key());
         }
+        meters_.setSourceState(values_.value("fresh.status").toString(), connection_ == "Connected");
         emit valuesChanged();
     });
+    connect(worker_, &DeviceWorker::meterSample, this,
+            [this](const QVariantList& levels, qint64 sampleNs) { meters_.observeSample(levels, sampleNs); });
     connect(worker_, &DeviceWorker::connectionChanged, this,
             [this](const QString& s, const QString& b, bool w, bool sim) {
                 if (s == connection_ && b == backend_ && w == writable_ && sim == simulated_) return;
                 connection_ = s; backend_ = b; writable_ = w; simulated_ = sim;
+                meters_.setSourceState(values_.value("fresh.status").toString(), s == "Connected");
                 emit connectionChanged();
             });
     connect(worker_, &DeviceWorker::errorOccurred, this, [this](const QString& m) {

@@ -29,6 +29,11 @@ Window {
     property bool showSettings: false
     property bool showWizard: false
     property bool showOnboarding: false
+    // One frame-synchronized clock for eight presentation envelopes; never performs USB I/O.
+    FrameAnimation {
+        running: win.visible && win.active && win.live && device.meters.needsFrames
+        onTriggered: device.meters.advanceFrame()
+    }
     readonly property bool hasPending: Object.keys(device.values).some(function (k) { return k.indexOf("pending.") === 0; })
     Connections {
         target: device

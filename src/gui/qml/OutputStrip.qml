@@ -19,6 +19,10 @@ Item {
                 kind: group === "loop" ? "loop" : group === "spk" ? "speakers" : "headphones"
                 color: "#f0f0f0" }
     LevelMeter { x: group === "loop" ? 7 : 5; y: 44; height: 187; stereo: true; scale: true
+                 objectName: root.group === "loop" ? "meterLoopback" : root.group === "spk" ? "meterSpeaker" : "meterHeadphone"
+                 meterL: device.meters.channel(root.group === "loop" ? 2 : root.group === "spk" ? 4 : 6)
+                 meterR: device.meters.channel(root.group === "loop" ? 3 : root.group === "spk" ? 5 : 7)
+                 sourceFreshness: device.meters.freshness
                  levelL: root.v("levelL", -60); levelR: root.v("levelR", -60) }
     Fader { visible: root.hasFader; x: 55; y: 44; height: 187; enabled: root.interactive
             tip: root.group === "spk" ? "Adjust the loudspeaker volume" : "Adjust the headphone volume"

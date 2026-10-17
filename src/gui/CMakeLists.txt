@@ -2,7 +2,7 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick)
 qt_standard_project_setup()
 
 # Backend facade as a static library so it can be tested without the QML app.
-qt_add_library(lewitt_gui_backend STATIC DeviceController.cpp DeviceController.hpp)
+qt_add_library(lewitt_gui_backend STATIC DeviceController.cpp DeviceController.hpp MeterPresentation.cpp MeterPresentation.hpp MeterDynamics.hpp)
 target_include_directories(lewitt_gui_backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(lewitt_gui_backend PUBLIC lewitt_core Qt6::Core Qt6::Gui)
 
@@ -34,6 +34,9 @@ set_target_properties(openwitty PROPERTIES INSTALL_RPATH "" INSTALL_RPATH_USE_LI
 install(TARGETS openwitty RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(LEWITT_BUILD_TESTS)
+    add_executable(lewitt_meter_tests ${CMAKE_SOURCE_DIR}/tests/gui/test_meter_dynamics.cpp)
+    target_link_libraries(lewitt_meter_tests PRIVATE lewitt_gui_backend GTest::gtest_main)
+    gtest_discover_tests(lewitt_meter_tests)
     add_executable(lewitt_gui_tests ${CMAKE_SOURCE_DIR}/tests/gui/test_gui.cpp)
     target_link_libraries(lewitt_gui_tests PRIVATE lewitt_gui_backend Qt6::Qml Qt6::Quick GTest::gtest_main)
     target_compile_definitions(lewitt_gui_tests PRIVATE LEWITT_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")

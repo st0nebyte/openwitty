@@ -38,9 +38,12 @@ int main(int argc, char** argv) {
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Lewitt/Main.qml")));
-    if (controller.traceEnabled() && !engine.rootObjects().isEmpty())
-        if (auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().first()))
-            QObject::connect(w, &QQuickWindow::frameSwapped, &controller, &DeviceController::traceFrameSwapped);
+    if (!engine.rootObjects().isEmpty())
+        if (auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().first())) {
+            QObject::connect(w, &QQuickWindow::frameSwapped, controller.meters(), &MeterPresentation::noteFrameSwapped);
+            if (controller.traceEnabled())
+                QObject::connect(w, &QQuickWindow::frameSwapped, &controller, &DeviceController::traceFrameSwapped);
+        }
     if (p.isSet(show) && !engine.rootObjects().isEmpty()) {
         QObject* root = engine.rootObjects().first();
         if (p.value(show) == "settings") root->setProperty("showSettings", true);

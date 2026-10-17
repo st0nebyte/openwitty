@@ -16,7 +16,11 @@ Item {
     Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
                 border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
 
-    LevelMeter { x: -9; y: 40; height: 187; scale: true; barWidth: 8; levelL: root.v("level", -60) }
+    LevelMeter { x: -9; y: 40; height: 187; scale: true; barWidth: 8
+                 objectName: root.mic ? "meterMic" : "meterInstrument"
+                 meterL: device.meters.channel(root.mic ? 0 : 1)
+                 sourceFreshness: device.meters.freshness
+                 levelL: root.v("level", -60) }
 
     GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"; color: "#ececec" }
 

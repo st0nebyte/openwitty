@@ -16,6 +16,7 @@
 #include "core/DeviceSession.hpp"
 #include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
+#include "MeterPresentation.hpp"
 
 class DeviceWorker : public QObject {
     Q_OBJECT
@@ -40,6 +41,7 @@ public slots:
     void simulatePanicMute();                                     // simulation only
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
+    void meterSample(const QVariantList& levels, qint64 monotonicNs); // observed status data only
     void pollTrace(const QVariantMap& stages);       // opt-in, monotonic timestamps only
     void pollTracePublished(qint64 sequence, qint64 durationUs);
     void connectionChanged(const QString& state, const QString& backend, bool writable, bool simulated);
@@ -49,6 +51,7 @@ public:
     void cancelAll();
 private:
     void publish();
+    void publishMeterSample();
     void armRescan();
     void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t);
     lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
@@ -107,6 +110,7 @@ class DeviceController : public QObject {
     Q_PROPERTY(QVariantMap values READ values NOTIFY valuesChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
     Q_PROPERTY(bool traceEnabled READ traceEnabled CONSTANT)
+    Q_PROPERTY(QObject* meters READ meters CONSTANT)
 public:
     explicit DeviceController(QObject* parent = nullptr);
     ~DeviceController() override;
@@ -117,6 +121,7 @@ public:
     QVariantMap values() const { return values_; }
     QString lastError() const { return lastError_; }
     bool traceEnabled() const { return traceEnabled_; }
+    MeterPresentation* meters() { return &meters_; }
 
     Q_INVOKABLE void connectMock();
     Q_INVOKABLE void connectUsb();
@@ -146,6 +151,7 @@ private:
     QString connection_{"Disconnected"}, backend_, lastError_;
     bool writable_{false}, simulated_{false};
     QVariantMap values_;
+    MeterPresentation meters_{this};
     bool traceEnabled_{false};
     int traceLevel_{0};
     qint64 lastLoggedTraceSequence_{0};
