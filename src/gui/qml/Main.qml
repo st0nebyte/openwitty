@@ -57,14 +57,14 @@ Window {
                    text: "| CONNECT 2" }
             GlyphIcon { x: 14; y: 13; width: 24; height: 24; kind: "headphones"; color: Theme.accent
                         visible: false }
-            DeviceStatusIndicator { x: 262; anchors.verticalCenter: parent.verticalCenter
+            DeviceStatusIndicator { objectName: "headerConnectionIndicator"; x: 262; anchors.verticalCenter: parent.verticalCenter
                 state: device.connection
                 detail: win.uiState === "simulated" ? "simulated"
-                      : win.uiState === "real-readonly" ? "control data · read-only"
+                      : win.uiState === "real-readonly" ? "read-only"
                       : win.uiState === "real-writable" ? "real device"
                       : win.uiState === "connection-lost" ? "connection lost"
                       : device.backend }
-            Text { x: 461; anchors.verticalCenter: parent.verticalCenter; color: Theme.textDim; font.pixelSize: 11
+            Text { objectName: "sampleRateLabel"; x: 461; anchors.verticalCenter: parent.verticalCenter; color: Theme.textDim; font.pixelSize: 11
                    text: "Sample rate:" }
             Rectangle {   // sample-rate dropdown (simulation only; real rate comes from the audio stack)
                 id: rateBox

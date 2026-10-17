@@ -1017,7 +1017,12 @@ malformed) even if status keeps working; stalls, busy and permission errors stil
 old status frames are cleared at reconnect. This is covered by mock tests, **not** a deliberately
 induced hardware failure. After the owner's later computer restart, a new usbfs node and Wayland
 session were observed; the GUI from the timing run was no longer running. The new read-only GUI
-was launched again with user-visible confirmation pending. No unplug/replug experiment was
+was launched again. An owner-provided screenshot confirmed the “CONTROL LINK, READ-ONLY” banner,
+the explicit audio/front-panel readiness caveat, and the `Unknown` sample rate. It also exposed
+an overlap between the longer header connection detail and the sample-rate label. The header
+detail was shortened to “read-only”; the full readiness caveat remains in the banner, and a QML
+geometry regression assertion covers the header slot. This correction is code-tested but not yet
+reconfirmed in another real-device screenshot. No unplug/replug experiment was
 performed in Phase 7D.
 
 The final Release build passed **149/149 CTests**, including the GUI integration suite, lease

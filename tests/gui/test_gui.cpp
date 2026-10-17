@@ -165,6 +165,16 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
     QCoreApplication::processEvents();
     EXPECT_EQ(root->property("interactive").toBool(), true);
+    auto* headerStatus = root->findChild<QObject*>("headerConnectionIndicator");
+    auto* sampleRateLabel = root->findChild<QObject*>("sampleRateLabel");
+    ASSERT_TRUE(headerStatus);
+    ASSERT_TRUE(sampleRateLabel);
+    // A real read-only connection has only the space between x=262 and the sample-rate
+    // label at x=461. The longer Phase 7D detail previously overran that slot.
+    headerStatus->setProperty("detail", "read-only");
+    QCoreApplication::processEvents();
+    EXPECT_LE(headerStatus->property("x").toDouble() + headerStatus->property("width").toDouble(),
+              sampleRateLabel->property("x").toDouble());
     root.reset();
 }
 

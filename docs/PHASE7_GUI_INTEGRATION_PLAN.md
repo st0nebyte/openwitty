@@ -91,6 +91,10 @@ The owner's mix-endpoint observation corrected the real display's maximum label 
 `0:100`; the owner saw `50:50` at a physical halfway position and confirmed that the headphone
 slider stayed fixed. The acoustic ratio and mapping across firmware versions remain unverified.
 All real GUI writes remain disabled.
+An owner screenshot after the computer restart confirmed the new control-link banner and
+`Unknown` sample rate, but revealed a header status/sample-rate overlap. The compact header
+“read-only” text and a QML geometry test correct that regression; the banner retains the full
+readiness explanation. The corrected header has not yet had a second real screenshot check.
 Persistent settings-read failure can no longer be masked by successful meter reads: after three
 unresponsive settings refreshes the session enters Error and reconnects, and old status frames are dropped
 at reconnect. This transition is mock-tested; no hardware fault was induced.
