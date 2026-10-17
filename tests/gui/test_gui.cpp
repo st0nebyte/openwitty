@@ -179,12 +179,56 @@ TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {
     ASSERT_TRUE(root);
     auto* indicator = root->findChild<QObject*>("panicMuteIndicator");
     ASSERT_TRUE(indicator);
+    auto* bannerText = root->findChild<QObject*>("connectionBannerText");
+    ASSERT_TRUE(bannerText);
     c.connectMock();
     ASSERT_TRUE(waitFor([&] { return c.values().contains("mute.allFour"); }));
     EXPECT_FALSE(indicator->property("visible").toBool());
     c.simulatePanicMute();
     ASSERT_TRUE(waitFor([&] { return c.values()["mute.allFour"].toBool(); }, 4000));
     EXPECT_TRUE(indicator->property("visible").toBool());
+    EXPECT_GT(bannerText->property("width").toDouble(), 100.0);
+    EXPECT_LE(bannerText->property("x").toDouble() + bannerText->property("width").toDouble(),
+              indicator->property("x").toDouble());
+    c.simulateUnplug();
+    ASSERT_TRUE(waitFor([&] { return c.connection() != "Connected"; }));
+    EXPECT_FALSE(indicator->property("visible").toBool());
+}
+
+TEST(Qml, RealReadOnlyMixUsesObservedPhysicalScale) {
+    app();
+    QQmlEngine engine;
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/MonitorSection.qml")));
+    for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    auto fractionAt = [&](double mix) {
+        engine.rootContext()->setContextProperty("device", QVariantMap{
+            {"simulated", false}, {"values", QVariantMap{{"mon.mix", mix}}}});
+        std::unique_ptr<QObject> section(comp.create());
+        EXPECT_TRUE(section != nullptr);
+        if (!section) return -1.0;
+        auto* knob = section->findChild<QObject*>("monitorMixKnob");
+        EXPECT_TRUE(knob != nullptr);
+        if (!knob) return -1.0;
+        EXPECT_FALSE(knob->property("enabled").toBool());
+        EXPECT_DOUBLE_EQ(knob->property("from").toDouble(), -100.0);
+        EXPECT_DOUBLE_EQ(knob->property("to").toDouble(), 0.0);
+        EXPECT_EQ(knob->property("maxLabel").toString(), "50:50");
+        return knob->property("frac").toDouble();
+    };
+    EXPECT_DOUBLE_EQ(fractionAt(-100.0), 0.0);
+    EXPECT_NEAR(fractionAt(-18.57), 0.8143, 0.0001);
+    EXPECT_DOUBLE_EQ(fractionAt(0.0), 1.0);
+    engine.rootContext()->setContextProperty("device", QVariantMap{
+        {"simulated", true}, {"values", QVariantMap{{"mon.mix", 0.5}}}});
+    std::unique_ptr<QObject> mockSection(comp.create());
+    ASSERT_TRUE(mockSection);
+    auto* mockKnob = mockSection->findChild<QObject*>("monitorMixKnob");
+    ASSERT_TRUE(mockKnob);
+    EXPECT_DOUBLE_EQ(mockKnob->property("from").toDouble(), -1.0);
+    EXPECT_DOUBLE_EQ(mockKnob->property("to").toDouble(), 1.0);
+    EXPECT_DOUBLE_EQ(mockKnob->property("frac").toDouble(), 0.75);
+    EXPECT_EQ(mockKnob->property("maxLabel").toString(), "0:100");
 }
 
 TEST(GuiBackend, CustomButtonAndMixToSpeakers) {

@@ -10,12 +10,16 @@ Item {
     Text { anchors.horizontalCenter: parent.horizontalCenter; y: 47; color: Theme.textDim
            font.pixelSize: 10; text: "Input / playback" }
     GainKnob {
+        objectName: "monitorMixKnob"
         x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
         enabled: root.interactive; showValue: false; warnFrom: 1
         tip: "Hear your input signal and computer"
-        from: -1; to: 1; step: 0.05
+        // Physical CONNECT 2 reads observed in Phase 7C span -100..0. Keep the established
+        // simulated -1..1 control unchanged; real hardware remains display-only.
+        from: device.simulated ? -1 : -100; to: device.simulated ? 1 : 0
+        step: device.simulated ? 0.05 : 1
         value: root.v("mon.mix", 0)
-        minLabel: "100:0"; maxLabel: "0:100"
+        minLabel: "100:0"; maxLabel: device.simulated ? "0:100" : "50:50"
         onMoved: (nv) => device.setValue("mon.mix", nv)
     }
     Text { x: 3; y: 186; horizontalAlignment: Text.AlignHCenter; width: 78; color: Theme.textDim

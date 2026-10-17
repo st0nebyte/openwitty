@@ -15,7 +15,7 @@ Window {
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
     readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
-    readonly property bool panicMuted: device.values["mute.allFour"] === true
+    readonly property bool panicMuted: win.live && device.values["mute.allFour"] === true
     property bool showSettings: false
     property bool showWizard: false
     property bool showOnboarding: false
@@ -142,8 +142,9 @@ Window {
         color: win.uiState === "simulated" ? "#2e2813"
              : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#162633"
              : win.uiState === "error" || win.uiState === "connection-lost" ? "#2b1d1d" : "#232323"
-        Text { anchors.verticalCenter: parent.verticalCenter; x: 10; font.pixelSize: 11
-               width: parent.width - 330; elide: Text.ElideRight
+        Text { objectName: "connectionBannerText"; anchors.verticalCenter: parent.verticalCenter; x: 10; font.pixelSize: 11
+               width: Math.max(0, (panicMuteIndicator.visible ? panicMuteIndicator.x : controls.x) - x - 10)
+               elide: Text.ElideRight
                color: win.uiState === "simulated" ? Theme.sim
                     : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#9ec7ff"
                     : win.uiState === "error" || win.uiState === "connection-lost" ? Theme.bad : Theme.textDim
@@ -159,7 +160,7 @@ Window {
                      ? "Connection to the device was lost — retrying when it reappears. " + win.uiError
                      : win.uiState === "error" ? "Cannot communicate with the device. " + win.uiError
                      : "No device connected. Use “USB (read-only)” to look for a CONNECT 2." }
-        Text { objectName: "panicMuteIndicator"; visible: win.panicMuted; anchors.verticalCenter: parent.verticalCenter; anchors.right: controls.left
+        Text { id: panicMuteIndicator; objectName: "panicMuteIndicator"; visible: win.panicMuted; anchors.verticalCenter: parent.verticalCenter; anchors.right: controls.left
                anchors.rightMargin: 10; color: "#ff9a9a"; font.pixelSize: 10; font.bold: true
                text: "ALL MAIN CHANNELS MUTED" }
         Row { id: controls; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 6

@@ -103,7 +103,7 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 32 | u8 | Monitor | Dim | `Dim` |
 | 33 | u8 | Monitor | Mono | `Mono` |
 | 34 | u8 | Monitor | direct-monitor source: **0 instrument only, 1 microphone only, 2 both**; the app's toggle logic (pair tables {(2,0),(1,0)} / {(2,1),(0,1)}) never reaches "none" | `MonitorMicrophone`,`MonitorInstrument` lambdas |
-| 35 | i16 | Monitor | **input/playback mix** (id `Balance`), Q8.8 stored sign-inverted; range unverified | getter `-raw/256` |
+| 35 | i16 | Monitor | **input/playback mix** (id `Balance`), Q8.8 stored sign-inverted; physically accessible low/high stops on one CONNECT 2 read −100.00/0.00 (2026-10-17); authoritative protocol/SET range still unverified | getter `-raw/256` |
 | 37 | u8 | Main | LED brightness, clamp 0…100 | setter `cmp 0x64` |
 | 38–40 | RGB | Main `Icons` | LED colour, byte order R,G,B | setter splits 0xRRGGBB |
 | 41–43 / 44–46 / 47–49 / 50–52 | RGB | Main `Mute`/`Parameter`/`Metering`/`GainReduction` | LED colours | contiguous 5×3 bytes |
@@ -389,7 +389,9 @@ static-analysis-only.
 * `OutputSource` enumerator names; bytes 54–55, 58, 60–70 semantics (byte 56 is now confirmed for
   the 4 channel-select values, see the hardware-confirmed note earlier in this file — not
   necessarily complete for mute/custom/mix/autogain button states).
-* Authoritative range for the input/playback mix value (Q8.8 sign-inverted).
+* Authoritative protocol/SET range for the input/playback mix value (Q8.8 sign-inverted); one
+  device's physical wheel produced −100.00…0.00 in the read-only Phase 7C session (§18 of
+  `docs/HARDWARE_TEST_RESULTS.md`), but no SET was attempted.
 * `iface_version_t` layout (no consumer).
 * Windows has not been re-traced for the above (same codebase; cross-check of
   the transport only).
@@ -444,7 +446,7 @@ LED brightness is the only field where an actual SET has been hardware-tested (P
 | 4 | Instrument gain | 10–11 | i16 LE Q8.8 dB | 0–60 dB | none | Low | bytes 10–11 | restore original gain | Field mapping hardware-verified (Phase 6B); SET untested; not CLI-enabled |
 | 5 | Speaker / headphone volume | 20–21 / 27–28 | i16 LE Q8.8 dB | −60…0 dB | confirm no audio is actively playing through the channel being changed; prefer testing while muted, as done in Phase 6A/6B | **Medium** — directly drives audible output level | the relevant offset pair | restore original volume | Field mapping hardware-verified (Phase 6A/6B); SET untested; not CLI-enabled |
 | 6 | Mute states (mic/instrument/speaker/headphone/loopback) | 2 / 12 / 22 / 29 / 19 | u8 boolean | 0/1 | confirm associated volume/monitor routing is safe before unmuting (see Phase 6B's speaker-mute-first precaution) | Low–Medium — unmuting can expose an existing volume/routing setting | the relevant offset | restore original mute state | Field mapping hardware-verified, all 4 primary channels (Phase 6B); SET untested; not CLI-enabled |
-| 7 | Monitoring mix (source + input/playback mix) | 34 (enum 0/1/2) / 35–36 (i16 Q8.8, sign-inverted) | enum + i16 | source 0–2; mix within ±1 (documented range, not independently re-verified) | output muted/safe — this changes what's audible in the monitor path | **Medium** — can introduce an unexpected monitoring/feedback path | offsets 34–36 | restore originals | **Planned only** — no hardware evidence of any kind yet (neither physical nor SET) |
+| 7 | Monitoring mix (source + input/playback mix) | 34 (enum 0/1/2) / 35–36 (i16 Q8.8, sign-inverted) | enum + i16 | source 0–2; current software setter accepts only ±1, but physical reads reached −100…0, so **do not use the setter for hardware** until range/mapping is resolved | output muted/safe — this changes what's audible in the monitor path | **Medium** — can introduce an unexpected monitoring/feedback path | offsets 34–36 | restore originals | Physical wheel changed only bytes 35–36 on 2026-10-17; no SET attempted or authorized (§18) |
 | 8 | Preamp style + input processing (preamp 6/15, denoise 7/16, compress 9/18, Clipguard 4/14, low-cut 3/13) | see offsets | mostly u8 enum/boolean | preamp 0–2 (Clean/Warm/Vivid); denoise/compress/Clipguard/low-cut 0/1 | sample rate < 96 kHz for denoise/compress (`violatesDspRestriction`, already enforced in `commit()`) | Low (signal-character change, not loudness) | relevant offset(s) | restore originals | **Preamp style has no physical control on this unit at all** (owner-confirmed, Phase 6B) — software-only, cannot be physically cross-checked here. Denoise/compress/Clipguard/low-cut: no hardware evidence yet. Not CLI-enabled. |
 
 **Explicitly out of scope for any policy above, now or later without separate authorization:**

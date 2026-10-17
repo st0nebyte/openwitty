@@ -28,7 +28,7 @@ evidence of any kind.
 Everything above is **unverified on real hardware**: the selection rule reproduces the descriptor
 layout recorded on 2026-10-14, but the GUI has never opened the device.
 
-## Phase 7B addendum (implemented, mock/replay-tested; hardware retest pending)
+## Phase 7B addendum (implemented and initially mock/replay-tested; see Phase 7C below)
 
 * `SelectedChannel` decodes settings byte 56 as microphone/instrument/speaker/headphone; unknown
   bytes are preserved and shown as Unknown. A blue outline reflects the physical selection only.
@@ -41,6 +41,35 @@ layout recorded on 2026-10-14, but the GUI has never opened the device.
   500 ms). This is a conservative configuration, mock-tested but not yet measured on hardware.
 * `ReplayTransport` supplies deterministic identifier-free settings/status frames and refuses all
   writes. Its current fixtures are synthetic/sanitized transition shapes, not claimed real captures.
+
+## Phase 7C addendum (read-only hardware validation, 2026-10-17)
+
+The real GUI has now been validated live against the CONNECT 2. Physical selection of all four
+main channels moved the blue border in the running GUI; physical mic gain, mic mute, and headphone
+volume changes were reflected without restart. An owner-operated Panic Mute hold updated all four
+main mute indicators and the derived notice. Loopback was already muted, so this session did not
+repeat the earlier independent loopback-preservation experiment. The sample rate remained
+`Unknown`, the audio card stayed attached, and USB tracing recorded no SETs.
+
+Measured USB cadence over ~89 seconds was 3.999 status GET/s and 1.999 settings GET/s, with zero
+transfer failures; CPU stayed below 1% after startup and RSS was roughly 173–176 MiB in the
+desktop runs. The owner perceived gain/mute/volume updates as prompt but mix-knob updates at about
+one-second intervals. No polling-rate change was made. Two CLI settings GETs failed with EIO when
+run concurrently with the GUI, while the GUI stayed connected and later single-client reads
+succeeded; investigate concurrent-client behavior separately.
+
+An observed real-data mismatch showed that the existing `−1…+1` GUI mix-knob range clamped
+physical values. The owner's low/high stops read −100.00/0.00 on this unit; a controlled intermediate
+step changed only settings bytes 35–36, not headphone volume. The real read-only knob now displays
+this observed span; mock interaction remains unchanged. The owner confirmed the corrected pointer
+position and intermediate movement. A notice/connection-text overlap was also observed and given a
+layout-boundary regression test, confirmed visually in the reopened real GUI. The owner later
+approved and performed a physical unplug/replug: the running GUI showed disconnection, then
+automatically re-established read-only control GETs; ALSA/PipeWire devices returned. Cached mute
+indications prompted an additional live-connection gate on the derived all-muted notice, covered
+by a mock unplug test but not a second physical unplug. The GUI's control connection appeared
+before the device's flashing/front-panel startup finished; audio readiness was not proven.
+Hardware unknown-selection states and precise display-latency measurements remain open.
 
 ## 1. Existing architectural readiness
 

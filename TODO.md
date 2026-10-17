@@ -133,7 +133,19 @@
   “ALL MAIN CHANNELS MUTED” indication. No software Panic Mute trigger exists.
 - ✔ `ui.state` is canonical; redundant `ui.status` removed in favour of non-state `ui.detail` and
   existing `write.*` verification fields.
-- **Next:** approved hardware session: GUI read-only against the real unit (`--interface auto`),
-  compare CLI and GUI while manually changing gain/volume/mute/channel selection/Panic Mute.
+- ✔ Phase 7C (2026-10-17): real read-only GUI session confirmed live selection of all four
+  channels, physical mic gain/mute, headphone volume, and owner-operated Panic Mute display.
+  Measured status/settings GET rates were 3.999/1.999 Hz with zero SETs and zero transfer errors.
+  See `docs/HARDWARE_TEST_RESULTS.md` §18.
+- ✔ Observed GUI corrections: physical mix reads on this unit span −100…0, not the old drawing
+  range −1…+1; read-only knob scale corrected, mock behavior preserved. Panic Mute notice was
+  observed overlapping the connection text; the banner now reserves its space.
+- ✔ Owner-approved physical disconnect/reconnect: GUI detected absence and automatically
+  resumed read-only control GETs; ALSA/PipeWire nodes returned. Derived all-muted notice is now
+  hidden while disconnected (mock regression test); the corrected binary did not undergo a
+  second physical unplug. GUI control-ready appeared before front-panel startup finished.
+- **Still pending:** precise GUI update-latency measurement (owner perceived mix updates about
+  once per second), concurrent CLI/GUI USB EIO investigation, audio-ready versus control-ready
+  presentation, hardware unknown-selection behavior, and other unverified fields.
 - Evidence badges for unverified fields remain deferred; prefer a compact advanced-details panel.
 - Re-run packaging checks (`packaging_staging`) — unchanged by 7A but not re-verified on `.deb`.

@@ -843,7 +843,7 @@ owner will re-mute manually rather than have this session restore it.
 
 Device disconnect/reconnect handling was not tested this session (not requested).
 
-### 17.7 Phase 7B implementation status — mock/replay only, hardware retest pending
+### 17.7 Phase 7B implementation status at that time — mock/replay only
 
 The following changes were implemented after the observations above, but were **not** exercised on
 the physical device in this session: byte 56 now has a typed selected-channel decoder and a
@@ -854,4 +854,104 @@ non-state `ui.detail`; write verification remains in `write.*`. A deterministic,
 `ReplayTransport` tests selected-channel and Panic-Mute-shaped settings transitions without USB or
 identifying data. Release validation after this work: 140/140 CTests; these are automated/mock/replay
 results only, and a separate read-only hardware session is required before claiming live GUI
-confirmation.
+confirmation. That separate session is recorded in §18 below.
+
+## 18. Phase 7C — live read-only GUI validation, 2026-10-17
+
+This is a new hardware session, distinct from the prior-session record in §17. The starting tree
+was clean on `phase7-hardware-integration` at `087dcd1`. The CONNECT 2 (`29c2:0004`) was present
+in normal mode, interface 3 was vendor-specific (`ff/f0/00`) and unbound, and the current user had
+usbfs access. The ALSA `snd-usb-audio` card remained present. No kernel driver was detached, no DFU
+interface was opened, and no USB SET was sent. All physical changes below were made by the owner
+on the device; OpenWitty only read them.
+
+Automatic-interface CLI API, status, and settings GETs succeeded. Automatic and explicit
+interface-3 settings reads matched before launching the GUI. The real GUI connected without
+`--mock`, displayed the read-only state and `Unknown` sample rate, and initially matched the CLI's
+decoded gains, volumes, and mutes. The same running GUI session followed physical selection of
+microphone, instrument, and speaker (independently captured) and headphone (owner-observed): the
+blue strip border moved to the selected channel. No selection command was sent by software.
+
+The owner turned the physical microphone gain up; the GUI followed almost immediately. A later
+CLI read showed 55 dB, versus 45 dB in the session's initial snapshot. The owner physically
+toggled microphone mute and restored it; both GUI transitions had no noticeable delay. A small
+physical headphone-volume change moved the GUI slider promptly; the device has dots rather than
+a numeric readout, so this was a visual comparison, not a numeric device/display equality claim.
+CLI values changed from −22.63 dB initially to −20.57 dB later. No GUI control was operated to
+make these changes.
+
+With the owner's physical Panic Mute hold, all four main-channel mute indicators changed and the
+derived “ALL MAIN CHANNELS MUTED” notice appeared. The blue selected-channel border remained
+correct. Loopback was already muted and has no physical unmute button on this unit, so **this
+session did not test loopback independence from an initially unmuted state**; §16's earlier
+byte-level hardware trials remain the evidence for that behavior. The owner reported that the
+notice overlapped the blue connection text at this window size; this prompted a bounded-banner
+layout correction and a QML geometry regression assertion. In the reopened real GUI, the owner
+confirmed that the notice and connection text were separate and readable. No channel was
+auto-unmuted.
+
+### 18.1 Mix-wheel display defect found during live validation
+
+The owner selected the physical input/playback mix and saw the GUI mix knob appear to have only two
+positions; the headphone slider also appeared to rise during an earlier uncontrolled adjustment.
+With the GUI closed to avoid simultaneous USB clients, a controlled physical mix-wheel step changed
+**only settings bytes 35–36**: decoded mix −32.29 → −18.57, while headphone volume stayed exactly
+−20.57 dB. Reads at the owner's physical low and high stops yielded mix −100.00 and 0.00,
+respectively, again with headphone volume unchanged. These are observed positions on this unit,
+not a claim about every firmware or a newly authorized SET range.
+
+The defect was the GUI's `−1…+1` mix-knob drawing range, which clamped most real values to an
+endpoint. The real read-only display now uses the observed `−100…0` span, with 100:0 and 50:50
+endpoint labels; mock mode retains its old `−1…+1` behavior and hardware writes remain disabled.
+In the reopened real GUI, the owner confirmed that the knob reached the correct end and moved
+through intermediate positions while the headphone slider stayed fixed. The owner estimated mix
+updates at roughly one-second intervals; this is a visual estimate, not a timed latency
+measurement, and polling was not increased.
+
+### 18.2 USB cadence, resource use, and limitations
+
+A local `libusb_control_transfer` counter (logging request metadata only, not payloads or device
+identifiers) observed 357 status GETs over 89.03 s (**3.999/s**) and 179 settings GETs over 89.04 s
+(**1.999/s**) in the unchanged GUI. It recorded one API GET, four descriptor GETs at startup,
+**zero SETs, and zero failed transfers**. The corrected GUI's subsequent traced run likewise
+showed no SETs or transport errors. The first desktop GUI process stayed around 176 MiB RSS and
+below 1% CPU after startup; a separately instrumented run was around 173 MiB RSS after startup.
+The GUI remained responsive and ALSA stayed attached.
+
+Two CLI settings GETs attempted *concurrently* with an open GUI returned `LIBUSB_ERROR_IO` while
+the GUI remained connected; CLI GETs after closing the GUI succeeded. This suggests a concurrent
+client/access limitation but does not establish its precise cause. Avoid competing CLI reads
+during a live GUI session until investigated. Unknown byte-56 selection values were not induced
+on hardware because doing so would require an unsupported action; mock/replay tests cover them.
+
+### 18.3 Owner-approved physical disconnect/reconnect
+
+After explicit approval, the owner unplugged the CONNECT 2 while the real GUI continued running.
+The USB device and ALSA card disappeared, the next status GET returned `LIBUSB_ERROR_NO_DEVICE`,
+and the GUI displayed “No LEWITT device connected” over the cached controls. The owner also
+reported that all channels still appeared muted while disconnected; it was not established
+whether this referred to the four underlying indicators or the derived notice. To avoid a stale
+notice regardless, the QML notice is now gated on a live connection, and a mock unplug regression
+test asserts it disappears; the corrected binary was **not** re-tested by physically unplugging
+again. No software reset or detach was performed.
+
+At the owner's reconnect, the same running GUI automatically performed fresh descriptor/API,
+settings, and status GETs and resumed polling. USB and ALSA enumeration returned; PipeWire again
+listed a CONNECT 2 device, sink, and source. Post-reconnect CLI API/status/settings GETs succeeded,
+and automatic and explicit interface-3 settings reads matched exactly. The trace had no USB SETs.
+The owner observed that the GUI reported connected almost immediately while the device's lights
+flashed for a few seconds before its physical controls became responsive. Thus the banner denotes
+control-transport readiness, **not proven audio or front-panel readiness**. Audio nodes returned,
+but audible playback/capture was not tested (PipeWire sink/source were muted during inspection).
+Current hardware mute/volume/mix settings were not restored or modified by software.
+
+### 18.4 Final validation of the corrections
+
+The Release build completed. The full CTest suite passed **140/140** (including the new QML
+mix-scale test and the extended Panic Mute/layout/disconnect test inside `gui_integration`). The
+USB call-site audit passed: the GUI still uses `readOnlyHardwareOptions()`, cannot enable hardware
+writes, chooses its interface automatically, and rejects DFU. A final offscreen launch of the
+corrected real GUI exited cleanly; its trace contained 9 vendor GETs, zero SETs, and zero errors.
+The screenshot showed a real read-only connection, `Unknown` sample rate, and current state
+consistent with a subsequent CLI read. The post-reconnect stale-notice correction itself remains
+mock-tested, not physically unplugged a second time.
