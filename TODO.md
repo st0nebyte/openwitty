@@ -175,3 +175,13 @@
   2 Hz settings / 4 Hz status until a read-only hardware comparison supports a change.
 - Visually reconfirm the compact `Connected · read-only` header and Phase 7E freshness-warning
   layout on the real device; the automated geometry checks do not replace a screenshot.
+
+## Phase 7F / 7G — meter priority
+
+- Complete single-owner, read-only Phase 7E visual acceptance after the older GUI releases the
+  control lease; document healthy freshness and any genuine externally marked latency.
+- **High priority:** implement the separate Phase 7G audio-meter plan in
+  `docs/PHASE7G_AUDIO_METER_PLAN.md` only after Phase 7F acceptance. Target responsive 60 FPS
+  rendering without equating animation rate to USB GET rate. No new GUI hardware writes.
+- Do not increase the 4 Hz status GET default without a separately approved, measured
+  single-client hardware trial; establish actual meter-data freshness and peak semantics first.

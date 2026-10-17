@@ -1087,3 +1087,34 @@ An opt-in offscreen `--mock` smoke run of the new trace emitted four sampled hea
 mock poll gaps 39.1–40.1 ms, publication calls 24–82 µs, and sub-microsecond mock decoding.
 Mock GET timing rounds to zero at microsecond resolution; these values are trace-functionality
 checks, **not** real USB or physical-control latency measurements.
+
+### 21. Phase 7F — read-only acceptance and meter-source investigation (2026-10-17)
+
+Starting branch `phase7-hardware-integration` at `53c24e80655270f144bb057e6ceb838f03327ee0`
+was clean. Passive USB enumeration found a CONNECT 2 (`29c2:0004`); its usbfs node was
+read/write-accessible to the logged-in user through the existing ACL. ALSA and PipeWire both
+listed the interface. A previously running OpenWitty GUI (PID 13477) held the per-user
+`openwitty-connect2-control.lock` lease. It was left running; no second hardware control
+client, concurrent-client experiment, permission change, detach, reset or write was attempted.
+
+Source inspection confirms that the current eight GUI audio levels come from the 64-byte
+status GET (`DeviceSession::refreshStatus`) scheduled at 4 Hz, not the 2 Hz settings GET.
+The codec reads signed Q8.8 fields and clamps to −60…0 dB; `LevelMeter.qml` binds bar geometry
+directly to the latest published sample. The 1/256 dB nominal code step does **not** establish
+sensor accuracy, peak/RMS semantics, internal averaging window, or firmware update frequency.
+Passive sysfs descriptors showed vendor-specific interface 3 with zero non-control endpoints
+in active alternate setting 0. No documented alternative read-only meter path has been found;
+this does not prove none exists. The dedicated, unimplemented Phase 7G design is in
+`docs/PHASE7G_AUDIO_METER_PLAN.md`.
+
+The Phase 7E mock/QML fault-injection suite passed during Phase 7F, covering independently
+delayed/stale settings and status, recovery, and reconnect without interrupting real USB.
+The corrected header, readiness banner, healthy freshness and all live GUI indicators still
+require confirmation with the latest binary after the owner closes the older lease-holding GUI.
+No synchronized physical-action/video marker was available, so no new genuine end-to-end
+latency measurement is claimed. The production 2 Hz settings / 4 Hz status schedules are
+unchanged.
+
+Phase 7F automated checks: Release **156/156 CTests**, including the mock/QML fault suite;
+ASan/UBSan **155/155**; standalone USB call-site audit **PASS**. These validate the unchanged
+read-only software baseline and plan documentation, not the pending real-screen acceptance.

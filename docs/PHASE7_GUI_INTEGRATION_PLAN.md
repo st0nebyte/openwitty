@@ -122,6 +122,16 @@ The `f793ab7` compact header remains code-tested but not visually reconfirmed. A
 front-panel readiness still cannot be inferred from control GET success. All real GUI controls
 remain read-only.
 
+## Phase 7F / 7G priority (2026-10-17)
+
+Phase 7F performs single-owner real-GUI acceptance of the Phase 7E freshness/header changes
+without intentional USB faults. The existing lease holder must exit normally before the latest
+read-only binary is launched. The high-priority next implementation is **audio-meter motion**,
+not additional GUI hardware writes. `docs/PHASE7G_AUDIO_METER_PLAN.md` records the current
+4 Hz status source, limits of its Q8.8 encoding, a separate 30/60 FPS rendering layer,
+observed-sample peak policy, tests, and approval-gated acquisition-rate experiments. No
+Phase 7G polling or rendering change is implemented here.
+
 ## 1. Existing architectural readiness
 
 | Component | Real-hardware ready? | Notes |
