@@ -1,7 +1,7 @@
 # Phase 7 plan: connecting the Qt/QML GUI to the real CONNECT 2
 
-Status: **planning/audit only.** No code was changed, no hardware was used, no new write path
-was added. Baseline: branch `phase6e-work-preparation` @ `7d8a4c0` (117 tests), which sits on
+Historical planning snapshot; superseded for implementation status by the Phase 7B addendum below.
+No new hardware write path was added. Baseline: branch `phase6e-work-preparation` @ `7d8a4c0` (117 tests), which sits on
 `hardware-validation-2026-10-14` @ `d4f99c6` (106 tests). The home computer's unpushed Panic Mute
 commits (108/108 there) are **not** in this tree; section 7 lists where they will collide.
 
@@ -27,6 +27,20 @@ evidence of any kind.
 
 Everything above is **unverified on real hardware**: the selection rule reproduces the descriptor
 layout recorded on 2026-10-14, but the GUI has never opened the device.
+
+## Phase 7B addendum (implemented, mock/replay-tested; hardware retest pending)
+
+* `SelectedChannel` decodes settings byte 56 as microphone/instrument/speaker/headphone; unknown
+  bytes are preserved and shown as Unknown. A blue outline reflects the physical selection only.
+* `mute.allFour` now drives an informational “ALL MAIN CHANNELS MUTED” banner. It is derived from
+  four standard mute fields, not a stored Panic-Mute mode, and cannot send any command.
+* `ui.state` is the sole connection-state source of truth; `ui.detail` is descriptive and
+  `write.state`/`write.verifying` retain verification information. The overlapping `ui.status` key
+  was removed.
+* USB polling remains serialized and read-only: status is 4 Hz; settings is 2 Hz (one GET every
+  500 ms). This is a conservative configuration, mock-tested but not yet measured on hardware.
+* `ReplayTransport` supplies deterministic identifier-free settings/status frames and refuses all
+  writes. Its current fixtures are synthetic/sanitized transition shapes, not claimed real captures.
 
 ## 1. Existing architectural readiness
 

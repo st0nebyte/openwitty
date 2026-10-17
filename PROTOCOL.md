@@ -250,6 +250,10 @@ mix/monitor and autogain buttons are action-trigger buttons rather than pure sel
 tested against this byte (doing so would have side effects beyond selection), so whether they also
 populate byte 56, and with what values, remains open.
 
+Phase 7B exposes this as the typed `SelectedChannel` decoder. Values outside `0x01`–`0x04` remain
+raw-preserved and are presented as Unknown; the GUI only reflects this physical focus and has no
+channel-selection write/control path.
+
 Sync loop (every tick; `LewittDevice::tick`): snapshot ← current;
 `readStatus()`; optionally `readSettings()`; then for each schema field, if
 `pending != snapshot` **or** (the device's current value differs from the

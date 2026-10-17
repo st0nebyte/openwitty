@@ -123,10 +123,17 @@
 - AppImage/Flatpak: deferred (see docs/PACKAGING.md).
 - Add `developer`/screenshots to metainfo once a licence and hosting exist.
 
-## Phase 7B (after the Panic Mute commits are integrated)
+## Phase 7B (read-only live-state synchronization)
 
-- `SettingsMessage::selectedChannel()` + `selected.channel` + strip highlight (byte 56 is hardware-confirmed).
-- Evidence badges for unverified fields in QML; `ReplayTransport` with serial-redacted real fixtures.
-- Settings poll rate on USB (≥ 2 Hz) and a `mute.allFour`-aware Panic Mute indicator.
-- Hardware session: GUI read-only against the real unit (`--interface auto` first), compare with CLI.
+- ✔ typed `SettingsMessage::selectedChannel()` + `selected.channel` + read-only strip highlight;
+  unknown raw values are not guessed. Mock/replay tested; pending hardware retest.
+- ✔ deterministic read-only `ReplayTransport` with identifier-free snapshots and Panic-Mute-shaped
+  transition tests. A captured, sanitized real-data fixture is still pending.
+- ✔ USB settings poll at 2 Hz (status remains 4 Hz); `mute.allFour` drives a non-interactive
+  “ALL MAIN CHANNELS MUTED” indication. No software Panic Mute trigger exists.
+- ✔ `ui.state` is canonical; redundant `ui.status` removed in favour of non-state `ui.detail` and
+  existing `write.*` verification fields.
+- **Next:** approved hardware session: GUI read-only against the real unit (`--interface auto`),
+  compare CLI and GUI while manually changing gain/volume/mute/channel selection/Panic Mute.
+- Evidence badges for unverified fields remain deferred; prefer a compact advanced-details panel.
 - Re-run packaging checks (`packaging_staging`) — unchanged by 7A but not re-verified on `.deb`.

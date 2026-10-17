@@ -9,6 +9,9 @@ namespace lewitt {
 
 enum class PreampType : std::uint8_t { Clean = 0, Warm = 1, Vivid = 2 };
 enum class MonitorSource : std::uint8_t { InstrumentOnly = 0, MicrophoneOnly = 1, Both = 2 };
+// Settings byte 56 is the physical touch-surface focus. Values 1..4 were confirmed on a
+// CONNECT 2; all other values deliberately remain unknown rather than being guessed.
+enum class SelectedChannel : std::uint8_t { Microphone = 1, Instrument = 2, Speaker = 3, Headphone = 4 };
 enum class LedElement { Icons, Mute, Parameter, Metering, GainReduction };
 
 // CustomButtonShortPress (settings byte 53). Values recovered from the Windows
@@ -85,6 +88,7 @@ inline constexpr std::size_t kLedColorParameter = 44;
 inline constexpr std::size_t kLedColorMetering = 47;
 inline constexpr std::size_t kLedColorGainReduction = 50;
 inline constexpr std::size_t kCustomButton = 53;       // enum
+inline constexpr std::size_t kSelectedChannel = 56;    // physical touch-surface focus (HW-read)
 inline constexpr std::size_t kExternalGainLock = 57;   // bool (ExternalGainControl)
 inline constexpr std::size_t kNativeVolumeMapping = 59;// enum (MasterSliderMap)
 inline constexpr std::size_t kMobileStreaming = 67;    // bool
@@ -142,6 +146,8 @@ public:
     bool mixToSpeakers() const { return mixToSpeakersRaw() != 0; }
     std::uint8_t nativeVolumeMapping() const;
     std::uint8_t ledBrightness() const;
+    std::uint8_t selectedChannelRaw() const;
+    std::optional<SelectedChannel> selectedChannel() const;
     Rgb ledColor(LedElement e) const;
     std::uint8_t byteAt(std::size_t off) const { return raw_[off]; }
 

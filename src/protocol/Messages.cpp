@@ -136,6 +136,16 @@ bool SettingsMessage::highImpedanceHeadphone() const { return raw_[settings_off:
 bool SettingsMessage::externalGainLock() const { return raw_[settings_off::kExternalGainLock] != 0; }
 bool SettingsMessage::mobileStreaming() const { return raw_[settings_off::kMobileStreaming] != 0; }
 std::uint8_t SettingsMessage::ledBrightness() const { return raw_[settings_off::kLedBrightness]; }
+std::uint8_t SettingsMessage::selectedChannelRaw() const { return raw_[settings_off::kSelectedChannel]; }
+std::optional<SelectedChannel> SettingsMessage::selectedChannel() const {
+    switch (selectedChannelRaw()) {
+        case static_cast<std::uint8_t>(SelectedChannel::Microphone): return SelectedChannel::Microphone;
+        case static_cast<std::uint8_t>(SelectedChannel::Instrument): return SelectedChannel::Instrument;
+        case static_cast<std::uint8_t>(SelectedChannel::Speaker): return SelectedChannel::Speaker;
+        case static_cast<std::uint8_t>(SelectedChannel::Headphone): return SelectedChannel::Headphone;
+        default: return std::nullopt;
+    }
+}
 static std::size_t ledOff(LedElement e) {
     switch (e) {
         case LedElement::Icons: return settings_off::kLedColorIcons;

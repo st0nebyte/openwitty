@@ -6,12 +6,15 @@ Item {
     id: root
     property int index: 1
     property bool interactive: false
+    property bool physicalSelected: false
     readonly property string p: "in" + index + "."
     readonly property bool mic: index === 1
     function v(k, d) { var x = device.values[p + k]; return x === undefined ? d : x; }
     readonly property bool dsp: device.values["dsp.available"] !== false
     readonly property bool pending: device.values["pending." + p + "gain"] === true
     width: 152; height: 267
+    Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
+                border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
 
     LevelMeter { x: -9; y: 40; height: 187; scale: true; barWidth: 8; levelL: root.v("level", -60) }
 

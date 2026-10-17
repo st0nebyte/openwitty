@@ -168,6 +168,25 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     root.reset();
 }
 
+TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {
+    app();
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* indicator = root->findChild<QObject*>("panicMuteIndicator");
+    ASSERT_TRUE(indicator);
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("mute.allFour"); }));
+    EXPECT_FALSE(indicator->property("visible").toBool());
+    c.simulatePanicMute();
+    ASSERT_TRUE(waitFor([&] { return c.values()["mute.allFour"].toBool(); }, 4000));
+    EXPECT_TRUE(indicator->property("visible").toBool());
+}
+
 TEST(GuiBackend, CustomButtonAndMixToSpeakers) {
     app();
     DeviceController c;
@@ -263,6 +282,40 @@ TEST(GuiSync, PanicMuteUpdatesAllFourMuteFieldsAndPreservesPendingEdit) {
         << "loopback mute confirmed NOT affected by Panic Mute on real hardware";
     EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 61.0);   // pending edit survived
     EXPECT_TRUE(c.values()["pending.in1.gain"].toBool());
+}
+
+TEST(GuiSync, PhysicalSelectedChannelIsPublishedAndUnknownIsSafe) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("selected.channel"); }));
+    EXPECT_EQ(c.values()["selected.channel"].toString(), "microphone");
+    for (const auto& entry : std::initializer_list<std::pair<int, const char*>>{
+             {2, "instrument"}, {3, "speaker"}, {4, "headphone"}}) {
+        c.simulateExternalChange("selected.channel", entry.first);
+        ASSERT_TRUE(waitFor([&] { return c.values()["selected.channel"].toString() == entry.second; }, 4000));
+        EXPECT_TRUE(c.values()["selected.channelKnown"].toBool());
+    }
+    c.simulateExternalChange("selected.channel", 0x7f);
+    ASSERT_TRUE(waitFor([&] { return c.values()["selected.channelRaw"].toInt() == 0x7f; }, 4000));
+    EXPECT_EQ(c.values()["selected.channel"].toString(), "unknown");
+    EXPECT_FALSE(c.values()["selected.channelKnown"].toBool());
+}
+
+TEST(GuiSync, RapidPhysicalChangesConvergeOnTheNextSettingsRefresh) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("spk.volume"); }));
+    // These are device-side changes only: no GUI setValue()/SET path is involved.
+    c.simulateExternalChange("in1.gain", 45.0);
+    c.simulateExternalChange("spk.volume", -12.0);
+    c.simulateExternalChange("in1.mute", true);
+    c.simulateExternalChange("selected.channel", 3);
+    ASSERT_TRUE(waitFor([&] {
+        return c.values()["in1.gain"].toDouble() == 45.0 && c.values()["spk.volume"].toDouble() == -12.0 &&
+               c.values()["in1.mute"].toBool() && c.values()["selected.channel"].toString() == "speaker";
+    }, 4000));
 }
 
 TEST(GuiSync, IdenticalValueSendsNoCommand) {

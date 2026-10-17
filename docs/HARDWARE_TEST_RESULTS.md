@@ -842,3 +842,16 @@ request (mic 45 dB muted, instrument unmuted no-input, speaker unmuted 0 dB, hea
 owner will re-mute manually rather than have this session restore it.
 
 Device disconnect/reconnect handling was not tested this session (not requested).
+
+### 17.7 Phase 7B implementation status — mock/replay only, hardware retest pending
+
+The following changes were implemented after the observations above, but were **not** exercised on
+the physical device in this session: byte 56 now has a typed selected-channel decoder and a
+read-only blue strip outline; the existing derived `mute.allFour` value now shows an informational
+“ALL MAIN CHANNELS MUTED” banner; and USB settings polling is 2 Hz while status polling remains
+4 Hz. `ui.state` is now the sole connection-state source, replacing redundant `ui.status` with
+non-state `ui.detail`; write verification remains in `write.*`. A deterministic, write-refusing
+`ReplayTransport` tests selected-channel and Panic-Mute-shaped settings transitions without USB or
+identifying data. Release validation after this work: 140/140 CTests; these are automated/mock/replay
+results only, and a separate read-only hardware session is required before claiming live GUI
+confirmation.

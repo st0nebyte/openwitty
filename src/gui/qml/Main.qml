@@ -14,6 +14,8 @@ Window {
     readonly property string uiError: (device.values["ui.error"] || "").split("\n")[0]
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
+    readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
+    readonly property bool panicMuted: device.values["mute.allFour"] === true
     property bool showSettings: false
     property bool showWizard: false
     property bool showOnboarding: false
@@ -108,11 +110,11 @@ Window {
         Rectangle { x: 480; y: 78; width: 1; height: 267; color: "#1a1a1a" }
         Rectangle { x: 565; y: 50; width: 1; height: 295; color: "#000" }
 
-        InputStrip { x: 3; y: 78; index: 1; interactive: win.interactive }
-        InputStrip { x: 157; y: 78; index: 2; interactive: win.interactive }
+        InputStrip { x: 3; y: 78; index: 1; interactive: win.interactive; physicalSelected: win.selectedChannel === "microphone" }
+        InputStrip { x: 157; y: 78; index: 2; interactive: win.interactive; physicalSelected: win.selectedChannel === "instrument" }
         OutputStrip { x: 310; y: 78; group: "loop"; interactive: win.interactive }
-        OutputStrip { x: 395; y: 78; group: "spk"; interactive: win.interactive }
-        OutputStrip { x: 480; y: 78; group: "hp"; interactive: win.interactive }
+        OutputStrip { x: 395; y: 78; group: "spk"; interactive: win.interactive; physicalSelected: win.selectedChannel === "speaker" }
+        OutputStrip { x: 480; y: 78; group: "hp"; interactive: win.interactive; physicalSelected: win.selectedChannel === "headphone" }
         MonitorSection { x: 568; y: 78; interactive: win.interactive }
 
         // overlays
@@ -157,7 +159,10 @@ Window {
                      ? "Connection to the device was lost — retrying when it reappears. " + win.uiError
                      : win.uiState === "error" ? "Cannot communicate with the device. " + win.uiError
                      : "No device connected. Use “USB (read-only)” to look for a CONNECT 2." }
-        Row { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+        Text { objectName: "panicMuteIndicator"; visible: win.panicMuted; anchors.verticalCenter: parent.verticalCenter; anchors.right: controls.left
+               anchors.rightMargin: 10; color: "#ff9a9a"; font.pixelSize: 10; font.bold: true
+               text: "ALL MAIN CHANNELS MUTED" }
+        Row { id: controls; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 6
             ToggleButton { width: 90; height: 20; text: "Mock device"; onClicked: device.connectMock() }
             ToggleButton { width: 100; height: 20; text: "USB (read-only)"; onClicked: device.connectUsb() }
             ToggleButton { width: 52; height: 20; text: "Unplug"; visible: device.simulated; onClicked: device.simulateUnplug() }

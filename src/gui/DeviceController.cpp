@@ -264,9 +264,11 @@ void DeviceWorker::poll() {
     auto s = session_->refreshStatus();
     if (!s) report(s);
     if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
-    // Re-read settings periodically (the original does this every tick): device-side
-    // changes (hardware knob, other software) are merged, pending user edits survive.
-    if (++pollCount_ % (mock_ ? 10 : 4) == 0) refreshDeviceState();
+    // Re-read settings periodically: device-side changes (hardware knob, other software) are
+    // merged and pending simulated edits survive. USB status remains 4 Hz; settings are 2 Hz
+    // (one additional read every 500 ms, serialized with status) to keep physical controls live
+    // without speculative high-rate polling. Mock retains its prior 4 Hz settings cadence.
+    if (++pollCount_ % (mock_ ? 10 : 2) == 0) refreshDeviceState();
     publish();
 }
 
@@ -339,6 +341,16 @@ void DeviceWorker::simulateExternalChange(const QString& key, const QVariant& v)
     else if (key == "in1.gain") (void)m.setGainDb(0, v.toDouble());
     else if (key == "in2.gain") (void)m.setGainDb(1, v.toDouble());
     else if (key == "in1.mute") (void)m.setMute(0, v.toBool());
+    else if (key == "loop.mute") (void)m.setLoopbackMute(v.toBool());
+    else if (key == "selected.channel") {
+        const int raw = v.toInt();
+        if (raw < 0 || raw > 255) return;
+        auto b = m.bytes();
+        Bytes edited(b.begin(), b.end());
+        edited[settings_off::kSelectedChannel] = static_cast<std::uint8_t>(raw);
+        mock_->setSettingsBytes(std::move(edited));
+        return;
+    }
     else return;
     auto b = m.bytes();
     mock_->setSettingsBytes(Bytes(b.begin(), b.end()));
@@ -390,20 +402,17 @@ void DeviceWorker::publish() {
     }
     v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
     v["write.verifying"] = verifying_;
-    // One label distinguishing the states the GUI needs to react to: whether there's a device at
-    // all, whether it's simulated, whether writes are actually possible, and whether a write is
-    // currently being confirmed. Writable real hardware never appears here while GUI policy keeps
-    // allowHardwareWrites off (see DeviceSession's WritePolicy) - that's intentional: this label
-    // reflects reality, it doesn't grant anything by itself.
-    QString uiStatus;
-    if (verifying_) uiStatus = "Pending verification";
-    else if (!session_ || cs == ConnectionState::Disconnected) uiStatus = "Disconnected";
-    else if (cs == ConnectionState::Connecting) uiStatus = "Connecting";
-    else if (cs == ConnectionState::Error) uiStatus = "Hardware error";
-    else if (session_->isSimulated()) uiStatus = "Mock mode";
-    else if (session_->writesEnabled()) uiStatus = "Connected with authorized controls";
-    else uiStatus = "Connected read-only";
-    v["ui.status"] = uiStatus;
+    // `ui.state` is the sole connection-state source of truth and is what QML renders. Keep
+    // write progress separate rather than creating a second, partially-overlapping status enum.
+    // `ui.detail` is optional human detail only; write.state/write.verifying remain authoritative
+    // for verification and never grant write permission.
+    v["ui.detail"] = verifying_ ? "Pending verification"
+                   : uiState == "simulated" ? "Mock mode"
+                   : uiState == "real-readonly" ? "Connected read-only"
+                   : uiState == "real-writable" ? "Connected with authorized controls"
+                   : uiState == "connection-lost" ? "Connection lost"
+                   : uiState == "error" ? "Hardware error"
+                   : uiState == "connecting" ? "Connecting" : "Disconnected";
     if (session_) {
         auto mode = deviceModeFromPid(session_->info().pid);
         v["device.mode"] = mode == DeviceMode::MacOSStreaming ? "MacOSStreaming"
@@ -430,6 +439,16 @@ void DeviceWorker::publish() {
         v["spk.mute"] = s.speakerMute();
         v["hp.volume"] = s.headphoneVolumeDb();
         v["hp.mute"] = s.headphoneMute();
+        v["selected.channelRaw"] = int(s.selectedChannelRaw());
+        const auto selected = s.selectedChannel();
+        if (!selected) v["selected.channel"] = "unknown";
+        else switch (*selected) {
+            case SelectedChannel::Microphone: v["selected.channel"] = "microphone"; break;
+            case SelectedChannel::Instrument: v["selected.channel"] = "instrument"; break;
+            case SelectedChannel::Speaker: v["selected.channel"] = "speaker"; break;
+            case SelectedChannel::Headphone: v["selected.channel"] = "headphone"; break;
+        }
+        v["selected.channelKnown"] = selected.has_value();
         // Purely derived display state, not a protocol concept: real hardware has no dedicated
         // "Panic Mute" flag (confirmed 2026-10-16, docs/HARDWARE_TEST_RESULTS.md) - holding MUTE
         // just sets these same four fields. True exactly when all four happen to be muted, however

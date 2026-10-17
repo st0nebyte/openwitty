@@ -15,6 +15,7 @@ MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(
     settings_[37] = 80;  // LED brightness
     settings_[41] = 0xFF;  // mute LED red (guide: factory red)
     settings_[53] = 0x0E;  // custom button: toggle brightness (as in the guide screenshot)
+    settings_[56] = 1;     // physical focus: microphone (confirmed mapping; simulation only)
 }
 
 Status MockTransport::open() {

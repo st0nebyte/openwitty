@@ -5,11 +5,14 @@ Item {
     id: root
     property string group: "spk"       // loop | spk | hp
     property bool interactive: false
+    property bool physicalSelected: false
     function v(k, d) { var x = device.values[root.group + "." + k]; return x === undefined ? d : x; }
     readonly property bool hasFader: group !== "loop"
     readonly property bool pending: device.values["pending." + root.group + ".volume"] === true
                                     || device.values["pending." + root.group + ".mute"] === true
     width: 85; height: 267
+    Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
+                border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
     Rectangle { visible: root.pending; x: 74; y: 8; width: 6; height: 6; radius: 3; color: Theme.warn }
 
     GlyphIcon { x: 42.5 - width / 2; y: 8; width: 30; height: 30
