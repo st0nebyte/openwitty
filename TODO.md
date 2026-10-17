@@ -178,8 +178,10 @@
 
 ## Phase 7F / 7G — meter priority
 
-- Complete single-owner, read-only Phase 7E visual acceptance after the older GUI releases the
-  control lease; document healthy freshness and any genuine externally marked latency.
+- ✔ Single-owner, read-only Phase 7E visual acceptance after the older GUI released the lease:
+  compact header/sample-rate spacing and readiness banner confirmed by a current screenshot;
+  owner confirmed matching live selection, gain, volume, mute and mix. Deliberately induced
+  real-USB freshness faults and externally marked action-to-screen latency remain pending.
 - **High priority:** implement the separate Phase 7G audio-meter plan in
   `docs/PHASE7G_AUDIO_METER_PLAN.md` only after Phase 7F acceptance. Target responsive 60 FPS
   rendering without equating animation rate to USB GET rate. No new GUI hardware writes.

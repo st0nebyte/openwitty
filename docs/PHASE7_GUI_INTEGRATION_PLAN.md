@@ -132,6 +132,15 @@ not additional GUI hardware writes. `docs/PHASE7G_AUDIO_METER_PLAN.md` records t
 observed-sample peak policy, tests, and approval-gated acquisition-rate experiments. No
 Phase 7G polling or rendering change is implemented here.
 
+The owner closed the old lease holder; the latest read-only GUI then connected as a single
+client. A window screenshot confirmed the compact header and `Unknown` sample rate without
+overlap, plus the readable readiness banner. The owner confirmed current values matched and
+physically rechecked live selection, microphone gain, headphone volume, headphone/speaker mute,
+and monitoring mix. Trace categories matched each change; no software write or new poll rate
+was used. The owner confirmed no freshness warning during the healthy session. Phase 7E fault
+warnings remain mock-tested only, and physical-action-to-screen latency remains unmeasured
+without an external marker. Details: hardware results §21.
+
 ## 1. Existing architectural readiness
 
 | Component | Real-hardware ready? | Notes |

@@ -1109,8 +1109,39 @@ this does not prove none exists. The dedicated, unimplemented Phase 7G design is
 
 The Phase 7E mock/QML fault-injection suite passed during Phase 7F, covering independently
 delayed/stale settings and status, recovery, and reconnect without interrupting real USB.
-The corrected header, readiness banner, healthy freshness and all live GUI indicators still
-require confirmation with the latest binary after the owner closes the older lease-holding GUI.
+The owner then closed the older GUI normally. PID 13477 was absent, no OpenWitty process or
+control-lease holder remained, and the current Release GUI rebuilt successfully. A new
+single-client read-only launch took the lease. A window-only screenshot from that build showed
+“Connected · read-only”, a non-overlapping “Sample rate: Unknown” label, the readable
+“CONTROL LINK, READ-ONLY” readiness caveat, and real settings/selected-channel values. No
+freshness warning appeared in that screenshot. The persistent GUI subsequently produced
+regular read-only status/settings traces: representative poll gaps 249.910/249.943 ms,
+status GETs 2.751/2.684 ms, settings GETs 3.994/3.994 ms; no transport error was reported.
+These are internal stage observations, not an action-to-screen measurement. The owner visually
+confirmed that the current selected channel, gain, volume, mute and mix indications matched
+the physical device, with no delayed/stale/unavailable warning. In a follow-up manual selection
+test, the owner selected microphone on the device and confirmed the blue GUI outline followed;
+the trace classified a settings `selection` change without any software write. This is a
+read-only, owner-observed live synchronization result, not an externally timed latency sample.
+The owner then adjusted microphone gain physically and confirmed the GUI followed; the trace
+classified successive `gain` changes at the unchanged 500 ms settings cadence. No software
+gain command was sent. The owner did not provide an external action timestamp, so “updates” is
+an observation, not a measured physical-to-screen delay.
+The owner next selected headphone and confirmed its blue outline, then adjusted headphone
+volume physically and confirmed the GUI slider followed. The trace classified `selection` and
+successive `volume` changes, again without a software write. The owner then toggled headphone
+and speaker mute physically and confirmed both GUI indicators; the trace classified matching
+`mute` changes. Finally, the owner selected and adjusted input/playback mix, confirmed that
+the GUI mix knob followed, and saw no other control change. The trace classified successive
+`mix` changes without a headphone-volume change. These owner-operated actions and their GUI
+observations complete the Phase 7F live-control checks; they do not calibrate mix acoustics.
+The owner confirmed at the end that the readiness banner remained readable and no
+SETTINGS/METERS delayed or stale warning was visible. The single-owner GUI had run for over
+eight minutes, retained the control lease, and produced regular read-only GET traces without
+a reported transport error. ALSA still listed the CONNECT 2; no audio-ready claim is inferred
+from the control GETs alone. No USB SET, driver detach, reset, DFU, streaming-mode switch or
+software-triggered device change was performed. The GUI was left running for the owner.
+
 No synchronized physical-action/video marker was available, so no new genuine end-to-end
 latency measurement is claimed. The production 2 Hz settings / 4 Hz status schedules are
 unchanged.
