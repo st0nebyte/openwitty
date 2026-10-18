@@ -183,7 +183,8 @@ build-release/openwitty-meter-probe --rate 8 --duration 10 --execute
 Run them sequentially with only one OpenWitty control client, unchanged device settings and
 audio routing, and a comparable steady signal supplied by the owner. These commands imply
 40 + 80 status GETs and two API GETs at most across both runs: 120 status requests total,
-7,680 status-payload bytes, plus 128 API-payload bytes, excluding USB transaction overhead.
+7,680 status-payload bytes, plus two 64-byte API responses (128 bytes total),
+excluding USB transaction overhead.
 Monitor audio for glitches and confirm ALSA/PipeWire presence before/after. A 16 Hz trial is
 not part of this diagnostic and needs its own decision and approval.
 
@@ -245,7 +246,7 @@ Approval sequence:
    OpenWitty control lease; prepare a comparable steady audio signal. Ask for
    **explicit approval** of `build-release/openwitty-meter-probe --rate 40
    --duration 10 --execute`. This yields at most 400 status GETs, 25,600 status
-   payload bytes, and one 128-byte API GET over at most 10 seconds, excluding
+   payload bytes, and one 64-byte API GET over at most 10 seconds, excluding
    USB transaction overhead. Stop immediately on transfer/decode error, device
    loss, or audible disruption. This command has **not** been executed.
 2. Review achieved frequency, interval jitter, GET median/p95, genuinely changed
@@ -253,7 +254,7 @@ Approval sequence:
    coexistence. Do not infer peak accuracy merely from changed bytes.
 3. Only if 40 Hz is stable and informative, propose the separate
    `--rate 48 --duration 10 --execute` command (maximum 480 status GETs,
-   30,720 status payload bytes, plus one API GET) and obtain **new approval**.
+   30,720 status payload bytes, plus one 64-byte API GET) and obtain **new approval**.
 
 Do not change the real GUI's 4 Hz production default, the optional 8 Hz mode,
 2 Hz settings schedule, or 60 FPS presentation until approved hardware results
