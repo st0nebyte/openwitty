@@ -108,12 +108,12 @@ the official application on its supported OS could answer the original poll
 interval directly, but must be separately planned because launching it may
 cause device writes outside this read-only task.
 
-## Phase 7G.2 follow-up (preparation only)
+## Phase 7G.2 follow-up (read-only hardware sampling)
 
-OpenWitty now has a bounded, approval-gated `openwitty-meter-probe` for the
-proposed 4 Hz versus 8 Hz status-GET comparison; see
-`docs/PHASE7G_AUDIO_METER_PLAN.md`. No physical run has occurred, so the
-original application's poll frequency, the device's status-field update rate,
-and any benefit from 8 Hz remain unknown. The diagnostic compares eight raw
-meter fields separately from other status changes to avoid interpreting an
-unrelated status-byte change as a new level observation.
+After separate owner approval, OpenWitty's bounded read-only diagnostic sampled status at
+4 Hz (40/40 GETs) and 8 Hz (80/80 GETs), with no transfer errors. The active speaker meter
+fields changed on every consecutive response at both rates; 38/39 interior 8 Hz midpoint
+speaker-L values differed from both neighboring 250 ms-spaced samples. Therefore this
+device/signal supplied additional observations at 8 Hz. This does **not** reveal the original
+application's poll interval, establish firmware's maximum update rate or meter semantics, or
+justify 16 Hz automatically. See `docs/HARDWARE_TEST_RESULTS.md` §23 for timing and caveats.

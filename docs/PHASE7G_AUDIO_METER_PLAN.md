@@ -157,7 +157,7 @@ The 8 Hz/16 Hz status-GET comparison is **still pending separate approval**. Its
 must distinguish rendered cadence from 4 Hz hardware sampling, and must check GET errors,
 audio coexistence, CPU/RSS, and whether repeated frames indicate a slower firmware source.
 
-## Phase 7G.2 bounded acquisition diagnostic (prepared, not hardware-run)
+## Phase 7G.2 bounded acquisition diagnostic (hardware-run after approval)
 
 The standalone `openwitty-meter-probe` uses the same read-only auto-discovery and cooperative
 control lease as the GUI. It does not alter `DeviceWorker` or production polling. Real USB is
@@ -171,9 +171,9 @@ is a baseline, not counted as a change. `interval_hz` is computed from the first
 GET start timestamps, not request count divided by a shortened final wall time. CPU and RSS
 are whole-process diagnostics, not an isolated USB cost. Mock tests validate the bounds and
 read-only path; the full Release suite passed 166/166 and the USB call-site audit passed.
-No 8 Hz hardware observation is claimed yet.
 
-The proposed real commands, **not to execute without explicit approval**, are:
+The owner explicitly approved these exact commands and prepared a comparable signal; they
+were executed sequentially after a fresh safety preflight on 2026-10-18:
 
 ```sh
 build-release/openwitty-meter-probe --rate 4 --duration 10 --execute
@@ -186,3 +186,14 @@ audio routing, and a comparable steady signal supplied by the owner. These comma
 7,680 status-payload bytes, plus 128 API-payload bytes, excluding USB transaction overhead.
 Monitor audio for glitches and confirm ALSA/PipeWire presence before/after. A 16 Hz trial is
 not part of this diagnostic and needs its own decision and approval.
+
+Measured results are in `docs/HARDWARE_TEST_RESULTS.md` §23. The 4/8 Hz commands returned
+40/80 successful status GETs with no errors; measured start intervals were 250/125 ms.
+Both runs changed active speaker meter bytes on every consecutive response. Within the 8 Hz
+run, 38/39 interior 125 ms midpoint speaker-L values differed from both neighboring
+250 ms-spaced values, including several >1 dB local extrema. That is concrete additional
+meter information, **not** proof of improved true peak accuracy or of how a GUI would look.
+GET-duration p95 was 2.908/2.927 ms and no control instability was seen. The probe's high
+identical peak-RSS outputs need independent verification; audio enumeration survived, while
+audible-glitch feedback and objective XRUN monitoring remain open. Keep production 4 Hz until
+the GUI benefit and resource picture are validated. A 16 Hz trial is not automatic.

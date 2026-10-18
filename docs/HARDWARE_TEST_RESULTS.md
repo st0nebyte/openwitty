@@ -1217,6 +1217,42 @@ After implementation, the full Release suite passed **166/166 CTests** (three ne
 mock/dry-run checks), and the standalone USB call-site audit passed. The CTests made no
 physical sampling GETs. ASan/UBSan was not rerun for this small diagnostic addition.
 
-**Approval pending:** neither the 4 Hz nor the 8 Hz physical sampling run has been executed.
-No GET-rate, changed-snapshot, CPU, memory, transport-error or audio-coexistence comparison
-can yet be reported for these runs. Production GUI polling remains 4 Hz status / 2 Hz settings.
+The owner then explicitly approved the two exact, sequential 10-second read-only commands in
+`docs/PHASE7G_AUDIO_METER_PLAN.md` and reported a comparable steady signal was prepared. Before
+execution, a fresh passive preflight reconfirmed `29c2:0004`, interface 3 `ff/f0/00` with zero
+endpoints and no bound driver, read/write usbfs permission, ALSA/PipeWire card presence, no
+OpenWitty process, and no held control lease. No other control client was started. The commands
+were executed in order, with a lease/audio-presence check between them. No 16 Hz command,
+GUI launch, software audio routing change, USB SET, driver detach, reset or DFU access occurred.
+
+| Observation | 4 Hz baseline | 8 Hz candidate |
+|---|---:|---:|
+| Successful status GETs / errors | 40 / 0 | 80 / 0 |
+| Actual first-to-last GET-start cadence | 4.000 Hz | 8.000 Hz |
+| GET duration mean / median / p95 / max | 2.727 / 2.749 / 2.908 / 2.995 ms | 2.759 / 2.760 / 2.927 / 2.989 ms |
+| Changed eight-meter bytes, excluding first sample | 39/39 | 79/79 |
+| Changed complete status frames, excluding first sample | 39/39 | 79/79 |
+| Consecutive identical meter snapshots | 0; max run 0 | 0; max run 0 |
+| Probe CPU time / reported mean process CPU | 0.9 ms / 0.01% | 3.6 ms / 0.04% |
+| Probe-reported peak RSS | 777,620 KiB | 777,620 KiB |
+
+Only speaker L/R levels moved; both ranged from about −57 to −31 dB at 4 Hz and −60 to −30 dB
+at 8 Hz. Mic, instrument, loopback L/R and headphone L/R decoded at the −60 dB display floor
+throughout both runs. This is **not** an eight-channel firmware-rate finding. At 8 Hz, the
+intervening 125 ms samples changed from their neighbors: 38 of the 39 interior midpoint
+speaker-L readings differed from *both* adjacent 250 ms-spaced readings. Three midpoint
+readings exceeded both neighbors by more than 1 dB and nine fell below both by more than
+1 dB; these are observed samples, not interpolated peaks. Thus 8 Hz supplied additional
+genuine status-meter observations under this signal. Because the two runs covered different
+10-second signal windows, their ranges/peaks are not a controlled paired accuracy comparison;
+the result does not establish the device's true peak/RMS semantics or a visual improvement.
+
+The probe's identical 777,620 KiB `ru_maxrss` readings are anomalously high for this small
+diagnostic (a separate mock run reported 4,612 KiB). They were **not** independently verified
+with a concurrent process-memory sample, so no conclusion about incremental memory cost is
+drawn. The reported CPU values are short-run whole-process measurements, not isolated USB
+costs. After both runs, the device still enumerated at the same VID/PID, interface 3 remained
+unbound, the control lease was free, and ALSA/PipeWire still listed the card. Those passive
+checks demonstrate continued enumeration, not absence of audible glitches or XRUNs; owner
+audio-quality confirmation was requested. Production GUI polling remains 4 Hz status / 2 Hz
+settings, and any 16 Hz experiment remains unapproved.
