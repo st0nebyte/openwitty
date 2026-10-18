@@ -208,5 +208,8 @@ peak handling are unchanged. The first 4 Hz real-GUI trace and independent `/pro
 snapshot are documented in `docs/HARDWARE_TEST_RESULTS.md` §24. The owner found the
 4 Hz real GUI meters "way too slow"; the opt-in 8 Hz GUI subsequently produced
 stable 125 ms polling with no traced USB errors and similar whole-process RSS.
-Owner visual judgment of 8 Hz and audible-quality feedback remain pending. A 16 Hz
-trial still requires separate approval.
+The owner judged 8 Hz better than 4 Hz, but still far from a real-time level bar;
+the visual acceptance target was **not met**. Audible-quality feedback for the GUI
+run remains pending. Further work should first determine what hardware sample rate
+and meter semantics are achievable; a bounded 16 Hz read-only trial is a possible
+next measurement, not an approved run or a production-rate change.

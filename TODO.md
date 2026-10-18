@@ -187,6 +187,8 @@
   visual motion and measure active frame cadence before calling the 60 FPS target accepted.
 - ✔ Bounded single-client 4/8 Hz read-only probe: 40/80 successful GETs with distinct
   active speaker observations and no USB errors; the owner heard no clicks/dropouts.
-- Visually compare the temporary `--experimental-status-8hz` real GUI with the unchanged
-  4 Hz default, independently measure process resources, and retain 4 Hz until accepted.
-  Do not run 16 Hz without separate approval; meter peak semantics remain unknown.
+- ✔ Temporary `--experimental-status-8hz` real-GUI comparison: owner found 4 Hz far too
+  slow and 8 Hz better, but still far from a real-time level bar. Independent GUI RSS
+  stayed near 160 MiB and the observed 8 Hz trace had no USB errors. Keep 4 Hz as the
+  production default; do not claim visual acceptance or run 16 Hz without separate
+  approval. Meter peak semantics remain unknown; GUI-run audio feedback is pending.

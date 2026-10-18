@@ -1283,7 +1283,7 @@ private dirty; this does **not** reproduce or explain the probe's 777,620 KiB pe
 report because it is a different process and measurement. The owner judged the 4 Hz
 GUI meters "way too slow" and closed that window normally. This is a qualitative
 visual report, not a frame-cadence or physical-sound-to-screen latency measurement.
-The 8 Hz visual assessment remains pending; no meter-smoothness acceptance is claimed.
+The 8 Hz visual assessment follows below; no meter-smoothness acceptance is claimed.
 
 After normal closure of the 4 Hz window and verification that no OpenWitty control
 client held the lease, the opt-in 8 Hz GUI connected to the same device. Three
@@ -1297,4 +1297,11 @@ snapshot after roughly one minute showed 161,240 KiB RSS and 0.4% cumulative CPU
 an earlier `/proc/<pid>/smaps_rollup` snapshot showed 160,016 KiB RSS, 59,011 KiB
 PSS and 45,752 KiB private dirty. The memory figures are of the complete GUI, not
 incremental meter cost. ALSA and PipeWire still listed the CONNECT 2 audio device.
-Audible quality and meter appearance require the owner's assessment.
+The owner reported that 8 Hz looked better than 4 Hz but was "still far away from a
+realtime volume level bar." Thus the extra observed samples improved the subjective
+display but did **not** satisfy meter responsiveness. This is qualitative visual
+feedback, not a measured end-to-end latency or proof that a particular higher GET
+rate would suffice. Audible quality during this GUI run was not separately reported;
+the earlier no-glitch confirmation applies only to the bounded 4/8 Hz probe runs.
+The opt-in GUI remained open at the time of this note. The 4 Hz production default
+is unchanged, and a 16 Hz experiment remains unapproved.

@@ -109,6 +109,8 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   ~60 FPS rendering does not create or imply additional hardware samples.
 * Delayed status freezes/dims the meters; stale status or disconnection clears their live
   display until a new successful sample. A bounded read-only probe observed additional
-  active speaker-meter values at 8 Hz without USB errors; exact meter semantics and GUI
-  visual benefit are still unverified. An explicitly labelled 8 Hz GUI startup experiment
-  is available; the production default remains 4 Hz and no GUI hardware writes were added.
+  active speaker-meter values at 8 Hz without USB errors. In the real GUI, the owner
+  judged 8 Hz better than 4 Hz but still far from a real-time level bar; visual
+  acceptance and exact meter semantics remain open. An explicitly labelled 8 Hz GUI
+  startup experiment is available; the production default remains 4 Hz and no GUI
+  hardware writes were added.
