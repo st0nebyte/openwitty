@@ -142,10 +142,13 @@ behavior, GUI frame rate, or why minimized operation is slower. The exact USB
 request metadata and capture methodology require the sanitized report for an
 independent review. No raw capture or identifying device data is committed.
 
-The owner approved one single-owner, read-only 40 Hz/10-second Linux run (at most
-400 GETs). It achieved its cadence without USB errors but saw only unchanged
-−60 dB meter/status frames; the owner confirmed that no audio was playing.
-Thus it does not test whether
-40 Hz supplies new meter information under playback. The 48 Hz run remains
-unapproved. Neither rate has become a GUI default. See the Phase 7G plan and
-hardware results for Linux details.
+The first approved single-owner, read-only 40 Hz/10-second Linux run (400 GETs)
+achieved its cadence without USB errors but saw unchanged −60 dB frames; the
+owner confirmed no audio was playing. A **separately approved repeat** with
+white-noise playback also achieved 400/400 GETs and zero errors, and its active
+speaker meter fields changed in all 399 successive raw-snapshot comparisons.
+The owner heard no clicks or other noise. This supports genuine 40 Hz meter
+information under that route, not a firmware peak-accuracy claim or a direct
+replication of the Windows timing. The 48 Hz run remains unapproved; neither
+rate has become a GUI default. See the Phase 7G plan and hardware results for
+Linux details.

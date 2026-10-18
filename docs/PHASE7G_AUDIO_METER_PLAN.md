@@ -282,3 +282,23 @@ answer whether 40 Hz yields additional genuine level observations during
 playback. Do not advance to 48 Hz, change the GUI rate, or infer a firmware
 update ceiling from this run. Details and caveats are in
 `docs/HARDWARE_TEST_RESULTS.md` §25.
+
+### Separately approved active-playback 40 Hz repeat
+
+With owner-confirmed white-noise playback reaching CONNECT 2, a new approval
+was obtained for the same 40 Hz/10-second command. It achieved 400/400 GETs,
+zero errors, 40.000 Hz, 25.000 ms median interval, and 0.255/0.312 ms
+median/p95 GET duration. The active speaker meter bytes changed on all 399
+consecutive comparisons; decoded speaker L/R ranged approximately −17…−12 dB.
+CPU was 0.09% of one core over the run, current `/proc` RSS 5,176 KiB, and
+the owner heard no clicks or other audible problem. ALSA/PipeWire and the
+kernel audio driver remained present afterward. This is evidence that the
+device/control path supplies distinct readings at 40 Hz under playback; it
+does not prove true peak accuracy or that the GUI will feel responsive.
+
+A separately approved 48 Hz/10-second read-only trial is now **reasonable to
+propose**, because 40 Hz was stable and informative. It is **not approved or
+executed**. It would be capped at 480 serialized status GETs (30,720 payload
+bytes) plus one 64-byte API GET, with the same first-error stop and owner
+audio monitoring. Keep the 4 Hz GUI default and 2 Hz settings schedule until
+high-rate hardware results and a further GUI-specific authorization exist.

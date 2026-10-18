@@ -1380,3 +1380,40 @@ SET, settings GET, driver detach, reset, or DFU access occurred. The GUI's
 production status schedule remains 4 Hz. **No 48 Hz run was made**; a repeat
 40 Hz run or 48 Hz run requires a new explicit approval; an active-signal repeat
 must first have comparable playback confirmed on the CONNECT 2 path.
+
+The owner then started white-noise playback and confirmed that it reached the
+CONNECT 2. After a **new, explicit approval** for the same exact 40 Hz command,
+the read-only preflight again found the correct VID/PID, accessible vendor
+interface 3, no competing OpenWitty process or held lease, and ALSA/PipeWire
+presence. The second approved run supplied the previously missing active-
+playback comparison:
+
+| Linux 40 Hz with white-noise playback | Observation |
+|---|---:|
+| Status GETs / errors | 400 / 0 |
+| Achieved start-to-start rate | 40.000 Hz |
+| Interval min / median / p95 / max | 24.739 / 25.000 / 25.004 / 25.262 ms |
+| Scheduling lateness p95 | 0.057 ms |
+| Status GET mean / median / p95 / max | 0.257 / 0.255 / 0.312 / 0.492 ms |
+| Changed meter snapshots / changed whole status frames | 399/399 / 399/399 |
+| Consecutive identical meter snapshots | 0 |
+| Speaker L / R decoded range | −17.137…−12.430 / −17.332…−12.910 dB |
+| Process CPU over 9.975 s | 8.9 ms (0.09%) |
+| Current RSS / PSS from `/proc/self/smaps_rollup` | 5,176 / 1,250 KiB |
+| Historical `getrusage` peak RSS | 787,228 KiB (still inconsistent with current `/proc` RSS; cause unknown) |
+
+Only the two speaker meter fields moved under this playback route. At the
+three-decimal printed precision, each speaker channel changed on 398/399
+consecutive comparisons; the raw **eight-meter-byte set** changed on all
+399/399. This demonstrates distinct genuine observations 25 ms apart that a
+4/8 Hz schedule would not sample between its reads. Because the playback
+signals/runs were not identical, this is **not** a controlled numerical
+comparison of captured peaks across rates. It does **not** establish device
+peak/RMS semantics, true peak accuracy, or GUI
+visual acceptance. The owner reported **no clicks or other audible noise**
+during the active-playback run; objective XRUN instrumentation was not used.
+
+Post-run checks still found the CONNECT 2, `snd-usb-audio`, ALSA/PipeWire
+nodes, and a released lease. No USB SET/settings GET, driver detach, reset,
+DFU access, or audio-routing change was made. The default GUI remains at 4 Hz.
+The 48 Hz run has **not** been approved or executed.

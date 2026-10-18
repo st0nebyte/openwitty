@@ -197,6 +197,8 @@
   ✔ Approved 40 Hz/10 s run: 400 GETs, no errors, correct cadence, but all
   status/meter frames stayed unchanged at −60 dB. The owner reported no audible
   clicks or problems and confirmed no audio was playing. An active-signal
-  40 Hz repeat requires a comparable playback signal and new explicit approval.
-  Do not run 48 Hz or change GUI polling on this inconclusive meter-information
-  result.
+  ✔ Separately approved repeat with white-noise playback: 400/400 GETs, zero
+  errors, 40.000 Hz; speaker meter bytes changed on all 399 comparisons, and
+  the owner heard no clicks or other noise. A bounded 48 Hz run is reasonable
+  to propose but needs separate explicit approval. Do not change GUI polling
+  or claim peak accuracy from these probes.
