@@ -1194,3 +1194,29 @@ seven new deterministic meter-dynamics CTests and a new eight-channel QML integr
 An active, externally observed ~60 FPS cadence and owner visual judgment were not yet
 available when this note was written. The 8 Hz/16 Hz read-only acquisition trial remains
 separately approval-gated.
+
+### 23. Phase 7G.2 — bounded meter diagnostic prepared (2026-10-18)
+
+Starting branch `phase7-hardware-integration` at `727a3da20ed54588b35561bd3126826c26bb3ac6`
+was clean. Passive checks found one CONNECT 2 in normal application mode (`29c2:0004`),
+vendor-specific control interface 3 (`ff/f0`, zero endpoints, unbound), a writable usbfs node
+through the existing user ACL, and the card in ALSA/PipeWire. No OpenWitty process or held
+control lease was found. These are enumeration/permission observations, **not** a status-GET
+test. No physical USB control request or audio capture was performed in preparation.
+
+`openwitty-meter-probe` now provides a dry-run-by-default, single-owner, read-only status
+sampler. Its only real-device options use `readOnlyHardwareOptions()` (automatic safe interface,
+no detach, no writes). Each bounded run performs at most one API GET plus 40 status GETs at
+4 Hz or 80 at 8 Hz over a requested 10-second window. It stops on the first transport or
+decode error and never sends catch-up bursts. Output contains monotonic relative time, GET
+duration, eight decoded dB levels, separate changed-status/changed-meter flags, repeat runs,
+summary timing/CPU/RSS, and no raw payload or serial. The software/mock checks do **not**
+establish real USB stability or an 8 Hz benefit.
+
+After implementation, the full Release suite passed **166/166 CTests** (three new probe
+mock/dry-run checks), and the standalone USB call-site audit passed. The CTests made no
+physical sampling GETs. ASan/UBSan was not rerun for this small diagnostic addition.
+
+**Approval pending:** neither the 4 Hz nor the 8 Hz physical sampling run has been executed.
+No GET-rate, changed-snapshot, CPU, memory, transport-error or audio-coexistence comparison
+can yet be reported for these runs. Production GUI polling remains 4 Hz status / 2 Hz settings.

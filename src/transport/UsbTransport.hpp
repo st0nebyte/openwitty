@@ -47,6 +47,8 @@ struct UsbOptions {
     bool allowDetachKernelDriver{false};
     // Writes are refused at transport level unless explicitly enabled.
     bool allowWrites{false};
+    // Diagnostics can avoid even reading device string descriptors (especially serial).
+    bool readDeviceStrings{true};
     // Transport-level gate for the disruptive detach/claim path: even if a caller selects
     // DetachAndClaim / allowDetachKernelDriver, read() refuses unless this is also set.
     // Only an explicit, user-confirmed action (CLI: LEWITT_ALLOW_DISRUPTIVE=1) may set it.

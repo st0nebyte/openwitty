@@ -156,3 +156,33 @@ animation targets the display refresh (~60 FPS on a 60 Hz screen), not a fixed U
 The 8 Hz/16 Hz status-GET comparison is **still pending separate approval**. Its measurements
 must distinguish rendered cadence from 4 Hz hardware sampling, and must check GET errors,
 audio coexistence, CPU/RSS, and whether repeated frames indicate a slower firmware source.
+
+## Phase 7G.2 bounded acquisition diagnostic (prepared, not hardware-run)
+
+The standalone `openwitty-meter-probe` uses the same read-only auto-discovery and cooperative
+control lease as the GUI. It does not alter `DeviceWorker` or production polling. Real USB is
+dry-run-only unless `--execute` is passed after separate owner approval. Valid rates are only
+4 or 8 Hz, valid durations 1–10 seconds, and the hard ceiling is 80 status GETs plus one API
+GET. Device string-descriptor reads are disabled for this diagnostic, so it does not fetch a
+serial number. A first error stops the run; delayed requests are never followed by a catch-up burst.
+Its output compares the full 64-byte status frame and only the 16 raw meter bytes separately,
+while logging decoded/clamped eight-channel values rather than raw payloads. The first sample
+is a baseline, not counted as a change. `interval_hz` is computed from the first and last
+GET start timestamps, not request count divided by a shortened final wall time. CPU and RSS
+are whole-process diagnostics, not an isolated USB cost. Mock tests validate the bounds and
+read-only path; the full Release suite passed 166/166 and the USB call-site audit passed.
+No 8 Hz hardware observation is claimed yet.
+
+The proposed real commands, **not to execute without explicit approval**, are:
+
+```sh
+build-release/openwitty-meter-probe --rate 4 --duration 10 --execute
+build-release/openwitty-meter-probe --rate 8 --duration 10 --execute
+```
+
+Run them sequentially with only one OpenWitty control client, unchanged device settings and
+audio routing, and a comparable steady signal supplied by the owner. These commands imply
+40 + 80 status GETs and two API GETs at most across both runs: 120 status requests total,
+7,680 status-payload bytes, plus 128 API-payload bytes, excluding USB transaction overhead.
+Monitor audio for glitches and confirm ALSA/PipeWire presence before/after. A 16 Hz trial is
+not part of this diagnostic and needs its own decision and approval.

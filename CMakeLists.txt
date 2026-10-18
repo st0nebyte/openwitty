@@ -76,6 +76,22 @@ endif()
 add_executable(openwitty-cli src/cli/main.cpp)
 target_link_libraries(openwitty-cli PRIVATE lewitt_core)
 install(TARGETS openwitty-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(LEWITT_ENABLE_USB)
+    # Approval-gated, short read-only status sampling; not part of the GUI polling policy.
+    add_executable(openwitty-meter-probe tools/diagnostics/meter_probe.cpp)
+    target_link_libraries(openwitty-meter-probe PRIVATE lewitt_core)
+    if(LEWITT_BUILD_TESTS)
+        add_test(NAME meter_probe_mock_4hz
+                 COMMAND openwitty-meter-probe --mock --rate 4 --duration 1)
+        add_test(NAME meter_probe_mock_8hz
+                 COMMAND openwitty-meter-probe --mock --rate 8 --duration 1)
+        add_test(NAME meter_probe_real_dry_run
+                 COMMAND openwitty-meter-probe --rate 8 --duration 10)
+        set_tests_properties(meter_probe_mock_4hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=4 errors=0")
+        set_tests_properties(meter_probe_mock_8hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=8 errors=0")
+        set_tests_properties(meter_probe_real_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "dry run: no device opened")
+    endif()
+endif()
 # Compatibility alias for the pre-rebranding command name (docs, scripts, muscle memory).
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli \
     \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/lewitt-cli)")

@@ -71,11 +71,11 @@ Status UsbTransport::open() {
     info_ = DeviceInfo{fd.idVendor, fd.idProduct, "", "", "usb"};
     unsigned char buf[128];
     // Use the returned length: never rely on the buffer being NUL-terminated.
-    if (fd.iProduct) {
+    if (opt_.readDeviceStrings && fd.iProduct) {
         int len = libusb_get_string_descriptor_ascii(handle_, fd.iProduct, buf, sizeof buf);
         if (len > 0) info_.product.assign(reinterpret_cast<char*>(buf), static_cast<std::size_t>(len));
     }
-    if (fd.iSerialNumber) {
+    if (opt_.readDeviceStrings && fd.iSerialNumber) {
         int len = libusb_get_string_descriptor_ascii(handle_, fd.iSerialNumber, buf, sizeof buf);
         if (len > 0) info_.serial.assign(reinterpret_cast<char*>(buf), static_cast<std::size_t>(len));
     }

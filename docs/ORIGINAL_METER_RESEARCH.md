@@ -107,3 +107,13 @@ application concurrently or probe unknown requests. A later passive trace of
 the official application on its supported OS could answer the original poll
 interval directly, but must be separately planned because launching it may
 cause device writes outside this read-only task.
+
+## Phase 7G.2 follow-up (preparation only)
+
+OpenWitty now has a bounded, approval-gated `openwitty-meter-probe` for the
+proposed 4 Hz versus 8 Hz status-GET comparison; see
+`docs/PHASE7G_AUDIO_METER_PLAN.md`. No physical run has occurred, so the
+original application's poll frequency, the device's status-field update rate,
+and any benefit from 8 Hz remain unknown. The diagnostic compares eight raw
+meter fields separately from other status changes to avoid interpreting an
+unrelated status-byte change as a new level observation.
