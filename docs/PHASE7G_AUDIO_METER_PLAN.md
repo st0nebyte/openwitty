@@ -294,7 +294,10 @@ CPU was 0.09% of one core over the run, current `/proc` RSS 5,176 KiB, and
 the owner heard no clicks or other audible problem. ALSA/PipeWire and the
 kernel audio driver remained present afterward. This is evidence that the
 device/control path supplies distinct readings at 40 Hz under playback; it
-does not prove true peak accuracy or that the GUI will feel responsive.
+does not prove true peak accuracy or that the GUI will feel responsive. An
+offline every-fifth-sample decimation of the same trace shows that some 8 Hz
+phase alignments would miss an observed speaker value by up to about 1.16 dB;
+it is **not** a simultaneous 8 Hz hardware comparison.
 
 A separately approved 48 Hz/10-second read-only trial is now **reasonable to
 propose**, because 40 Hz was stable and informative. It is **not approved or

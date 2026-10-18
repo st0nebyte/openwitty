@@ -1409,9 +1409,19 @@ consecutive comparisons; the raw **eight-meter-byte set** changed on all
 4/8 Hz schedule would not sample between its reads. Because the playback
 signals/runs were not identical, this is **not** a controlled numerical
 comparison of captured peaks across rates. It does **not** establish device
-peak/RMS semantics, true peak accuracy, or GUI
-visual acceptance. The owner reported **no clicks or other audible noise**
+peak/RMS semantics, true peak accuracy, or GUI visual acceptance. The owner
+reported **no clicks or other audible noise**
 during the active-playback run; objective XRUN instrumentation was not used.
+
+As an offline sensitivity check on **this same recorded 40 Hz sequence**, taking
+every fifth printed sample yields five possible 8 Hz phase subsets (80 samples
+each). Their highest observed speaker-L values range from −13.594 to −12.430 dB,
+versus −12.430 dB in all 400 samples; speaker-R subset maxima range from
+−13.762 to −12.910 dB, versus −12.910 dB in all 400. Thus some hypothetical
+8 Hz alignments miss an *observed* value by up to 1.164 dB on L or 0.852 dB
+on R in this trace. This is decimation of **rounded diagnostic output**, not
+a simultaneous real 8 Hz acquisition, a true-peak measurement, or a firmware
+accuracy claim.
 
 Post-run checks still found the CONNECT 2, `snd-usb-audio`, ALSA/PipeWire
 nodes, and a released lease. No USB SET/settings GET, driver detach, reset,
