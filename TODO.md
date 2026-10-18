@@ -205,6 +205,12 @@
 - ✔ Phase 7G.5 software preparation: temporary `--experimental-status-48hz`
   read-only GUI option, independent 500 ms settings deadline, fractional
   monotonic status deadlines, missed-tick skipping, 75/200 ms status freshness,
-  deterministic tests, and hardware-safe GUI test lease. **Pending:** separate
-  owner approval to launch the real 48 Hz GUI, measure actual polling/frame
-  cadence and resources, confirm audio coexistence, and judge meter motion.
+  deterministic tests, and hardware-safe GUI test lease. ✔ Owner-approved
+  real 48 Hz GUI run with white noise: 48.00 status GETs/s
+  in a sustained trace, settings near 2/s, no observed USB errors, about
+  3.7% whole-GUI CPU and 158 MiB RSS in one sample. Typical measured meter
+  frame cadence was about 48 FPS, with occasional longer gaps. The owner
+  judged simultaneous speaker/headphone meters smooth and “really good,”
+  with no clicks heard. **Pending:** longer-duration validation, frame-pacing
+  investigation, meter/peak semantics, and a separate decision before any
+  production-default change. Keep the real GUI read-only.

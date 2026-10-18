@@ -377,3 +377,9 @@ initial connection reads, or reconnect attempts. Compare actual GET cadence,
 USB errors, CPU/RSS, visible frame cadence, settings behavior, audio coexistence,
 and owner-reported sound/meter appearance. Stop on errors or audible trouble.
 No visual acceptance is claimed until the owner confirms it.
+
+### Approved 48 Hz real-GUI result (2026-10-18)
+
+The owner approved and visually tested the opt-in read-only GUI with white-noise playback. The observed status cadence averaged 48.00 GETs/s in a sustained trace segment, with settings remaining near 2 GETs/s and no observed USB errors. Whole-GUI CPU was about 3.7% and RSS about 158 MiB in one process sample. Meter-frame diagnostics showed typical median frame gaps around 21 ms (about 48 FPS), with occasional roughly 42 ms gaps; the rendering target of 60 FPS is therefore not independently met on this desktop. The owner said the meters “look really good,” observed simultaneous speaker and headphone bars rendering smoothly, and heard no clicks. See `HARDWARE_TEST_RESULTS.md` §27 for evidence and limits.
+
+This validates the **visual usefulness and observed stability of the opt-in 48 Hz mode**, not peak accuracy, true sound-to-screen latency, or a universal firmware capability. Keep the production 4 Hz default pending a separate product decision and longer-run testing. Retain the read-only policy and independent 60 FPS presentation design. Before making 48 Hz the default, investigate frame pacing and longer-duration/audio-workload stability; do not raise acquisition above 48 Hz without separate approval.

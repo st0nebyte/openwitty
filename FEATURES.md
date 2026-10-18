@@ -115,5 +115,9 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   startup experiment is available. A separately approved 48 Hz read-only probe
   returned 480/480 GETs, no errors and changed active meter bytes on every
   comparison; the owner heard no clicks. An explicitly labelled **opt-in 48 Hz
-  GUI mode is prepared but has not been run on hardware or visually accepted**.
-  The production default remains 4 Hz; no GUI hardware writes were added.
+  GUI mode was run on hardware with white-noise playback**: status cadence
+  averaged 48.00 GETs/s in a sustained trace, no USB errors were observed,
+  and the owner said the meters “look really good,” including simultaneous
+  speaker and headphone bars, with no clicks heard. The production default
+  remains 4 Hz; exact meter/peak semantics remain unverified and no GUI
+  hardware writes were added.

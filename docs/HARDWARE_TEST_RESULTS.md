@@ -1495,3 +1495,13 @@ status cadence, settings responsiveness, CPU/RSS, frame cadence, audible
 coexistence, and owner visual acceptance at ~48 Hz are still pending a
 separately approved real-hardware GUI launch. No software or hardware write
 capability was enabled, and no 48 Hz GUI GET was sent in this phase.
+
+### 27. Phase 7G.5 — approved 48 Hz real-GUI visual run (2026-10-18)
+
+The owner explicitly approved launching the prepared read-only GUI with white-noise playback. Preflight found a clean worktree at `a06601e06cf6647b4456a5a0514bc9f97a238e08`, the CONNECT 2 at USB VID:PID `29c2:0004`, accessible vendor interface 3, no competing OpenWitty process or held control lease, and CONNECT 2 audio interfaces still attached to `snd-usb-audio`. No serial or raw USB capture is recorded here.
+
+Launch command: `OPENWITTY_TRACE_LATENCY=2 OPENWITTY_TRACE_METER_FRAMES=1 build-release/src/gui/openwitty --experimental-status-48hz`. The same serialized, leased control connection was used; no GUI USB write path was enabled. A sustained trace segment yielded an average interval equivalent to **48.00 status GETs/s** (median gap about 20.4 ms; p95 about 21.4 ms), while settings GETs continued at approximately **2/s**. Status GET median was about 0.26 ms and p95 about 0.30 ms. No USB errors appeared in the observed diagnostic output. These are internal timings, not physical-sound-to-screen latency.
+
+Opt-in meter-frame diagnostics reported median inter-frame gaps around 20.6–21.0 ms (roughly 48 FPS), with occasional approximately 42 ms gaps. This is a measured presentation cadence, **not** a claim of 60 FPS or 48 independent frames of audio resolution beyond the status samples. One `ps` sample showed about 3.7% process CPU and 161,448 KiB RSS; `/proc` showed about 59,715 KiB proportional set size in an earlier sample. These are whole-GUI snapshots, not isolated meter-rendering costs. PipeWire still listed CONNECT 2 as the active playback sink during the run; ALSA remained attached.
+
+The owner reported that the 48 Hz meters **“look really good”** and that speaker and headphone bars running simultaneously **both rendered smoothly**. The owner reported **no clicks**. This is owner visual/audio acceptance of this opt-in run, not an objective peak-accuracy test or an independently timestamped action-to-screen latency measurement. The exact hardware meter semantics remain unknown. The production GUI default is still 4 Hz status / 2 Hz settings; 48 Hz remains explicitly experimental and read-only.
