@@ -1280,5 +1280,21 @@ polling, not a measured physical-sound-to-screen latency. ALSA and PipeWire cont
 listing the card. An independent `/proc/<pid>/status` and `smaps_rollup` snapshot while
 the GUI was connected measured about 161,000 KiB RSS (PSS 59,562 KiB), with 46,128 KiB
 private dirty; this does **not** reproduce or explain the probe's 777,620 KiB peak-RSS
-report because it is a different process and measurement. Owner visual comparison of
-4 Hz versus 8 Hz is pending; no meter-smoothness acceptance is claimed here.
+report because it is a different process and measurement. The owner judged the 4 Hz
+GUI meters "way too slow" and closed that window normally. This is a qualitative
+visual report, not a frame-cadence or physical-sound-to-screen latency measurement.
+The 8 Hz visual assessment remains pending; no meter-smoothness acceptance is claimed.
+
+After normal closure of the 4 Hz window and verification that no OpenWitty control
+client held the lease, the opt-in 8 Hz GUI connected to the same device. Three
+non-overlapping payload-free trace batches contained 414 status poll gaps in all;
+their batch medians were 124.994–124.996 ms, with observed extrema 124.048–125.937 ms.
+The corresponding status-GET batch medians were 2.789–2.803 ms; settings GETs
+continued every fourth tick, with batch medians 3.992–3.993 ms. No USB transport
+error was printed in these batches. These are acquisition/transfer timings, **not**
+GUI frame cadence or physical-sound-to-screen latency. An independent process
+snapshot after roughly one minute showed 161,240 KiB RSS and 0.4% cumulative CPU;
+an earlier `/proc/<pid>/smaps_rollup` snapshot showed 160,016 KiB RSS, 59,011 KiB
+PSS and 45,752 KiB private dirty. The memory figures are of the complete GUI, not
+incremental meter cost. ALSA and PipeWire still listed the CONNECT 2 audio device.
+Audible quality and meter appearance require the owner's assessment.

@@ -205,5 +205,8 @@ mode uses the same serialized worker/USB connection, retains 2 Hz settings, and 
 status freshness to fresh through 188 ms, delayed through 375 ms, then stale. The QML
 window title labels the experiment; the eight-channel frame animation and observed-only
 peak handling are unchanged. The first 4 Hz real-GUI trace and independent `/proc` memory
-snapshot are documented in `docs/HARDWARE_TEST_RESULTS.md` §24. Owner visual judgment of
-both rates, the 8 Hz GUI trace, and any 16 Hz decision remain pending.
+snapshot are documented in `docs/HARDWARE_TEST_RESULTS.md` §24. The owner found the
+4 Hz real GUI meters "way too slow"; the opt-in 8 Hz GUI subsequently produced
+stable 125 ms polling with no traced USB errors and similar whole-process RSS.
+Owner visual judgment of 8 Hz and audible-quality feedback remain pending. A 16 Hz
+trial still requires separate approval.
