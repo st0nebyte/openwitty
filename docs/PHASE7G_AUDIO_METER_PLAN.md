@@ -213,3 +213,51 @@ the visual acceptance target was **not met**. Audible-quality feedback for the G
 run remains pending. Further work should first determine what hardware sample rate
 and meter semantics are achievable; a bounded 16 Hz read-only trial is a possible
 next measurement, not an approved run or a production-rate change.
+
+## Phase 7G.4 — match the reported original acquisition rate (prepared, not run)
+
+The owner reports a native-Windows capture of the original application's 64-byte
+status GET at 46.845/s visible idle and 46.775/s visible with playback (mean
+intervals 21.347 and 21.379 ms), versus 34.813/s minimized with playback
+(28.725 ms). Two probable stereo meter fields reportedly changed on every
+successive playback response; a separate 128-byte read did not change and no
+periodic control-transfer errors were observed. The original report and JSON
+remain on another computer and have not been independently inspected here.
+`docs/ORIGINAL_METER_RESEARCH.md` keeps those Windows observations distinct
+from the Linux measurements below.
+
+The existing `openwitty-meter-probe` now accepts only 4, 8, 40, and 48 Hz, with
+the same dry-run default, read-only `UsbTransport`, auto-selected vendor control
+interface, per-user lease, and serialized status GETs. Its hard ceiling is 480
+status requests and 10 seconds; the 40 Hz/10-second plan is bounded to 400 GETs,
+the 48 Hz plan to 480. Each adds one API-version GET, but **no** settings GET,
+SET, driver detach, reset, or DFU access. The probe stops on the first read or
+decode error, never catches up with a burst after a delayed request, and prints
+monotonic start times, eight decoded levels, changed/repeated meter snapshots,
+GET duration, start-interval distribution, schedule-lag p95, CPU time, and
+`getrusage` peak plus current `/proc` RSS/PSS. The latter independently checks
+the earlier suspicious peak-RSS figure; it is not an incremental USB-memory
+measurement. No serial, raw status payload, or proprietary asset is stored.
+
+Approval sequence:
+
+1. Recheck device identity, interface, permissions, audio presence, and an empty
+   OpenWitty control lease; prepare a comparable steady audio signal. Ask for
+   **explicit approval** of `build-release/openwitty-meter-probe --rate 40
+   --duration 10 --execute`. This yields at most 400 status GETs, 25,600 status
+   payload bytes, and one 128-byte API GET over at most 10 seconds, excluding
+   USB transaction overhead. Stop immediately on transfer/decode error, device
+   loss, or audible disruption. This command has **not** been executed.
+2. Review achieved frequency, interval jitter, GET median/p95, genuinely changed
+   meter samples, USB errors, CPU, `/proc` memory, and ALSA/PipeWire/audio
+   coexistence. Do not infer peak accuracy merely from changed bytes.
+3. Only if 40 Hz is stable and informative, propose the separate
+   `--rate 48 --duration 10 --execute` command (maximum 480 status GETs,
+   30,720 status payload bytes, plus one API GET) and obtain **new approval**.
+
+Do not change the real GUI's 4 Hz production default, the optional 8 Hz mode,
+2 Hz settings schedule, or 60 FPS presentation until approved hardware results
+and a separate GUI-rate authorization justify it. The owner has already judged
+4 Hz too slow and 8 Hz better but still far from a real-time meter; that is a
+visual observation, not a measured sound-to-screen delay. Hidden-window rate
+reduction and GUI acceptance need separate measurement and visual review.

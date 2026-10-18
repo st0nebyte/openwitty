@@ -192,3 +192,8 @@
   stayed near 160 MiB and the observed 8 Hz trace had no USB errors. Keep 4 Hz as the
   production default; do not claim visual acceptance or run 16 Hz without separate
   approval. Meter peak semantics remain unknown; GUI-run audio feedback is pending.
+- Phase 7G.4: owner-reported native-Windows capture indicates ~47 status GETs/s
+  while visible, but the original report/JSON are not present on this Linux host.
+  The dry-run-only 40/48 Hz Linux probe is prepared. Obtain separate approval
+  for the 40 Hz/10 s run (400 GETs), review it, then request separate 48 Hz
+  approval only if warranted. Do not change GUI polling yet.

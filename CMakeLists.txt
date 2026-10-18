@@ -85,11 +85,20 @@ if(LEWITT_ENABLE_USB)
                  COMMAND openwitty-meter-probe --mock --rate 4 --duration 1)
         add_test(NAME meter_probe_mock_8hz
                  COMMAND openwitty-meter-probe --mock --rate 8 --duration 1)
+        add_test(NAME meter_probe_mock_40hz
+                 COMMAND openwitty-meter-probe --mock --rate 40 --duration 1)
+        add_test(NAME meter_probe_mock_48hz
+                 COMMAND openwitty-meter-probe --mock --rate 48 --duration 1)
         add_test(NAME meter_probe_real_dry_run
-                 COMMAND openwitty-meter-probe --rate 8 --duration 10)
+                 COMMAND openwitty-meter-probe --rate 40 --duration 10)
+        add_test(NAME meter_probe_48hz_dry_run
+                 COMMAND openwitty-meter-probe --rate 48 --duration 10)
         set_tests_properties(meter_probe_mock_4hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=4 errors=0")
         set_tests_properties(meter_probe_mock_8hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=8 errors=0")
-        set_tests_properties(meter_probe_real_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "dry run: no device opened")
+        set_tests_properties(meter_probe_mock_40hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=40 errors=0")
+        set_tests_properties(meter_probe_mock_48hz PROPERTIES PASS_REGULAR_EXPRESSION "status_gets=48 errors=0")
+        set_tests_properties(meter_probe_real_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "at most 400 status GETs")
+        set_tests_properties(meter_probe_48hz_dry_run PROPERTIES PASS_REGULAR_EXPRESSION "at most 480 status GETs")
     endif()
 endif()
 # Compatibility alias for the pre-rebranding command name (docs, scripts, muscle memory).

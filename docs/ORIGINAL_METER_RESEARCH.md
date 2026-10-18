@@ -1,8 +1,8 @@
 # Original LEWITT CONTROL CENTER meter pipeline — static research
 
-Status: partial answer, 2026-10-18. This is static analysis, not a measurement of the
-official application's live USB traffic or screen cadence. No hardware I/O, audio
-capture, or OpenWitty code/polling change was made for this investigation.
+Status: static-analysis findings plus a separately reported native-Windows bus
+capture, 2026-10-18. The static analysis below did not itself measure live USB
+traffic or screen cadence. No proprietary capture or binary is tracked here.
 
 ## Material and limits
 
@@ -81,7 +81,7 @@ confirmed. Sixty frames per second cannot restore an unobserved transient from
 four status samples per second, and a higher GET rate should not be inferred
 from the original application's apparent smoothness alone.
 
-## Open questions and next experiment
+## Open questions and earlier experiment proposal (before the native capture)
 
 1. What schedules `Connect2Device` update at `0x140200cd0` on each platform,
    with what interval and under what visibility/device-state conditions?
@@ -95,7 +95,7 @@ from the original application's apparent smoothness alone.
    metering? The examined getter path does not, but the full application has
    not been ruled out.
 
-The next controlled hardware experiment, **only after separate owner approval**,
+The then-proposed controlled hardware experiment, **only after separate owner approval**,
 is a single-owner, read-only comparison of 4 Hz and 8 Hz status GETs using
 OpenWitty's existing request (`wValue=0x0102`), with 16 Hz considered only if
 8 Hz is safe and informative. Timestamp GET start/end and hash or compare only
@@ -107,6 +107,35 @@ application concurrently or probe unknown requests. A later passive trace of
 the official application on its supported OS could answer the original poll
 interval directly, but must be separately planned because launching it may
 cause device writes outside this read-only task.
+
+## Native-Windows capture reported by the owner (Phase 7G.4)
+
+The owner reports a real capture of the original LEWITT CONTROL CENTER with a
+physical CONNECT 2. The report (`CONNECT2_WINDOWS_USB_METER_CAPTURE.md`) and
+machine-readable summary (`capture-timing-summary.json`) are on a **separate
+Windows computer**; their user-specific directory paths are intentionally omitted.
+They were not available on this Linux computer and have **not** been independently
+read or audited here. Only the following user-supplied measurements are recorded:
+
+| Windows capture condition | Status GETs/s | Mean start interval | Other reported observation |
+|---|---:|---:|---|
+| Visible, idle | 46.845 | 21.347 ms | 64-byte status response |
+| Visible, YouTube playback | 46.775 | 21.379 ms | Two probable stereo meter fields changed on every successive response |
+| Minimized, playback | 34.813 | 28.725 ms | Lower acquisition rate than visible |
+
+A separate 128-byte read reportedly remained unchanged; no periodic control-
+transfer errors were observed. These measurements provide strong reported evidence
+that the original application acquires the **64-byte status** around 47 times/s
+when visible, far above OpenWitty's 4 Hz production cadence. They do not establish
+the exact firmware meter semantics, source update ceiling, instantaneous/peak/RMS
+behavior, GUI frame rate, or why minimized operation is slower. The exact USB
+request metadata and capture methodology require the sanitized report for an
+independent review. No raw capture or identifying device data is committed.
+
+The next Linux step is a **separately approved**, single-owner, read-only 40 Hz
+10-second status probe (at most 400 GETs); only after reviewing that result may
+a separate 48 Hz/10-second trial (at most 480 GETs) be proposed. Neither rate is
+yet a GUI default or an authorized hardware experiment. See the Phase 7G plan.
 
 ## Phase 7G.2 follow-up (read-only hardware sampling)
 

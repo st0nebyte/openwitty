@@ -1305,3 +1305,38 @@ rate would suffice. Audible quality during this GUI run was not separately repor
 the earlier no-glitch confirmation applies only to the bounded 4/8 Hz probe runs.
 The opt-in GUI remained open at the time of this note. The 4 Hz production default
 is unchanged, and a 16 Hz experiment remains unapproved.
+
+### 25. Phase 7G.4 — high-rate Linux probe prepared; not executed (2026-10-18)
+
+The owner supplied **reported** measurements from a native-Windows capture of
+the original application: 46.845 status GETs/s visible idle, 46.775/s visible
+with playback, and 34.813/s minimized with playback. Mean intervals were
+21.347, 21.379, and 28.725 ms respectively; responses were 64 bytes. Two
+probable stereo meter fields reportedly changed on every successive playback
+sample, a separate 128-byte read remained unchanged, and no periodic control
+errors were observed. The report/JSON reside on a separate Windows computer
+and were not read in this Linux session. These are **not OpenWitty measurements**.
+
+The local branch started clean at `f13bdafd6c78ea075ec99c4986c6493a0c3a092a`.
+The existing read-only meter probe was extended to bounded 40/48 Hz allowlisted
+rates, with at most 400/480 status GETs over ten seconds, respectively, and one
+API GET per run. It remains dry-run-only without `--execute` and holds the same
+single-owner control lease. It now reports start-interval/scheduling statistics
+and current `/proc` RSS/PSS alongside historical peak RSS. No GUI polling rate
+or hardware-write permission changed.
+
+Read-only preflight found CONNECT 2 `29c2:0004` at bus 005/device 002, vendor
+interface 3 unbound, audio interfaces 0–2 still attached to `snd-usb-audio`,
+user ACL read/write access to the usbfs node, no OpenWitty control client or
+held lease, and ALSA/PipeWire device presence. The ACL permits opening the USB
+node but does **not** authorize software writes; the probe remains GET-only.
+No API/status GET was sent during this preparation. The exact 40 Hz experiment
+requires separate owner approval; 48 Hz requires a later, separate approval
+after review of 40 Hz. No real high-rate result or audible-safety conclusion
+is claimed here.
+
+The Release build passed 171/171 CTests and the ASan/UBSan build passed
+170/170 CTests, including new 40/48 Hz mock and dry-run checks. The standalone
+USB call-site audit passed. Dry-run output confirmed the 400/480 GET ceilings
+without opening the device. These software checks cannot establish that either
+high-rate hardware run will be stable.
