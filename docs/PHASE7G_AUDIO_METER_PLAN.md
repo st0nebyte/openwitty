@@ -305,3 +305,26 @@ executed**. It would be capped at 480 serialized status GETs (30,720 payload
 bytes) plus one 64-byte API GET, with the same first-error stop and owner
 audio monitoring. Keep the 4 Hz GUI default and 2 Hz settings schedule until
 high-rate hardware results and a further GUI-specific authorization exist.
+
+### Separately approved 48 Hz playback probe
+
+The owner separately approved the exact 48 Hz/10-second read-only command with
+white-noise playback on. It completed 480/480 status GETs with zero errors,
+48.000 Hz achieved cadence, 20.833 ms median interval, 0.254/0.315 ms
+median/p95 GET duration, and changed raw meter bytes on all 479 successive
+comparisons. Only speaker L/R moved under this route. CPU was 0.10% of one
+core over the run; current `/proc` RSS was 5,180 KiB. The previously anomalous
+`getrusage` peak remained 787,228 KiB and is not treated as actual steady RSS.
+ALSA/PipeWire and `snd-usb-audio` remained present, and the lease released.
+The owner reported no clicks or other audible noise during **this** run;
+objective XRUN data were not captured. The full comparison is in
+`docs/HARDWARE_TEST_RESULTS.md` §25.
+
+The results support a capable, serialized read-only control path near the
+reported original Windows acquisition cadence, with fresh meter observations
+under playback. They do **not** justify claiming true peak fidelity or GUI
+visual acceptance. A new, explicitly authorized **GUI** experiment would be
+needed to compare 4/8 Hz against an opt-in ~48 Hz status schedule while keeping
+settings at 2 Hz, 60 FPS presentation independent, request serialization,
+freshness windows appropriate, and real GUI writes disabled. Do not change the
+production default or launch such a mode from the probe approvals alone.

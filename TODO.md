@@ -194,11 +194,11 @@
   approval. Meter peak semantics remain unknown; GUI-run audio feedback is pending.
 - Phase 7G.4: owner-reported native-Windows capture indicates ~47 status GETs/s
   while visible, but the original report/JSON are not present on this Linux host.
-  ✔ Approved 40 Hz/10 s run: 400 GETs, no errors, correct cadence, but all
-  status/meter frames stayed unchanged at −60 dB. The owner reported no audible
-  clicks or problems and confirmed no audio was playing. An active-signal
-  ✔ Separately approved repeat with white-noise playback: 400/400 GETs, zero
-  errors, 40.000 Hz; speaker meter bytes changed on all 399 comparisons, and
-  the owner heard no clicks or other noise. A bounded 48 Hz run is reasonable
-  to propose but needs separate explicit approval. Do not change GUI polling
-  or claim peak accuracy from these probes.
+  ✔ First approved 40 Hz/10 s run: 400 GETs, no errors, but no audio was
+  playing and the status frame stayed unchanged. ✔ Separately approved white-
+  noise repeat: 400/400 GETs, zero errors, speaker meter bytes changed on all
+  399 comparisons. ✔ Separately approved 48 Hz playback run: 480/480 GETs,
+  zero errors, meter bytes changed on all 479 comparisons. The owner heard no
+  clicks or other noise in either playback run. Next: seek explicit GUI-mode
+  authorization and visual acceptance; do not change production polling or
+  claim peak accuracy from these probes.

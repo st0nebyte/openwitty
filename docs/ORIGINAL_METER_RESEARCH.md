@@ -149,6 +149,11 @@ white-noise playback also achieved 400/400 GETs and zero errors, and its active
 speaker meter fields changed in all 399 successive raw-snapshot comparisons.
 The owner heard no clicks or other noise. This supports genuine 40 Hz meter
 information under that route, not a firmware peak-accuracy claim or a direct
-replication of the Windows timing. The 48 Hz run remains unapproved; neither
-rate has become a GUI default. See the Phase 7G plan and hardware results for
-Linux details.
+replication of the Windows timing. A later, **separately approved** 48 Hz Linux
+playback run achieved 480/480 GETs without errors and changed raw meter fields
+on all 479 successive comparisons. The owner heard no clicks or other noise.
+These Linux observations show status-meter updates are available near the
+reported original Windows visible acquisition rate; they do not establish
+identical firmware scheduling, meter semantics, or GUI presentation. Neither
+40 nor 48 Hz has become a GUI default. See the
+Phase 7G plan and hardware results for details.

@@ -1426,4 +1426,45 @@ accuracy claim.
 Post-run checks still found the CONNECT 2, `snd-usb-audio`, ALSA/PipeWire
 nodes, and a released lease. No USB SET/settings GET, driver detach, reset,
 DFU access, or audio-routing change was made. The default GUI remains at 4 Hz.
-The 48 Hz run has **not** been approved or executed.
+At that point, the 48 Hz run had **not** been approved or executed.
+
+After review of the informative 40 Hz playback run, the owner **separately
+approved** `build-release/openwitty-meter-probe --rate 48 --duration 10 --execute`
+with white-noise playback still on. A fresh preflight again confirmed CONNECT 2
+`29c2:0004`, accessible vendor interface 3, attached `snd-usb-audio`, audio
+nodes, and no competing client or held lease. This was one bounded, serialized
+read-only run; the 40 Hz result above was not used as blanket authorization.
+
+| Linux 48 Hz with white-noise playback | Observation |
+|---|---:|
+| Status GETs / errors | 480 / 0 |
+| Achieved start-to-start rate | 48.000 Hz |
+| Interval min / median / p95 / max | 20.756 / 20.833 / 20.837 / 20.914 ms |
+| Scheduling lateness p95 | 0.057 ms |
+| Status GET mean / median / p95 / max | 0.254 / 0.254 / 0.315 / 0.360 ms |
+| Changed meter snapshots / changed whole status frames | 479/479 / 479/479 |
+| Consecutive identical meter snapshots | 0 |
+| Speaker L / R decoded range | −17.762…−12.297 / −17.172…−12.160 dB |
+| Process CPU over 9.979 s | 10.4 ms (0.10%) |
+| Current RSS / PSS from `/proc/self/smaps_rollup` | 5,180 / 1,258 KiB |
+| Historical `getrusage` peak RSS | 787,228 KiB (still inconsistent with current `/proc` RSS) |
+
+At printed three-decimal precision, speaker L changed on 479/479 and R on
+478/479 successive comparisons; the raw eight-meter-byte set changed on all
+479/479. The other six decoded channels remained at the −60 dB display floor
+on this playback route. The device therefore supplied distinct 20.833 ms-
+spaced meter observations, close to but not exactly the owner-reported native-
+Windows visible interval (~21.35 ms). Compared with 40 Hz, this completed 80
+more successful and distinct status reads in roughly the same ten-second window,
+with similar GET timing and process load. The runs occupied different white-
+noise time windows, so their observed extrema are **not** a controlled peak-
+accuracy comparison. Sampled-value change does not establish RMS/peak semantics
+or guarantee that a GUI will look natural.
+
+Post-run checks still found the CONNECT 2, `snd-usb-audio`, ALSA/PipeWire
+nodes, and a released lease. The probe sent no SET or settings GET and made no
+driver, DFU, reset, streaming, or audio-routing change. The owner reported
+**no clicks or other audible noise** during this 48 Hz playback run. This is
+subjective audio feedback, not an instrumented XRUN count. The GUI remains at
+its 4 Hz production status default
+(optional 8 Hz experiment only). No 48 Hz GUI mode was implemented or launched.
