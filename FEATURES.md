@@ -112,5 +112,8 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   active speaker-meter values at 8 Hz without USB errors. In the real GUI, the owner
   judged 8 Hz better than 4 Hz but still far from a real-time level bar; visual
   acceptance and exact meter semantics remain open. An explicitly labelled 8 Hz GUI
-  startup experiment is available; the production default remains 4 Hz and no GUI
-  hardware writes were added.
+  startup experiment is available. A separately approved 48 Hz read-only probe
+  returned 480/480 GETs, no errors and changed active meter bytes on every
+  comparison; the owner heard no clicks. An explicitly labelled **opt-in 48 Hz
+  GUI mode is prepared but has not been run on hardware or visually accepted**.
+  The production default remains 4 Hz; no GUI hardware writes were added.

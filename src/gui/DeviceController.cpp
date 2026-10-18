@@ -60,16 +60,43 @@ Rgb parseHex(const QString& s) {
 }  // namespace
 
 DeviceWorker::DeviceWorker(RealPollCadence realCadence)
-    : realCadence_(realCadence), freshness_(realCadence.statusFreshness),
+    : realCadence_(realCadence), realSchedule_(realCadence), freshness_(realCadence.statusFreshness),
       traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") > 0) {}
 
 void DeviceWorker::startTimer(int ms) {
     if (!timer_) {
         timer_ = new QTimer(this);
-        timer_->setTimerType(Qt::CoarseTimer);
         connect(timer_, &QTimer::timeout, this, &DeviceWorker::poll);
     }
+    timer_->stop();
+    timer_->setSingleShot(false);
+    timer_->setTimerType(Qt::CoarseTimer);
     timer_->start(ms);
+}
+
+void DeviceWorker::armPreciseStatusTimer() {
+    const auto now = RealPollSchedule::Clock::now();
+    const auto deadline = realSchedule_.nextStatusAfter(now);
+    const auto remaining = deadline - now;
+    const auto rounded = std::chrono::ceil<std::chrono::milliseconds>(remaining);
+    timer_->start(static_cast<int>(std::max(rounded, std::chrono::milliseconds(1)).count()));
+}
+
+void DeviceWorker::startRealTimer() {
+    if (!realCadence_.preciseScheduling) {
+        startTimer(static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            realCadence_.statusPeriod).count()));
+        return;
+    }
+    if (!timer_) {
+        timer_ = new QTimer(this);
+        connect(timer_, &QTimer::timeout, this, &DeviceWorker::poll);
+    }
+    timer_->stop();
+    timer_->setSingleShot(true);
+    timer_->setTimerType(Qt::PreciseTimer);
+    realSchedule_.reset(RealPollSchedule::Clock::now());
+    armPreciseStatusTimer();
 }
 
 void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t) {
@@ -161,7 +188,7 @@ void DeviceWorker::connectUsb() {
     auto s = session_->connect();
     if (!s) { report(s); noteOpenFailure(s); }
     markInitialReads();
-    if (session_->state() == ConnectionState::Connected) startTimer(realCadence_.statusPeriod.count());
+    if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
     publishMeterSample();
@@ -201,7 +228,7 @@ void DeviceWorker::rescan() {
         backoffMs_ = 1000;
         lastOpenError_ = Errc::Ok;
         lastTransportError_.clear();
-        startTimer(realCadence_.statusPeriod.count());
+        startRealTimer();
     } else {
         report(s);
         noteOpenFailure(s);
@@ -327,12 +354,19 @@ void DeviceWorker::poll() {
     const bool statusOk = static_cast<bool>(s);
     if (!s) report(s);
     else freshness_.markStatus();
-    if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
+    if (session_->state() != ConnectionState::Connected) {
+        publish();
+        if (usbMode_ && realCadence_.preciseScheduling) armRescan();
+        return;   // repeating timers handle this on their next tick
+    }
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
-    // merged and pending simulated edits survive. Real USB status is 4 Hz by default or
-    // explicitly experimental 8 Hz; settings remain 2 Hz (every 500 ms, serialized) to keep physical controls live
-    // without speculative high-rate polling. Mock retains its prior 4 Hz settings cadence.
-    const bool settingsTick = ++pollCount_ % (mock_ ? 10 : realCadence_.settingsEveryStatus) == 0;
+    // merged and pending simulated edits survive. The 48 Hz fractional schedule
+    // has its own monotonic 500 ms settings deadline; all GETs remain serialized.
+    // Mock retains its prior 4 Hz settings cadence.
+    ++pollCount_;
+    const bool settingsTick = mock_ ? pollCount_ % 10 == 0
+        : realCadence_.preciseScheduling ? realSchedule_.settingsDue(RealPollSchedule::Clock::now())
+        : pollCount_ % realCadence_.settingsEveryStatus == 0;
     SettingsRefreshTiming timing;
     QString kinds;
     if (settingsTick) {
@@ -358,6 +392,10 @@ void DeviceWorker::poll() {
     publish();
     if (statusOk) publishMeterSample();
     if (traceEnabled_) emit pollTracePublished(sequence, (nowNs() - publishStart) / 1000);
+    if (usbMode_ && realCadence_.preciseScheduling) {
+        if (session_->state() == ConnectionState::Connected) armPreciseStatusTimer();
+        else armRescan();
+    }
 }
 
 Status DeviceWorker::refreshDeviceState(SettingsRefreshTiming* timing) {
@@ -687,9 +725,10 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     publish();
 }
 
-DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz)
-    : QObject(parent), worker_(new DeviceWorker(experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz)),
-      experimentalStatus8Hz_(experimentalStatus8Hz) {
+DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz, bool experimentalStatus48Hz)
+    : QObject(parent), worker_(new DeviceWorker(experimentalStatus48Hz ? kStatus48HzExperimental
+                                  : experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz)),
+      experimentalStatus8Hz_(experimentalStatus8Hz), experimentalStatus48Hz_(experimentalStatus48Hz) {
     traceLevel_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY");
     traceEnabled_ = traceLevel_ > 0;
     qRegisterMetaType<QVariantMap>("QVariantMap");
@@ -700,7 +739,7 @@ DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz)
         const auto sequence = t.value("seq").toLongLong();
         const QString changed = t.value("changed").toString();
         // Level 1: changed reads plus every 20th poll (~5 s default USB,
-        // ~2.5 s experimental 8 Hz USB, ~0.8 s mock);
+        // ~2.5 s experimental 8 Hz USB, ~0.4 s experimental 48 Hz, ~0.8 s mock);
         // level 2: every poll. No trace output unless explicitly enabled.
         // Neither mode records payload bytes, serials, or device-unique identifiers.
         const bool logThisPoll = traceLevel_ >= 2 || !changed.isEmpty() || sequence % 20 == 0;

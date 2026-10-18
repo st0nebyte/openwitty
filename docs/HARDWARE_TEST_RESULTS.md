@@ -1468,3 +1468,30 @@ driver, DFU, reset, streaming, or audio-routing change. The owner reported
 subjective audio feedback, not an instrumented XRUN count. The GUI remains at
 its 4 Hz production status default
 (optional 8 Hz experiment only). No 48 Hz GUI mode was implemented or launched.
+
+### 26. Phase 7G.5 — experimental 48 Hz GUI software preparation (2026-10-18)
+
+Starting from clean branch `phase7-hardware-integration` at
+`ba34d701a61cf2a91d18ed3cd2bb778c90fea960`, an explicitly selectable
+`--experimental-status-48hz` **real read-only GUI** mode was added. This phase
+did **not** launch that mode against the physical device. The 4 Hz production
+default, existing 8 Hz option, 2 Hz settings target, single control owner,
+serialized transport, and independent frame-synchronized meter rendering
+remain in place. The 48 Hz window title clearly labels the experimental
+read-only mode; `--mock` and simultaneous 8/48 flags are rejected.
+
+The high-rate worker uses monotonic 20,833,334 ns status deadlines and a
+separate 500 ms settings deadline, not a second USB loop or connection. It
+skips missed ticks instead of bursting GETs after a delay. A successful status
+GET alone refreshes status freshness; 48 Hz status age is fresh through 75 ms,
+delayed through 200 ms, then stale. Reconnection resets both deadlines and
+freshness. The existing 4/8 Hz and mock schedules are unchanged.
+
+GUI integration tests that invoke `connectUsb()` now hold a private test lease
+so they fail before USB I/O even with hardware attached. The Release suite
+passed 177/177 CTests and ASan/UBSan passed 176/176; the USB call-site audit
+passed. These are **software-only** results for the new GUI rate. Actual GUI
+status cadence, settings responsiveness, CPU/RSS, frame cadence, audible
+coexistence, and owner visual acceptance at ~48 Hz are still pending a
+separately approved real-hardware GUI launch. No software or hardware write
+capability was enabled, and no 48 Hz GUI GET was sent in this phase.

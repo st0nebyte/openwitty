@@ -41,6 +41,21 @@ TEST(ReadFreshness, ExperimentalEightHertzBoundaries) {
     EXPECT_EQ(reads.settings(kStart + 1500ms, true), Freshness::Delayed);
 }
 
+TEST(ReadFreshness, ExperimentalFortyEightHertzBoundaries) {
+    ReadFreshness reads(kStatus48HzExperimental.statusFreshness);
+    reads.markStatus(kStart);
+    EXPECT_EQ(reads.status(kStart + 75ms, true), Freshness::Fresh);
+    EXPECT_EQ(reads.status(kStart + 76ms, true), Freshness::Delayed);
+    EXPECT_EQ(reads.status(kStart + 200ms, true), Freshness::Delayed);
+    EXPECT_EQ(reads.status(kStart + 201ms, true), Freshness::Stale);
+    reads.markSettings(kStart + 1000ms);
+    EXPECT_EQ(reads.status(kStart + 1000ms, true), Freshness::Stale);
+    reads.markStatus(kStart + 1000ms);
+    EXPECT_EQ(reads.status(kStart + 1000ms, true), Freshness::Fresh);
+    reads.reset();
+    EXPECT_EQ(reads.status(kStart + 1001ms, true), Freshness::Unavailable);
+}
+
 TEST(ReadFreshness, RealSchedulesKeepSettingsAtTwoHertz) {
     EXPECT_EQ(kStatus4Hz.statusPeriod, 250ms);
     EXPECT_EQ(kStatus4Hz.settingsEveryStatus, 2);
@@ -48,6 +63,52 @@ TEST(ReadFreshness, RealSchedulesKeepSettingsAtTwoHertz) {
     EXPECT_EQ(kStatus8HzExperimental.settingsEveryStatus, 4);
     EXPECT_EQ(kStatus4Hz.statusPeriod * kStatus4Hz.settingsEveryStatus, 500ms);
     EXPECT_EQ(kStatus8HzExperimental.statusPeriod * kStatus8HzExperimental.settingsEveryStatus, 500ms);
+    EXPECT_EQ(kStatus48HzExperimental.statusPeriod, std::chrono::nanoseconds(20'833'334));
+    EXPECT_TRUE(kStatus48HzExperimental.preciseScheduling);
+    EXPECT_EQ(kStatus48HzExperimental.settingsEveryStatus, 0);
+}
+
+TEST(ReadFreshness, FortyEightHertzScheduleSkipsMissedTicksWithoutBurst) {
+    RealPollSchedule schedule(kStatus48HzExperimental);
+    schedule.reset(kStart);
+    const auto period = kStatus48HzExperimental.statusPeriod;
+    EXPECT_EQ(schedule.nextStatusAfter(kStart), kStart + period);
+    EXPECT_EQ(schedule.nextStatusAfter(kStart + period), kStart + period * 2);
+    const auto late = kStart + 125ms;
+    const auto next = schedule.nextStatusAfter(late);
+    EXPECT_GT(next, late);
+    EXPECT_LE(next - late, period);
+    EXPECT_EQ(next, kStart + period * 6); // sixth deadline is 125 ms + 4 ns
+    EXPECT_EQ(schedule.nextStatusAfter(late), next); // no catch-up request
+    schedule.reset(kStart + 10s);                  // reconnect starts a new epoch
+    EXPECT_EQ(schedule.nextStatusAfter(kStart + 10s), kStart + 10s + period);
+}
+
+TEST(ReadFreshness, FortyEightHertzSettingsDeadlineStaysIndependent) {
+    RealPollSchedule schedule(kStatus48HzExperimental);
+    schedule.reset(kStart);
+    EXPECT_FALSE(schedule.settingsDue(kStart + 499ms));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 500ms));
+    EXPECT_FALSE(schedule.settingsDue(kStart + 999ms));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 1000ms));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 5s)); // one read, never a catch-up burst
+    EXPECT_FALSE(schedule.settingsDue(kStart + 5s));
+    schedule.reset(kStart + 10s);
+    EXPECT_FALSE(schedule.settingsDue(kStart + 10s));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 10s + 500ms));
+}
+
+TEST(ReadFreshness, FortyEightHertzSchedulesTwentySettingsReadsInTenSeconds) {
+    RealPollSchedule schedule(kStatus48HzExperimental);
+    schedule.reset(kStart);
+    int settingsReads = 0;
+    auto statusAt = kStart;
+    for (int i = 0; i < 480; ++i) {
+        statusAt = schedule.nextStatusAfter(statusAt);
+        settingsReads += schedule.settingsDue(statusAt);
+    }
+    EXPECT_EQ(settingsReads, 20);
+    EXPECT_EQ(statusAt, kStart + kStatus48HzExperimental.statusPeriod * 480);
 }
 
 TEST(ReadFreshness, SuccessfulStatusCannotRefreshFailedSettings) {

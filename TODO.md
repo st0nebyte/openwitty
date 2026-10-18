@@ -202,3 +202,9 @@
   clicks or other noise in either playback run. Next: seek explicit GUI-mode
   authorization and visual acceptance; do not change production polling or
   claim peak accuracy from these probes.
+- ✔ Phase 7G.5 software preparation: temporary `--experimental-status-48hz`
+  read-only GUI option, independent 500 ms settings deadline, fractional
+  monotonic status deadlines, missed-tick skipping, 75/200 ms status freshness,
+  deterministic tests, and hardware-safe GUI test lease. **Pending:** separate
+  owner approval to launch the real 48 Hz GUI, measure actual polling/frame
+  cadence and resources, confirm audio coexistence, and judge meter motion.

@@ -44,6 +44,11 @@ if(LEWITT_BUILD_TESTS)
     add_test(NAME gui_integration COMMAND lewitt_gui_tests)
     set_tests_properties(gui_integration PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=$ENV{QML_IMPORT_PATH};LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/lsan.supp")
+    add_test(NAME gui_rejects_48hz_mock COMMAND openwitty --mock --experimental-status-48hz)
+    add_test(NAME gui_rejects_conflicting_status_rates
+             COMMAND openwitty --experimental-status-8hz --experimental-status-48hz)
+    set_tests_properties(gui_rejects_48hz_mock gui_rejects_conflicting_status_rates PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" WILL_FAIL TRUE TIMEOUT 2)
 endif()
 
 add_executable(lewitt_bench_gui EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tests/bench/bench_gui.cpp)

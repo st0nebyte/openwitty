@@ -25,6 +25,9 @@ int main(int argc, char** argv) {
     QCommandLineOption experimental8Hz("experimental-status-8hz",
         "EXPERIMENTAL: poll real-device status at 8 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
     p.addOption(experimental8Hz);
+    QCommandLineOption experimental48Hz("experimental-status-48hz",
+        "EXPERIMENTAL: poll real-device status at approximately 48 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
+    p.addOption(experimental48Hz);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
@@ -35,12 +38,13 @@ int main(int argc, char** argv) {
     p.addHelpOption();
     p.addVersionOption();
     p.process(app);
-    if (p.isSet(mock) && p.isSet(experimental8Hz)) {
-        std::fputs("--experimental-status-8hz is for the real read-only GUI, not --mock\n", stderr);
+    if ((p.isSet(mock) && (p.isSet(experimental8Hz) || p.isSet(experimental48Hz))) ||
+        (p.isSet(experimental8Hz) && p.isSet(experimental48Hz))) {
+        std::fputs("experimental status rates require one real read-only mode; do not combine with --mock or each other\n", stderr);
         return 64;
     }
 
-    DeviceController controller(nullptr, p.isSet(experimental8Hz));
+    DeviceController controller(nullptr, p.isSet(experimental8Hz), p.isSet(experimental48Hz));
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,

@@ -328,3 +328,52 @@ needed to compare 4/8 Hz against an opt-in ~48 Hz status schedule while keeping
 settings at 2 Hz, 60 FPS presentation independent, request serialization,
 freshness windows appropriate, and real GUI writes disabled. Do not change the
 production default or launch such a mode from the probe approvals alone.
+
+## Phase 7G.5 — opt-in ~48 Hz read-only GUI mode prepared (no hardware GUI run yet)
+
+`--experimental-status-48hz` extends the same real-device `DeviceWorker` and
+single serialized `DeviceSession` used at 4/8 Hz. It is mutually exclusive
+with `--experimental-status-8hz` and `--mock`; the default is still 4 Hz status
+and 2 Hz settings. The window title labels the opt-in mode as experimental and
+read-only. No GUI write policy, ALSA/PipeWire routing, or meter-presentation
+envelope was changed. The existing frame-synchronized meter animation remains
+independent of USB acquisition and cannot invent inter-sample peaks.
+
+The 48 Hz worker uses one **precise single-shot timer** with absolute monotonic
+deadlines spaced 20,833,334 ns apart (nominal 48 Hz). It rounds the next timer
+delay to milliseconds but retains the fractional absolute deadline, so 20/21 ms
+delays average toward the target instead of accumulating 21 ms drift. After a
+slow read or event-loop pause it skips missed deadlines rather than issuing a
+catch-up burst. The same worker thread performs each GET before rearming the
+timer; no overlapping requests or second USB connection are introduced.
+Settings use a separate monotonic 500 ms deadline in this mode, due on the
+first following status tick, and also skip missed deadlines. A deterministic
+schedule test produces 480 status deadlines and 20 settings deadlines across
+ten seconds. Actual GUI cadence and settings responsiveness remain **unmeasured
+on hardware** until the separately approved visual run.
+
+Status freshness is fresh through 75 ms, delayed through 200 ms, then stale;
+settings keep their 750/1500 ms thresholds. These conservative 48 Hz status
+thresholds tolerate ordinary GUI scheduling jitter while detecting sustained
+missing reads. Failed status reads do not refresh status age, successful
+settings reads cannot conceal stale meters, and reconnection resets the
+monotonic schedule and freshness timestamps. The 4/8 Hz schedules and mock
+cadence are unchanged.
+
+Software-only validation includes default/8/48 cadence and freshness tests,
+deadline skipping, 2 Hz settings independence, reconnect reset, mock/QML title
+checks, invalid option rejection, lease-held real-USB refusal tests, the full
+Release and ASan/UBSan suites, and the USB call-site audit. The three GUI tests
+that call `connectUsb()` now hold a private test lease, so they fail before
+physical USB I/O even when a CONNECT 2 is attached.
+
+**Next approval checkpoint:** launch
+`OPENWITTY_TRACE_LATENCY=2 OPENWITTY_TRACE_METER_FRAMES=1
+build-release/src/gui/openwitty --experimental-status-48hz` only after the
+owner explicitly approves this real-hardware GUI experiment. That launch
+would schedule about 48 status GETs/s (64-byte payload; ~3,072 payload B/s)
+plus 2 settings GETs/s (128-byte payload; 256 B/s), excluding USB overhead,
+initial connection reads, or reconnect attempts. Compare actual GET cadence,
+USB errors, CPU/RSS, visible frame cadence, settings behavior, audio coexistence,
+and owner-reported sound/meter appearance. Stop on errors or audible trouble.
+No visual acceptance is claimed until the owner confirms it.

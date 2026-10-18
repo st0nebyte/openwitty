@@ -7,10 +7,33 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QTemporaryDir>
+#include <optional>
 
 #include "DeviceController.hpp"
+#include "transport/ControlLease.hpp"
 
 namespace {
+// These offscreen tests must not open a real CONNECT 2 even when one is attached.
+// A private test runtime directory and held lease make connectUsb() fail before USB I/O.
+struct BlockRealUsb {
+    QTemporaryDir runtime;
+    QByteArray previous{qgetenv("XDG_RUNTIME_DIR")};
+    bool hadPrevious{qEnvironmentVariableIsSet("XDG_RUNTIME_DIR")};
+    std::optional<lewitt::ControlLease> lease;
+    BlockRealUsb() {
+        if (!runtime.isValid()) return;
+        qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+        auto acquired = lewitt::ControlLease::acquireForCurrentSession();
+        if (acquired) lease.emplace(std::move(acquired.value()));
+    }
+    ~BlockRealUsb() {
+        lease.reset();
+        if (hadPrevious) qputenv("XDG_RUNTIME_DIR", previous);
+        else qunsetenv("XDG_RUNTIME_DIR");
+    }
+    bool ready() const { return runtime.isValid() && lease.has_value(); }
+};
 // Tiny QSignalSpy replacement (Qt6Test is not required).
 struct Count {
     int n{0};
@@ -56,6 +79,20 @@ TEST(GuiBackend, ExperimentalEightHertzIsExplicitAndMockRemainsUnchanged) {
     EXPECT_FALSE(normal.experimentalStatus8Hz());
     DeviceController experimental(nullptr, true);
     EXPECT_TRUE(experimental.experimentalStatus8Hz());
+    experimental.connectMock();
+    ASSERT_TRUE(waitFor([&] { return experimental.connection() == "Connected"; }));
+    EXPECT_TRUE(experimental.simulated());
+    EXPECT_TRUE(experimental.writable()); // existing mock-only behavior
+    ASSERT_TRUE(waitFor([&] { return experimental.values().value("ui.state").toString() == "simulated"; }));
+}
+
+TEST(GuiBackend, ExperimentalFortyEightHertzIsExplicitAndMockRemainsUnchanged) {
+    app();
+    DeviceController normal;
+    EXPECT_FALSE(normal.experimentalStatus48Hz());
+    DeviceController experimental(nullptr, false, true);
+    EXPECT_TRUE(experimental.experimentalStatus48Hz());
+    EXPECT_FALSE(experimental.experimentalStatus8Hz());
     experimental.connectMock();
     ASSERT_TRUE(waitFor([&] { return experimental.connection() == "Connected"; }));
     EXPECT_TRUE(experimental.simulated());
@@ -152,9 +189,13 @@ TEST(GuiBackend, AutoGainWorkflowProgresses) {
 
 TEST(GuiBackend, UsbBackendIsReadOnlyAndAbsentDeviceIsReported) {
     app();
-    DeviceController c;
-    c.connectUsb();   // no device in CI/dev machine without hardware
+    BlockRealUsb block;
+    ASSERT_TRUE(block.ready());
+    DeviceController c(nullptr, false, true); // experimental mode must still refuse writes
+    c.connectUsb();   // held test lease refuses before any physical USB I/O
     ASSERT_TRUE(waitFor([&] { return !c.lastError().isEmpty() || c.connection() == "Connected"; }));
+    EXPECT_NE(c.connection(), "Connected");
+    EXPECT_TRUE(c.lastError().contains("already in use"));
     if (c.connection() != "Connected") {
         EXPECT_FALSE(c.simulated());
         EXPECT_FALSE(c.writable());
@@ -174,6 +215,7 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
     ASSERT_TRUE(root != nullptr);
+    EXPECT_FALSE(root->property("title").toString().contains("EXPERIMENTAL"));
     c.connectMock();
     ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
     QCoreApplication::processEvents();
@@ -202,6 +244,20 @@ TEST(Qml, ExperimentalStatusRateIsClearlyLabelled) {
     ASSERT_TRUE(root);
     EXPECT_TRUE(root->property("title").toString().contains("EXPERIMENTAL 8 Hz METERS"));
     EXPECT_TRUE(root->property("title").toString().contains("READ-ONLY"));
+}
+
+TEST(Qml, ExperimentalFortyEightHertzRateIsClearlyLabelled) {
+    app();
+    DeviceController c(nullptr, false, true);
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    EXPECT_TRUE(root->property("title").toString().contains("EXPERIMENTAL 48 Hz METERS"));
+    EXPECT_TRUE(root->property("title").toString().contains("READ-ONLY"));
+    EXPECT_FALSE(c.writable());
 }
 
 TEST(Qml, EightMetersBindToObservedPresentationAndClearOnDisconnect) {
@@ -559,9 +615,13 @@ TEST(GuiHardening, BusyAndPermissionErrorsAreReportedAndDoNotDisconnect) {
 
 TEST(GuiHardening, UsbModeWithoutDeviceStaysQuietAndSafe) {
     app();
+    BlockRealUsb block;
+    ASSERT_TRUE(block.ready());
     DeviceController c;
     c.connectUsb();
     ASSERT_TRUE(waitFor([&] { return !c.lastError().isEmpty() || c.connection() == "Connected"; }));
+    EXPECT_NE(c.connection(), "Connected");
+    EXPECT_TRUE(c.lastError().contains("already in use"));
     // whatever the machine has, nothing may have become writable on real hardware
     EXPECT_FALSE(c.writable());
     c.trigger("autogain1");        // must be refused by the backend, not just hidden in the UI
@@ -654,10 +714,14 @@ TEST(GuiState, ExplicitDisconnectIsPlainDisconnected) {
 
 TEST(GuiState, UsbModeNeverClaimsSimulationOrWritability) {
     app();
+    BlockRealUsb block;
+    ASSERT_TRUE(block.ready());
     DeviceController c;
     c.connectUsb();
     c.flush();
     ASSERT_TRUE(waitFor([&] { return c.values().contains("ui.state"); }));
+    EXPECT_NE(c.connection(), "Connected");
+    EXPECT_TRUE(c.lastError().contains("already in use"));
     const QString st = c.values().value("ui.state").toString();
     EXPECT_NE(st, "simulated");
     EXPECT_NE(st, "real-writable");
