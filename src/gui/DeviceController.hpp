@@ -13,6 +13,7 @@
 
 #include "core/DeviceManager.hpp"
 #include "core/ReadFreshness.hpp"
+#include "core/PollCadence.hpp"
 #include "core/DeviceSession.hpp"
 #include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
@@ -21,7 +22,7 @@
 class DeviceWorker : public QObject {
     Q_OBJECT
 public:
-    DeviceWorker();
+    explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus4Hz);
 public slots:
     void connectMock();
     void connectUsb();
@@ -65,6 +66,7 @@ private:
     double phase_{0};
     int sampleRate_{48000};
     int pollCount_{0};
+    lewitt::RealPollCadence realCadence_;
     lewitt::ReadFreshness freshness_;
     bool traceEnabled_{false};
     qint64 lastPollNs_{0};
@@ -111,8 +113,9 @@ class DeviceController : public QObject {
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
     Q_PROPERTY(bool traceEnabled READ traceEnabled CONSTANT)
     Q_PROPERTY(QObject* meters READ meters CONSTANT)
+    Q_PROPERTY(bool experimentalStatus8Hz READ experimentalStatus8Hz CONSTANT)
 public:
-    explicit DeviceController(QObject* parent = nullptr);
+    explicit DeviceController(QObject* parent = nullptr, bool experimentalStatus8Hz = false);
     ~DeviceController() override;
     QString connection() const { return connection_; }
     QString backend() const { return backend_; }
@@ -121,6 +124,7 @@ public:
     QVariantMap values() const { return values_; }
     QString lastError() const { return lastError_; }
     bool traceEnabled() const { return traceEnabled_; }
+    bool experimentalStatus8Hz() const { return experimentalStatus8Hz_; }
     MeterPresentation* meters() { return &meters_; }
 
     Q_INVOKABLE void connectMock();
@@ -153,6 +157,7 @@ private:
     QVariantMap values_;
     MeterPresentation meters_{this};
     bool traceEnabled_{false};
+    bool experimentalStatus8Hz_{false};
     int traceLevel_{0};
     qint64 lastLoggedTraceSequence_{0};
     qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};

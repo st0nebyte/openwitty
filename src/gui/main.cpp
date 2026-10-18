@@ -5,6 +5,7 @@
 #include <QCommandLineParser>
 #include <QQuickWindow>
 #include <QTimer>
+#include <cstdio>
 
 #include "DeviceController.hpp"
 #include "lewitt/version.hpp"
@@ -21,6 +22,9 @@ int main(int argc, char** argv) {
     QCommandLineParser p;
     QCommandLineOption mock("mock", "Start with the simulated device.");
     p.addOption(mock);
+    QCommandLineOption experimental8Hz("experimental-status-8hz",
+        "EXPERIMENTAL: poll real-device status at 8 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
+    p.addOption(experimental8Hz);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
@@ -31,8 +35,12 @@ int main(int argc, char** argv) {
     p.addHelpOption();
     p.addVersionOption();
     p.process(app);
+    if (p.isSet(mock) && p.isSet(experimental8Hz)) {
+        std::fputs("--experimental-status-8hz is for the real read-only GUI, not --mock\n", stderr);
+        return 64;
+    }
 
-    DeviceController controller;
+    DeviceController controller(nullptr, p.isSet(experimental8Hz));
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,

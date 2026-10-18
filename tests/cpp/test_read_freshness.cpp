@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "core/ReadFreshness.hpp"
+#include "core/PollCadence.hpp"
 
 using namespace lewitt;
 using namespace std::chrono_literals;
@@ -26,6 +27,27 @@ TEST(ReadFreshness, StatusBoundariesAtFourHertz) {
     EXPECT_EQ(reads.status(kStart + 376ms, true), Freshness::Delayed);
     EXPECT_EQ(reads.status(kStart + 750ms, true), Freshness::Delayed);
     EXPECT_EQ(reads.status(kStart + 751ms, true), Freshness::Stale);
+}
+
+TEST(ReadFreshness, ExperimentalEightHertzBoundaries) {
+    ReadFreshness reads(kStatus8HzExperimental.statusFreshness);
+    reads.markStatus(kStart);
+    EXPECT_EQ(reads.status(kStart + 188ms, true), Freshness::Fresh);
+    EXPECT_EQ(reads.status(kStart + 189ms, true), Freshness::Delayed);
+    EXPECT_EQ(reads.status(kStart + 375ms, true), Freshness::Delayed);
+    EXPECT_EQ(reads.status(kStart + 376ms, true), Freshness::Stale);
+    reads.markSettings(kStart);
+    EXPECT_EQ(reads.settings(kStart + 750ms, true), Freshness::Fresh);
+    EXPECT_EQ(reads.settings(kStart + 1500ms, true), Freshness::Delayed);
+}
+
+TEST(ReadFreshness, RealSchedulesKeepSettingsAtTwoHertz) {
+    EXPECT_EQ(kStatus4Hz.statusPeriod, 250ms);
+    EXPECT_EQ(kStatus4Hz.settingsEveryStatus, 2);
+    EXPECT_EQ(kStatus8HzExperimental.statusPeriod, 125ms);
+    EXPECT_EQ(kStatus8HzExperimental.settingsEveryStatus, 4);
+    EXPECT_EQ(kStatus4Hz.statusPeriod * kStatus4Hz.settingsEveryStatus, 500ms);
+    EXPECT_EQ(kStatus8HzExperimental.statusPeriod * kStatus8HzExperimental.settingsEveryStatus, 500ms);
 }
 
 TEST(ReadFreshness, SuccessfulStatusCannotRefreshFailedSettings) {

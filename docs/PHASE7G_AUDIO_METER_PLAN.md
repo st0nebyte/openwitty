@@ -197,3 +197,13 @@ GET-duration p95 was 2.908/2.927 ms and no control instability was seen. The pro
 identical peak-RSS outputs need independent verification; audio enumeration survived, while
 audible-glitch feedback and objective XRUN monitoring remain open. Keep production 4 Hz until
 the GUI benefit and resource picture are validated. A 16 Hz trial is not automatic.
+
+The owner later confirmed no audible interruptions, clicks or dropouts in those two probe
+runs. Phase 7G.3 adds a **temporary** real-GUI `--experimental-status-8hz` startup option
+for visual comparison, without changing the 4 Hz default or enabling writes. The 8 Hz
+mode uses the same serialized worker/USB connection, retains 2 Hz settings, and sets
+status freshness to fresh through 188 ms, delayed through 375 ms, then stale. The QML
+window title labels the experiment; the eight-channel frame animation and observed-only
+peak handling are unchanged. The first 4 Hz real-GUI trace and independent `/proc` memory
+snapshot are documented in `docs/HARDWARE_TEST_RESULTS.md` §24. Owner visual judgment of
+both rates, the 8 Hz GUI trace, and any 16 Hz decision remain pending.

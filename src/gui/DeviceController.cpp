@@ -59,7 +59,9 @@ Rgb parseHex(const QString& s) {
 }
 }  // namespace
 
-DeviceWorker::DeviceWorker() : traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") > 0) {}
+DeviceWorker::DeviceWorker(RealPollCadence realCadence)
+    : realCadence_(realCadence), freshness_(realCadence.statusFreshness),
+      traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") > 0) {}
 
 void DeviceWorker::startTimer(int ms) {
     if (!timer_) {
@@ -159,7 +161,7 @@ void DeviceWorker::connectUsb() {
     auto s = session_->connect();
     if (!s) { report(s); noteOpenFailure(s); }
     markInitialReads();
-    if (session_->state() == ConnectionState::Connected) startTimer(250);
+    if (session_->state() == ConnectionState::Connected) startTimer(realCadence_.statusPeriod.count());
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
     publishMeterSample();
@@ -199,7 +201,7 @@ void DeviceWorker::rescan() {
         backoffMs_ = 1000;
         lastOpenError_ = Errc::Ok;
         lastTransportError_.clear();
-        startTimer(250);
+        startTimer(realCadence_.statusPeriod.count());
     } else {
         report(s);
         noteOpenFailure(s);
@@ -327,10 +329,10 @@ void DeviceWorker::poll() {
     else freshness_.markStatus();
     if (session_->state() != ConnectionState::Connected) { publish(); return; }   // handled next tick
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
-    // merged and pending simulated edits survive. USB status remains 4 Hz; settings are 2 Hz
-    // (one additional read every 500 ms, serialized with status) to keep physical controls live
+    // merged and pending simulated edits survive. Real USB status is 4 Hz by default or
+    // explicitly experimental 8 Hz; settings remain 2 Hz (every 500 ms, serialized) to keep physical controls live
     // without speculative high-rate polling. Mock retains its prior 4 Hz settings cadence.
-    const bool settingsTick = ++pollCount_ % (mock_ ? 10 : 2) == 0;
+    const bool settingsTick = ++pollCount_ % (mock_ ? 10 : realCadence_.settingsEveryStatus) == 0;
     SettingsRefreshTiming timing;
     QString kinds;
     if (settingsTick) {
@@ -685,7 +687,9 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     publish();
 }
 
-DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(new DeviceWorker) {
+DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz)
+    : QObject(parent), worker_(new DeviceWorker(experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz)),
+      experimentalStatus8Hz_(experimentalStatus8Hz) {
     traceLevel_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY");
     traceEnabled_ = traceLevel_ > 0;
     qRegisterMetaType<QVariantMap>("QVariantMap");
@@ -695,7 +699,8 @@ DeviceController::DeviceController(QObject* parent) : QObject(parent), worker_(n
         if (!traceEnabled_) return;
         const auto sequence = t.value("seq").toLongLong();
         const QString changed = t.value("changed").toString();
-        // Level 1: changed reads plus every 20th poll (~5 s USB, ~0.8 s mock);
+        // Level 1: changed reads plus every 20th poll (~5 s default USB,
+        // ~2.5 s experimental 8 Hz USB, ~0.8 s mock);
         // level 2: every poll. No trace output unless explicitly enabled.
         // Neither mode records payload bytes, serials, or device-unique identifiers.
         const bool logThisPoll = traceLevel_ >= 2 || !changed.isEmpty() || sequence % 20 == 0;

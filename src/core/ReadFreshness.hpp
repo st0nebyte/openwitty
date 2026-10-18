@@ -33,6 +33,9 @@ public:
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
+    explicit ReadFreshness(FreshnessWindow statusWindow = kStatusFreshness)
+        : statusWindow_(statusWindow) {}
+
     void reset() { settings_.reset(); status_.reset(); }
     void markSettings(TimePoint when = Clock::now()) { settings_ = when; }
     void markStatus(TimePoint when = Clock::now()) { status_ = when; }
@@ -40,7 +43,7 @@ public:
         return classify(settings_, now, connected, kSettingsFreshness);
     }
     Freshness status(TimePoint now, bool connected) const {
-        return classify(status_, now, connected, kStatusFreshness);
+        return classify(status_, now, connected, statusWindow_);
     }
 
 private:
@@ -53,6 +56,7 @@ private:
         return Freshness::Stale;
     }
     std::optional<TimePoint> settings_, status_;
+    FreshnessWindow statusWindow_;
 };
 
 }  // namespace lewitt

@@ -1256,3 +1256,29 @@ unbound, the control lease was free, and ALSA/PipeWire still listed the card. Th
 checks demonstrate continued enumeration, not absence of audible glitches or XRUNs; owner
 audio-quality confirmation was requested. Production GUI polling remains 4 Hz status / 2 Hz
 settings, and any 16 Hz experiment remains unapproved.
+
+The owner subsequently confirmed **no audible interruptions, clicks or dropouts** during
+either approved probe run. This is an owner report, not instrumented XRUN evidence.
+
+### 24. Phase 7G.3 — opt-in 8 Hz real-GUI comparison (in progress, 2026-10-18)
+
+The branch started clean at `214a5e0e0a456e24e59f6091a9b4b24963cf18cf`. A temporary
+`--experimental-status-8hz` GUI startup option changes only the real-device status timer
+from 250 to 125 ms and settings from every second to every fourth status tick, preserving
+2 Hz settings. Status age thresholds become 188 ms fresh / 375 ms stale in the opt-in mode;
+settings stay 750 / 1500 ms. The default remains 4 Hz status / 2 Hz settings, and mock
+polling is unchanged. The window title explicitly labels the experiment. The existing
+single worker/serialized transport, control lease, frame animation and real-hardware
+write refusal remain in place.
+
+Before the GUI comparison, there was no OpenWitty process or held lease. The normal
+4 Hz read-only GUI connected to the physical CONNECT 2 without a reported transport
+error. A payload-free internal trace sample spanning 68 poll gaps had a median gap of
+249.994 ms (minimum 249.635 ms; a startup maximum 261.974 ms), median status GET
+2.656 ms and 34 alternating settings GETs (median 3.995 ms). This is observed GUI
+polling, not a measured physical-sound-to-screen latency. ALSA and PipeWire continued
+listing the card. An independent `/proc/<pid>/status` and `smaps_rollup` snapshot while
+the GUI was connected measured about 161,000 KiB RSS (PSS 59,562 KiB), with 46,128 KiB
+private dirty; this does **not** reproduce or explain the probe's 777,620 KiB peak-RSS
+report because it is a different process and measurement. Owner visual comparison of
+4 Hz versus 8 Hz is pending; no meter-smoothness acceptance is claimed here.

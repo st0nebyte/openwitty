@@ -185,5 +185,8 @@
 - ✔ Phase 7G first implementation: independently frame-animated eight meters, observed-sample
   peak hold, status-freshness gating and deterministic unit/QML coverage. Review real-device
   visual motion and measure active frame cadence before calling the 60 FPS target accepted.
-- Do not increase the 4 Hz status GET default without a separately approved, measured
-  single-client hardware trial; establish actual meter-data freshness and peak semantics first.
+- ✔ Bounded single-client 4/8 Hz read-only probe: 40/80 successful GETs with distinct
+  active speaker observations and no USB errors; the owner heard no clicks/dropouts.
+- Visually compare the temporary `--experimental-status-8hz` real GUI with the unchanged
+  4 Hz default, independently measure process resources, and retain 4 Hz until accepted.
+  Do not run 16 Hz without separate approval; meter peak semantics remain unknown.

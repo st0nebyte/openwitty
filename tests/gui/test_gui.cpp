@@ -50,6 +50,19 @@ TEST(GuiBackend, MockConnectsAndPublishesState) {
     EXPECT_DOUBLE_EQ(c.values()["in2.gainMax"].toDouble(), 60.0);
 }
 
+TEST(GuiBackend, ExperimentalEightHertzIsExplicitAndMockRemainsUnchanged) {
+    app();
+    DeviceController normal;
+    EXPECT_FALSE(normal.experimentalStatus8Hz());
+    DeviceController experimental(nullptr, true);
+    EXPECT_TRUE(experimental.experimentalStatus8Hz());
+    experimental.connectMock();
+    ASSERT_TRUE(waitFor([&] { return experimental.connection() == "Connected"; }));
+    EXPECT_TRUE(experimental.simulated());
+    EXPECT_TRUE(experimental.writable()); // existing mock-only behavior
+    ASSERT_TRUE(waitFor([&] { return experimental.values().value("ui.state").toString() == "simulated"; }));
+}
+
 TEST(GuiBackend, SetValueRoundTripsThroughSession) {
     app();
     DeviceController c;
@@ -176,6 +189,19 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     EXPECT_LE(headerStatus->property("x").toDouble() + headerStatus->property("width").toDouble(),
               sampleRateLabel->property("x").toDouble());
     root.reset();
+}
+
+TEST(Qml, ExperimentalStatusRateIsClearlyLabelled) {
+    app();
+    DeviceController c(nullptr, true);
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    EXPECT_TRUE(root->property("title").toString().contains("EXPERIMENTAL 8 Hz METERS"));
+    EXPECT_TRUE(root->property("title").toString().contains("READ-ONLY"));
 }
 
 TEST(Qml, EightMetersBindToObservedPresentationAndClearOnDisconnect) {

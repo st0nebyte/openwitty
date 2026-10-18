@@ -108,5 +108,7 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   and sampled-peak markers. The real device remains at 4 status GETs/s and 2 settings GETs/s;
   ~60 FPS rendering does not create or imply additional hardware samples.
 * Delayed status freezes/dims the meters; stale status or disconnection clears their live
-  display until a new successful sample. This is software-tested; exact real-device signal
-  semantics and any faster acquisition rate remain unverified. No GUI hardware writes were added.
+  display until a new successful sample. A bounded read-only probe observed additional
+  active speaker-meter values at 8 Hz without USB errors; exact meter semantics and GUI
+  visual benefit are still unverified. An explicitly labelled 8 Hz GUI startup experiment
+  is available; the production default remains 4 Hz and no GUI hardware writes were added.
