@@ -274,9 +274,11 @@ transport errors, an achieved 40.000 Hz start cadence, 25.000 ms median interval
 is not established. Audio interfaces and ALSA/PipeWire nodes remained present.
 
 However, all eight decoded meters stayed at −60 dB and the *entire* status
-frame repeated on all 399 comparisons. The owner has been asked whether signal
-was actively reaching this device path and whether any audible issue occurred.
-Until that is known and an active-signal run is approved, this result cannot
-answer whether 40 Hz yields additional genuine level observations. Do not
-advance to 48 Hz, change the GUI rate, or infer a firmware update ceiling from
-this run. Details and caveats are in `docs/HARDWARE_TEST_RESULTS.md` §25.
+frame repeated on all 399 comparisons. The owner confirmed that no audio was
+playing during this run and reported no audible clicks or other problems;
+the latter is subjective feedback, not XRUN instrumentation. An active-signal
+40 Hz repeat requires a newly approved command. Until then, this result cannot
+answer whether 40 Hz yields additional genuine level observations during
+playback. Do not advance to 48 Hz, change the GUI rate, or infer a firmware
+update ceiling from this run. Details and caveats are in
+`docs/HARDWARE_TEST_RESULTS.md` §25.

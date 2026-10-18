@@ -144,8 +144,8 @@ independent review. No raw capture or identifying device data is committed.
 
 The owner approved one single-owner, read-only 40 Hz/10-second Linux run (at most
 400 GETs). It achieved its cadence without USB errors but saw only unchanged
-−60 dB meter/status frames; signal
-presence during the run awaits confirmation. Thus it does not test whether
+−60 dB meter/status frames; the owner confirmed that no audio was playing.
+Thus it does not test whether
 40 Hz supplies new meter information under playback. The 48 Hz run remains
 unapproved. Neither rate has become a GUI default. See the Phase 7G plan and
 hardware results for Linux details.

@@ -1362,17 +1362,21 @@ client or held lease were rechecked. The one approved run completed:
 | Historical `getrusage` peak RSS | 787,228 KiB (inconsistent with both current `/proc` readings; cause unverified) |
 
 All eight decoded meter values remained at the −60 dB display floor for the
-entire run; the **whole 64-byte status frame** also remained unchanged. This
-is a valid USB-stability and scheduling observation, but **not** evidence that
-40 Hz fails to provide additional meter information under an active signal.
-Whether audio was playing through the monitored CONNECT 2 path during these
-ten seconds is awaiting owner confirmation. The original Windows playback
+entire run; the **whole 64-byte status frame** also remained unchanged. The
+owner subsequently confirmed that **no audio was playing** during the test.
+This is a valid idle USB-stability and scheduling observation, but **not**
+evidence that 40 Hz fails to provide additional meter information under an
+active signal. The original Windows playback
 capture and the earlier Linux 4/8 Hz signal runs must not be directly compared
 to this silent-status run. There were no software-reported transfer errors;
-audible clicks/dropouts were not machine-measured and owner feedback is pending.
+audible clicks/dropouts were not machine-measured. The owner subsequently
+reported no clicks or other audible problems and said everything seemed fine.
+This is subjective feedback during an idle-audio run, not evidence of playback
+stability or XRUN instrumentation.
 
 Post-run read-only checks still found the same CONNECT 2, `snd-usb-audio` on
 audio interfaces 0–2, ALSA/PipeWire nodes, and no held control lease. No USB
 SET, settings GET, driver detach, reset, or DFU access occurred. The GUI's
 production status schedule remains 4 Hz. **No 48 Hz run was made**; a repeat
-40 Hz run or 48 Hz run requires a new explicit approval after signal verification.
+40 Hz run or 48 Hz run requires a new explicit approval; an active-signal repeat
+must first have comparable playback confirmed on the CONNECT 2 path.

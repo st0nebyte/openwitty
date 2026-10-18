@@ -195,7 +195,8 @@
 - Phase 7G.4: owner-reported native-Windows capture indicates ~47 status GETs/s
   while visible, but the original report/JSON are not present on this Linux host.
   ✔ Approved 40 Hz/10 s run: 400 GETs, no errors, correct cadence, but all
-  status/meter frames stayed unchanged at −60 dB. Confirm whether audio was
-  active on the device path; only then consider a separately approved repeat.
+  status/meter frames stayed unchanged at −60 dB. The owner reported no audible
+  clicks or problems and confirmed no audio was playing. An active-signal
+  40 Hz repeat requires a comparable playback signal and new explicit approval.
   Do not run 48 Hz or change GUI polling on this inconclusive meter-information
   result.
