@@ -108,6 +108,16 @@ the official application on its supported OS could answer the original poll
 interval directly, but must be separately planned because launching it may
 cause device writes outside this read-only task.
 
+## Phase 7G.2 follow-up (read-only hardware sampling)
+
+After separate owner approval, OpenWitty's bounded read-only diagnostic sampled status at
+4 Hz (40/40 GETs) and 8 Hz (80/80 GETs), with no transfer errors. The active speaker meter
+fields changed on every consecutive response at both rates; 38/39 interior 8 Hz midpoint
+speaker-L values differed from both neighboring 250 ms-spaced samples. Therefore this
+device/signal supplied additional observations at 8 Hz. This does **not** reveal the original
+application's poll interval, establish firmware's maximum update rate or meter semantics, or
+justify 16 Hz automatically. See `docs/HARDWARE_TEST_RESULTS.md` §23 for timing and caveats.
+
 ## Native-Windows capture reported by the owner (Phase 7G.4)
 
 The owner reports a real capture of the original LEWITT CONTROL CENTER with a
@@ -132,17 +142,10 @@ behavior, GUI frame rate, or why minimized operation is slower. The exact USB
 request metadata and capture methodology require the sanitized report for an
 independent review. No raw capture or identifying device data is committed.
 
-The next Linux step is a **separately approved**, single-owner, read-only 40 Hz
-10-second status probe (at most 400 GETs); only after reviewing that result may
-a separate 48 Hz/10-second trial (at most 480 GETs) be proposed. Neither rate is
-yet a GUI default or an authorized hardware experiment. See the Phase 7G plan.
-
-## Phase 7G.2 follow-up (read-only hardware sampling)
-
-After separate owner approval, OpenWitty's bounded read-only diagnostic sampled status at
-4 Hz (40/40 GETs) and 8 Hz (80/80 GETs), with no transfer errors. The active speaker meter
-fields changed on every consecutive response at both rates; 38/39 interior 8 Hz midpoint
-speaker-L values differed from both neighboring 250 ms-spaced samples. Therefore this
-device/signal supplied additional observations at 8 Hz. This does **not** reveal the original
-application's poll interval, establish firmware's maximum update rate or meter semantics, or
-justify 16 Hz automatically. See `docs/HARDWARE_TEST_RESULTS.md` §23 for timing and caveats.
+The owner approved one single-owner, read-only 40 Hz/10-second Linux run (at most
+400 GETs). It achieved its cadence without USB errors but saw only unchanged
+−60 dB meter/status frames; signal
+presence during the run awaits confirmation. Thus it does not test whether
+40 Hz supplies new meter information under playback. The 48 Hz run remains
+unapproved. Neither rate has become a GUI default. See the Phase 7G plan and
+hardware results for Linux details.

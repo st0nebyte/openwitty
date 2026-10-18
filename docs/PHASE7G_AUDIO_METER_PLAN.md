@@ -248,7 +248,8 @@ Approval sequence:
    --duration 10 --execute`. This yields at most 400 status GETs, 25,600 status
    payload bytes, and one 64-byte API GET over at most 10 seconds, excluding
    USB transaction overhead. Stop immediately on transfer/decode error, device
-   loss, or audible disruption. This command has **not** been executed.
+   loss, or audible disruption. The owner subsequently approved and ran this
+   exact command; results follow below.
 2. Review achieved frequency, interval jitter, GET median/p95, genuinely changed
    meter samples, USB errors, CPU, `/proc` memory, and ALSA/PipeWire/audio
    coexistence. Do not infer peak accuracy merely from changed bytes.
@@ -262,3 +263,20 @@ and a separate GUI-rate authorization justify it. The owner has already judged
 4 Hz too slow and 8 Hz better but still far from a real-time meter; that is a
 visual observation, not a measured sound-to-screen delay. Hidden-window rate
 reduction and GUI acceptance need separate measurement and visual review.
+
+### Approved 40 Hz result — transport stable, meter-information test inconclusive
+
+The single approved 40 Hz/10-second run completed 400/400 status GETs with zero
+transport errors, an achieved 40.000 Hz start cadence, 25.000 ms median interval,
+0.247 ms median GET and 0.306 ms p95 GET. CPU time was 10.8 ms over the run
+(0.11%). Independent current `/proc` RSS was 5,204 KiB (PSS 1,258 KiB), while
+`getrusage` again reported an inconsistent ~787 MiB historical peak; the cause
+is not established. Audio interfaces and ALSA/PipeWire nodes remained present.
+
+However, all eight decoded meters stayed at −60 dB and the *entire* status
+frame repeated on all 399 comparisons. The owner has been asked whether signal
+was actively reaching this device path and whether any audible issue occurred.
+Until that is known and an active-signal run is approved, this result cannot
+answer whether 40 Hz yields additional genuine level observations. Do not
+advance to 48 Hz, change the GUI rate, or infer a firmware update ceiling from
+this run. Details and caveats are in `docs/HARDWARE_TEST_RESULTS.md` §25.

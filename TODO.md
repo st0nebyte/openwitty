@@ -194,6 +194,8 @@
   approval. Meter peak semantics remain unknown; GUI-run audio feedback is pending.
 - Phase 7G.4: owner-reported native-Windows capture indicates ~47 status GETs/s
   while visible, but the original report/JSON are not present on this Linux host.
-  The dry-run-only 40/48 Hz Linux probe is prepared. Obtain separate approval
-  for the 40 Hz/10 s run (400 GETs), review it, then request separate 48 Hz
-  approval only if warranted. Do not change GUI polling yet.
+  ✔ Approved 40 Hz/10 s run: 400 GETs, no errors, correct cadence, but all
+  status/meter frames stayed unchanged at −60 dB. Confirm whether audio was
+  active on the device path; only then consider a separately approved repeat.
+  Do not run 48 Hz or change GUI polling on this inconclusive meter-information
+  result.

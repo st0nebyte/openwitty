@@ -1306,7 +1306,7 @@ the earlier no-glitch confirmation applies only to the bounded 4/8 Hz probe runs
 The opt-in GUI remained open at the time of this note. The 4 Hz production default
 is unchanged, and a 16 Hz experiment remains unapproved.
 
-### 25. Phase 7G.4 — high-rate Linux probe prepared; not executed (2026-10-18)
+### 25. Phase 7G.4 — high-rate Linux probe preparation and approved 40 Hz run (2026-10-18)
 
 The owner supplied **reported** measurements from a native-Windows capture of
 the original application: 46.845 status GETs/s visible idle, 46.775/s visible
@@ -1340,3 +1340,39 @@ The Release build passed 171/171 CTests and the ASan/UBSan build passed
 USB call-site audit passed. Dry-run output confirmed the 400/480 GET ceilings
 without opening the device. These software checks cannot establish that either
 high-rate hardware run will be stable.
+
+The owner then explicitly approved **only**
+`build-release/openwitty-meter-probe --rate 40 --duration 10 --execute`.
+Immediately before execution, the same VID/PID, vendor interface 3, usbfs user
+ACL, attached `snd-usb-audio`, ALSA/PipeWire presence, and lack of an OpenWitty
+client or held lease were rechecked. The one approved run completed:
+
+| Linux 40 Hz result | Observation |
+|---|---:|
+| Status GETs / errors | 400 / 0 |
+| Achieved start-to-start rate | 40.000 Hz |
+| Interval min / median / p95 / max | 24.954 / 25.000 / 25.005 / 25.051 ms |
+| Scheduling lateness p95 | 0.058 ms |
+| Status GET mean / median / p95 / max | 0.249 / 0.247 / 0.306 / 0.363 ms |
+| Changed meter snapshots / changed whole status frames | 0/399 / 0/399 |
+| Longest run of identical meter snapshots | 399 |
+| Process CPU over 9.975 s | 10.8 ms (0.11%) |
+| Current RSS / PSS from `/proc/self/smaps_rollup` | 5,204 / 1,258 KiB |
+| Current RSS from `/proc/self/status` | 5,204 KiB |
+| Historical `getrusage` peak RSS | 787,228 KiB (inconsistent with both current `/proc` readings; cause unverified) |
+
+All eight decoded meter values remained at the −60 dB display floor for the
+entire run; the **whole 64-byte status frame** also remained unchanged. This
+is a valid USB-stability and scheduling observation, but **not** evidence that
+40 Hz fails to provide additional meter information under an active signal.
+Whether audio was playing through the monitored CONNECT 2 path during these
+ten seconds is awaiting owner confirmation. The original Windows playback
+capture and the earlier Linux 4/8 Hz signal runs must not be directly compared
+to this silent-status run. There were no software-reported transfer errors;
+audible clicks/dropouts were not machine-measured and owner feedback is pending.
+
+Post-run read-only checks still found the same CONNECT 2, `snd-usb-audio` on
+audio interfaces 0–2, ALSA/PipeWire nodes, and no held control lease. No USB
+SET, settings GET, driver detach, reset, or DFU access occurred. The GUI's
+production status schedule remains 4 Hz. **No 48 Hz run was made**; a repeat
+40 Hz run or 48 Hz run requires a new explicit approval after signal verification.
