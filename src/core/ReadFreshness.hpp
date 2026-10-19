@@ -17,8 +17,8 @@ constexpr const char* freshnessName(Freshness state) {
     return "unavailable";
 }
 
-// USB settings are scheduled every 500 ms, status every 250 ms. 1.5 periods
-// tolerates normal timer jitter; more than 3 periods without success is stale.
+// Production USB settings are scheduled every 500 ms, status every 250 ms.
+// Experimental schedules supply their own independent freshness windows.
 struct FreshnessWindow {
     std::chrono::milliseconds fresh;
     std::chrono::milliseconds stale;
@@ -33,14 +33,15 @@ public:
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
 
-    explicit ReadFreshness(FreshnessWindow statusWindow = kStatusFreshness)
-        : statusWindow_(statusWindow) {}
+    explicit ReadFreshness(FreshnessWindow statusWindow = kStatusFreshness,
+                           FreshnessWindow settingsWindow = kSettingsFreshness)
+        : statusWindow_(statusWindow), settingsWindow_(settingsWindow) {}
 
     void reset() { settings_.reset(); status_.reset(); }
     void markSettings(TimePoint when = Clock::now()) { settings_ = when; }
     void markStatus(TimePoint when = Clock::now()) { status_ = when; }
     Freshness settings(TimePoint now, bool connected) const {
-        return classify(settings_, now, connected, kSettingsFreshness);
+        return classify(settings_, now, connected, settingsWindow_);
     }
     Freshness status(TimePoint now, bool connected) const {
         return classify(status_, now, connected, statusWindow_);
@@ -56,7 +57,7 @@ private:
         return Freshness::Stale;
     }
     std::optional<TimePoint> settings_, status_;
-    FreshnessWindow statusWindow_;
+    FreshnessWindow statusWindow_, settingsWindow_;
 };
 
 }  // namespace lewitt

@@ -122,7 +122,8 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   remains 4 Hz; exact meter/peak semantics remain unverified and no GUI
   hardware writes were added.
 
-## Phase 7H visual quality (software-tested)
+## Phase 7H visual quality and control responsiveness
 
 * General GUI pictograms use one Lucide SVG outline family with bundled ISC/Feather MIT notices; the low-cut response curve is an original vector exception, auto gain stays a text label, and the OpenWitty logo is unchanged. SVG loading and visible rendering were tested with a software scene graph.
-* Held-peak lines now use screen-pixel-aligned shapes, appear only above the live level, and clear after silence/hold decay. Rendered one-row/floor tests passed at 100%, 125%, 150%, and 200% scaling. The updated GUI still needs owner review on real hardware; the earlier 48 Hz visual acceptance applies to the previous build.
+* Held-peak lines now use screen-pixel-aligned shapes, appear only above the live level, and clear after silence/hold decay. Rendered one-row/floor tests passed at 100%, 125%, 150%, and 200% scaling; the owner subsequently accepted their real-hardware appearance and the updated icons.
+* Explicit read-only `--experimental-settings-8hz` and `--experimental-settings-16hz` options require `--experimental-status-48hz`; the owner preferred 16 Hz for physical control response. A bounded 20-minute 16/48 Hz GUI run completed without observed USB errors, rate drift, or sustained RSS/frame-cadence degradation. Production remains 2 Hz settings / 4 Hz status, with real GUI writes disabled. See `docs/HARDWARE_TEST_RESULTS.md` §29 for limits.

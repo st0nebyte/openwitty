@@ -389,3 +389,23 @@ This validates the **visual usefulness and observed stability of the opt-in 48 H
 The acquisition and envelope stages are unchanged. Only the peak-hold edge case and rendering layer were corrected: floor samples do not restart hold, sub-threshold silence residue snaps to -60 dB, and a held peak is drawn only when distinct from the live bar. A Qt Quick `Shape` draws the marker on a screen-pixel-aligned path. Rendered-pixel tests cover a single row and disappearance at silence at 100/125/150/200% scaling. The screen-pixel result was not reliable with a fractional-height `Rectangle` under the software scene graph, motivating the shape. Eight static paths remain separate from USB polling and the frame-driven envelope; their real-GUI CPU impact has not yet been measured.
 
 The hand-drawn mixed-style Canvas icons were replaced with nine bundled Lucide SVGs under ISC (the Feather-derived headphones icon additionally carries MIT), plus a project-authored low-cut curve and text auto-gain label. SVG images are rasterized at 4× design resolution before stage scaling. Shader-based tinting was removed after a mock software-renderer screenshot showed blank icons. Mock screenshots at 1008×566 and 720×440 show the replacement icons; owner visual acceptance on the updated physical GUI is pending. The OpenWitty logo is unchanged.
+
+### Phase 7H acceptance and read-only settings experiment (2026-10-19)
+
+The owner subsequently accepted the updated icon and peak-marker appearance on
+the physical GUI. The 48 Hz status path remains independent of settings reads.
+Two explicit, temporary settings schedules (8 and 16 Hz) now run through the
+same serialized worker only when `--experimental-status-48hz` is selected;
+production stays at 2 Hz settings / 4 Hz status. The owner judged 8 Hz good,
+16 Hz visibly better, and the 16 Hz physical gain fader perfectly smooth,
+without clicks/dropouts in the short comparisons. No true physical-action-to-
+screen latency was measured.
+
+A 20-minute 16/48 Hz read-only GUI run completed at 16.000/48.001 GETs/s with
+zero observed USB errors, no sustained RSS growth, and no start-to-end frame-
+cadence decline. Active-meter summaries still clustered around 48 FPS rather
+than proving the nominal 60 FPS target. Detailed measurements and the audio-
+confirmation limitation are in `HARDWARE_TEST_RESULTS.md` §29. The experimental
+16 Hz setting is preferred for further evaluation, but making it a production
+default requires a separate decision; neither status nor settings default was
+changed here.

@@ -59,8 +59,11 @@ Rgb parseHex(const QString& s) {
 }
 }  // namespace
 
-DeviceWorker::DeviceWorker(RealPollCadence realCadence)
-    : realCadence_(realCadence), realSchedule_(realCadence), freshness_(realCadence.statusFreshness),
+DeviceWorker::DeviceWorker(RealPollCadence realCadence, int settingsHz)
+    : realCadence_(realCadence), realSchedule_(realCadence,
+          std::chrono::nanoseconds(1'000'000'000LL / (settingsHz == 8 || settingsHz == 16 ? settingsHz : 2))),
+      freshness_(realCadence.statusFreshness,
+          settingsHz == 8 ? kSettings8HzFreshness : settingsHz == 16 ? kSettings16HzFreshness : kSettingsFreshness),
       traceEnabled_(qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY") > 0) {}
 
 void DeviceWorker::startTimer(int ms) {
@@ -361,7 +364,8 @@ void DeviceWorker::poll() {
     }
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
     // merged and pending simulated edits survive. The 48 Hz fractional schedule
-    // has its own monotonic 500 ms settings deadline; all GETs remain serialized.
+    // has an independent monotonic settings deadline (500 ms by default, or
+    // 125/62.5 ms in the explicit experiment); all GETs remain serialized.
     // Mock retains its prior 4 Hz settings cadence.
     ++pollCount_;
     const bool settingsTick = mock_ ? pollCount_ % 10 == 0
@@ -725,10 +729,13 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     publish();
 }
 
-DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz, bool experimentalStatus48Hz)
+DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz,
+                                   bool experimentalStatus48Hz, int settingsPollingHz)
     : QObject(parent), worker_(new DeviceWorker(experimentalStatus48Hz ? kStatus48HzExperimental
-                                  : experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz)),
-      experimentalStatus8Hz_(experimentalStatus8Hz), experimentalStatus48Hz_(experimentalStatus48Hz) {
+                                  : experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz,
+                                  settingsPollingHz)),
+      experimentalStatus8Hz_(experimentalStatus8Hz), experimentalStatus48Hz_(experimentalStatus48Hz),
+      settingsPollingHz_(settingsPollingHz) {
     traceLevel_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY");
     traceEnabled_ = traceLevel_ > 0;
     qRegisterMetaType<QVariantMap>("QVariantMap");

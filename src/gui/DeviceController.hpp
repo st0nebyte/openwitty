@@ -22,7 +22,8 @@
 class DeviceWorker : public QObject {
     Q_OBJECT
 public:
-    explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus4Hz);
+    explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus4Hz,
+                          int settingsHz = 2);
 public slots:
     void connectMock();
     void connectUsb();
@@ -118,9 +119,10 @@ class DeviceController : public QObject {
     Q_PROPERTY(QObject* meters READ meters CONSTANT)
     Q_PROPERTY(bool experimentalStatus8Hz READ experimentalStatus8Hz CONSTANT)
     Q_PROPERTY(bool experimentalStatus48Hz READ experimentalStatus48Hz CONSTANT)
+    Q_PROPERTY(int settingsPollingHz READ settingsPollingHz CONSTANT)
 public:
     explicit DeviceController(QObject* parent = nullptr, bool experimentalStatus8Hz = false,
-                              bool experimentalStatus48Hz = false);
+                              bool experimentalStatus48Hz = false, int settingsPollingHz = 2);
     ~DeviceController() override;
     QString connection() const { return connection_; }
     QString backend() const { return backend_; }
@@ -131,6 +133,7 @@ public:
     bool traceEnabled() const { return traceEnabled_; }
     bool experimentalStatus8Hz() const { return experimentalStatus8Hz_; }
     bool experimentalStatus48Hz() const { return experimentalStatus48Hz_; }
+    int settingsPollingHz() const { return settingsPollingHz_; }
     MeterPresentation* meters() { return &meters_; }
 
     Q_INVOKABLE void connectMock();
@@ -165,6 +168,7 @@ private:
     bool traceEnabled_{false};
     bool experimentalStatus8Hz_{false};
     bool experimentalStatus48Hz_{false};
+    int settingsPollingHz_{2};
     int traceLevel_{0};
     qint64 lastLoggedTraceSequence_{0};
     qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};

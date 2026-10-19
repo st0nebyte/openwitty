@@ -26,25 +26,53 @@ int main(int argc, char** argv) {
         "EXPERIMENTAL: poll real-device status at 8 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
     p.addOption(experimental8Hz);
     QCommandLineOption experimental48Hz("experimental-status-48hz",
-        "EXPERIMENTAL: poll real-device status at approximately 48 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
+        "EXPERIMENTAL: poll real-device status at approximately 48 Hz (default 4 Hz); settings default to 2 Hz. Read-only.");
     p.addOption(experimental48Hz);
+    QCommandLineOption experimentalSettings8Hz("experimental-settings-8hz",
+        "EXPERIMENTAL: poll real-device settings at 8 Hz with --experimental-status-48hz. Read-only.");
+    QCommandLineOption experimentalSettings16Hz("experimental-settings-16hz",
+        "EXPERIMENTAL: poll real-device settings at 16 Hz with --experimental-status-48hz. Read-only.");
+    p.addOption(experimentalSettings8Hz);
+    p.addOption(experimentalSettings16Hz);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
     p.addOption(sizeOpt);
     QCommandLineOption show("show", "Open a page at start: settings | wizard | onboarding.", "page");
     p.addOption(show);
+    QCommandLineOption experimentSeconds("experiment-seconds",
+        "Bound a read-only experimental GUI run; quit normally after 1–1800 seconds.", "seconds");
+    p.addOption(experimentSeconds);
     p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();
     p.addVersionOption();
     p.process(app);
-    if ((p.isSet(mock) && (p.isSet(experimental8Hz) || p.isSet(experimental48Hz))) ||
-        (p.isSet(experimental8Hz) && p.isSet(experimental48Hz))) {
-        std::fputs("experimental status rates require one real read-only mode; do not combine with --mock or each other\n", stderr);
+    const bool settings8 = p.isSet(experimentalSettings8Hz);
+    const bool settings16 = p.isSet(experimentalSettings16Hz);
+    if ((p.isSet(mock) && (p.isSet(experimental8Hz) || p.isSet(experimental48Hz) || settings8 || settings16)) ||
+        (p.isSet(experimental8Hz) && p.isSet(experimental48Hz)) || (settings8 && settings16) ||
+        ((settings8 || settings16) && !p.isSet(experimental48Hz))) {
+        std::fputs("experimental settings require --experimental-status-48hz; do not combine rates or use --mock\n", stderr);
+        return 64;
+    }
+    bool durationOk = false;
+    const int experimentDuration = p.value(experimentSeconds).toInt(&durationOk);
+    if (p.isSet(experimentSeconds) && (!p.isSet(experimental48Hz) || !durationOk ||
+                                        experimentDuration < 1 || experimentDuration > 1800)) {
+        std::fputs("--experiment-seconds requires --experimental-status-48hz and a duration of 1–1800 seconds\n", stderr);
         return 64;
     }
 
-    DeviceController controller(nullptr, p.isSet(experimental8Hz), p.isSet(experimental48Hz));
+    DeviceController controller(nullptr, p.isSet(experimental8Hz), p.isSet(experimental48Hz),
+                                settings16 ? 16 : settings8 ? 8 : 2);
+    if (p.isSet(experimentSeconds)) {
+        QObject::connect(&controller, &DeviceController::errorChanged, &app, [&] {
+            if (!controller.lastError().isEmpty()) {
+                std::fputs("experiment stopped: device/control error\n", stderr);
+                app.exit(2);
+            }
+        });
+    }
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
@@ -77,5 +105,7 @@ int main(int argc, char** argv) {
             app.quit();
         });
     }
+    if (p.isSet(experimentSeconds))
+        QTimer::singleShot(experimentDuration * 1000, &app, &QCoreApplication::quit);
     return app.exec();
 }

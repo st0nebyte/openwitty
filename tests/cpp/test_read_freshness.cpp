@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+#include <array>
+#include <tuple>
 
 #include "core/ReadFreshness.hpp"
 #include "core/PollCadence.hpp"
@@ -109,6 +111,46 @@ TEST(ReadFreshness, FortyEightHertzSchedulesTwentySettingsReadsInTenSeconds) {
     }
     EXPECT_EQ(settingsReads, 20);
     EXPECT_EQ(statusAt, kStart + kStatus48HzExperimental.statusPeriod * 480);
+}
+
+TEST(ReadFreshness, ExperimentalSettingsRatesUseIndependentDeadlines) {
+    const std::array<std::pair<std::chrono::nanoseconds, int>, 2> cases{{
+        {125ms, 80}, {std::chrono::microseconds(62500), 160}}};
+    for (auto [period, expected] : cases) {
+        RealPollSchedule schedule(kStatus48HzExperimental, period);
+        schedule.reset(kStart);
+        int reads = 0;
+        auto statusAt = kStart;
+        for (int i = 0; i < 480; ++i) {
+            statusAt = schedule.nextStatusAfter(statusAt);
+            reads += schedule.settingsDue(statusAt);
+        }
+        EXPECT_EQ(reads, expected);
+        EXPECT_EQ(statusAt, kStart + kStatus48HzExperimental.statusPeriod * 480);
+        EXPECT_FALSE(schedule.settingsDue(statusAt)); // no duplicate or catch-up read
+        schedule.reset(kStart + 20s);
+        EXPECT_FALSE(schedule.settingsDue(kStart + 20s));
+        EXPECT_TRUE(schedule.settingsDue(kStart + 20s + period));
+    }
+}
+
+TEST(ReadFreshness, ExperimentalSettingsAgeDoesNotBorrowStatusTimestamp) {
+    for (auto [window, fresh, stale] : {
+             std::tuple{kSettings8HzFreshness, 250ms, 500ms},
+             std::tuple{kSettings16HzFreshness, 125ms, 250ms}}) {
+        ReadFreshness reads(kStatus48HzExperimental.statusFreshness, window);
+        reads.markSettings(kStart);
+        reads.markStatus(kStart + stale + 1ms);
+        EXPECT_EQ(reads.settings(kStart + fresh, true), Freshness::Fresh);
+        EXPECT_EQ(reads.settings(kStart + fresh + 1ms, true), Freshness::Delayed);
+        EXPECT_EQ(reads.settings(kStart + stale, true), Freshness::Delayed);
+        EXPECT_EQ(reads.settings(kStart + stale + 1ms, true), Freshness::Stale);
+        EXPECT_EQ(reads.status(kStart + stale + 1ms, true), Freshness::Fresh);
+        reads.markSettings(kStart + stale + 2ms);
+        EXPECT_EQ(reads.settings(kStart + stale + 2ms, true), Freshness::Fresh);
+        reads.reset();
+        EXPECT_EQ(reads.settings(kStart + stale + 3ms, true), Freshness::Unavailable);
+    }
 }
 
 TEST(ReadFreshness, SuccessfulStatusCannotRefreshFailedSettings) {

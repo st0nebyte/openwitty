@@ -1,4 +1,5 @@
-// Read-only real-device polling schedules. Settings stay at 2 Hz in every mode.
+// Read-only real-device polling schedules. Production settings stay at 2 Hz;
+// opt-in experiments may shorten their independent deadline.
 #pragma once
 #include <chrono>
 #include <optional>
@@ -30,17 +31,26 @@ inline constexpr RealPollCadence kStatus48HzExperimental{
     // data. Delayed begins after ~3.6 periods; stale after ~9.6 periods.
     {std::chrono::milliseconds(75), std::chrono::milliseconds(200)}, true};
 
+// Only used with the explicit 48 Hz status experiment. Fresh/delayed windows
+// allow two/four settings periods, including ordinary GUI scheduling jitter.
+inline constexpr FreshnessWindow kSettings8HzFreshness{
+    std::chrono::milliseconds(250), std::chrono::milliseconds(500)};
+inline constexpr FreshnessWindow kSettings16HzFreshness{
+    std::chrono::milliseconds(125), std::chrono::milliseconds(250)};
+
 // The high-rate mode uses absolute monotonic deadlines, skipping any missed
 // ticks rather than issuing a catch-up burst. No Qt or USB dependency.
 class RealPollSchedule {
 public:
     using Clock = std::chrono::steady_clock;
     using TimePoint = Clock::time_point;
-    explicit RealPollSchedule(RealPollCadence cadence) : cadence_(cadence) {}
+    explicit RealPollSchedule(RealPollCadence cadence,
+                              std::chrono::nanoseconds settingsPeriod = std::chrono::milliseconds(500))
+        : cadence_(cadence), settingsPeriod_(settingsPeriod) {}
 
     void reset(TimePoint now) {
         nextStatus_ = now;
-        nextSettings_ = now + std::chrono::milliseconds(500);
+        nextSettings_ = now + settingsPeriod_;
     }
     TimePoint nextStatusAfter(TimePoint now) {
         if (!nextStatus_) reset(now);
@@ -52,13 +62,13 @@ public:
     bool settingsDue(TimePoint now) {
         if (!nextSettings_) reset(now);
         if (now < *nextSettings_) return false;
-        const auto period = std::chrono::milliseconds(500);
-        const auto missed = (now - *nextSettings_) / period + 1;
-        *nextSettings_ += period * missed;
+        const auto missed = (now - *nextSettings_) / settingsPeriod_ + 1;
+        *nextSettings_ += settingsPeriod_ * missed;
         return true;
     }
 private:
     RealPollCadence cadence_;
+    std::chrono::nanoseconds settingsPeriod_;
     std::optional<TimePoint> nextStatus_, nextSettings_;
 };
 

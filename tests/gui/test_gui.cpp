@@ -106,6 +106,22 @@ TEST(GuiBackend, ExperimentalFortyEightHertzIsExplicitAndMockRemainsUnchanged) {
     ASSERT_TRUE(waitFor([&] { return experimental.values().value("ui.state").toString() == "simulated"; }));
 }
 
+TEST(GuiBackend, ExperimentalSettingsRateIsExplicitAndDoesNotChangeMockBehavior) {
+    app();
+    DeviceController normal;
+    EXPECT_EQ(normal.settingsPollingHz(), 2);
+    DeviceController eight(nullptr, false, true, 8);
+    DeviceController sixteen(nullptr, false, true, 16);
+    EXPECT_EQ(eight.settingsPollingHz(), 8);
+    EXPECT_EQ(sixteen.settingsPollingHz(), 16);
+    EXPECT_TRUE(eight.experimentalStatus48Hz());
+    eight.connectMock();
+    ASSERT_TRUE(waitFor([&] { return eight.connection() == "Connected"; }));
+    EXPECT_TRUE(eight.simulated());
+    EXPECT_TRUE(eight.writable());
+    ASSERT_TRUE(waitFor([&] { return eight.values().value("ui.state").toString() == "simulated"; }));
+}
+
 TEST(GuiBackend, SetValueRoundTripsThroughSession) {
     app();
     DeviceController c;

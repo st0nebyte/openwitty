@@ -59,7 +59,18 @@ if(LEWITT_BUILD_TESTS)
     add_test(NAME gui_rejects_48hz_mock COMMAND openwitty --mock --experimental-status-48hz)
     add_test(NAME gui_rejects_conflicting_status_rates
              COMMAND openwitty --experimental-status-8hz --experimental-status-48hz)
-    set_tests_properties(gui_rejects_48hz_mock gui_rejects_conflicting_status_rates PROPERTIES
+    add_test(NAME gui_rejects_settings_without_48hz COMMAND openwitty --experimental-settings-8hz)
+    add_test(NAME gui_rejects_conflicting_settings_rates
+             COMMAND openwitty --experimental-status-48hz --experimental-settings-8hz --experimental-settings-16hz)
+    add_test(NAME gui_rejects_settings_mock
+             COMMAND openwitty --mock --experimental-status-48hz --experimental-settings-8hz)
+    add_test(NAME gui_rejects_unbounded_duration COMMAND openwitty --experiment-seconds 10)
+    add_test(NAME gui_rejects_invalid_duration
+             COMMAND openwitty --experimental-status-48hz --experiment-seconds 1801)
+    set_tests_properties(gui_rejects_48hz_mock gui_rejects_conflicting_status_rates
+                         gui_rejects_settings_without_48hz gui_rejects_conflicting_settings_rates
+                         gui_rejects_settings_mock gui_rejects_unbounded_duration
+                         gui_rejects_invalid_duration PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" WILL_FAIL TRUE TIMEOUT 2)
 endif()
 

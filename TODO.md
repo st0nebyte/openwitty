@@ -214,4 +214,4 @@
   with no clicks heard. **Pending:** longer-duration validation, frame-pacing
   investigation, meter/peak semantics, and a separate decision before any
   production-default change. Keep the real GUI read-only.
-- Phase 7H: ✔ coherent licensed SVG pictograms; ✔ software-rendered one-row held peaks and silence recovery across 100/125/150/200% scale; ✔ narrow mock layout captures. Pending: owner review of the updated real read-only GUI, actual post-change CPU/frame measurements, and comparison against the reported peak artifact. Keep 4 Hz default and opt-in 48 Hz unchanged; no writes.
+- Phase 7H: ✔ coherent licensed SVG pictograms; ✔ one-row held peaks and silence recovery across 100/125/150/200% scale; ✔ owner visual acceptance on the physical read-only GUI. ✔ Opt-in 8/16 Hz settings with 48 Hz status, owner preference for 16 Hz, and a clean bounded 20-minute 16/48 Hz trace. Pending: independently timestamped physical-action-to-screen latency, full-run audible/XRUN confirmation, cause of the older-build ~18 MiB RSS difference, and the ~48 FPS desktop frame ceiling. Keep production at 2 Hz settings / 4 Hz status; no writes.

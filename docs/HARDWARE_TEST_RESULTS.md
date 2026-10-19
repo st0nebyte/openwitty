@@ -1515,3 +1515,76 @@ The former hand-drawn `GlyphIcon` Canvas mixed filled silhouettes, strokes, and 
 Source inspection found three concrete contributors to the reported peak artifacts: the prior marker was a two-design-unit rectangle at a fractional y coordinate, it remained drawn even when overlapping the live bar, and the presentation model could stop its frame clock with a sub-threshold peak residue just above the -60 dB display floor. The new shape is aligned to a one-physical-pixel screen grid, shown only for a held observed peak separated from the live bar, and hidden at the floor. Repeated floor samples no longer renew a peak hold; decay residue snaps to the floor. Offscreen rendered-pixel tests confirmed one amber row followed by no row at silence at 100%, 125%, 150%, and 200% scale. This is a code-supported correction, not proof that every artifact in the owner's screenshot had the same cause; that screenshot was not available in this turn.
 
 The existing 4 Hz default, opt-in 48 Hz acquisition, frame-driven meter envelopes, status freshness, control lease, and real-GUI write refusal were left unchanged. Release **179/179** CTests, ASan/UBSan **178/178** CTests, and the USB call-site audit passed. Post-change real-GUI CPU/frame cadence and peak appearance remain to be measured with owner approval; no physical USB test was made for this visual patch.
+
+### 29. Phase 7H — visual acceptance and bounded settings-polling stability (2026-10-19)
+
+This section records **later** owner-approved read-only runs; it does not change the
+software-only scope of §28. The owner inspected the updated physical GUI and said the
+Lucide icons, alignment, and peak rise/decay/disappearance looked good. The previous
+opt-in 48 Hz status GUI retained the 2 Hz settings schedule, which the owner found
+laggy for physical faders. In separate 45-second comparisons with 48 Hz status,
+8 Hz settings felt good and 16 Hz settings felt better. A final 20-second 16 Hz run
+captured 61 changed gain readings; the owner called its gain response “perfectly
+smooth” and reported no audible clicks or dropouts in the short comparisons.
+
+The new `--experimental-settings-8hz` and `--experimental-settings-16hz` flags
+require `--experimental-status-48hz`. They use the existing single worker, leased
+serialized transport, independent monotonic settings deadline, and read-only GUI
+policy. No second USB connection, SET, interface claim/detach, reset, DFU access,
+or audio-routing change was introduced. Settings freshness windows are 250/500 ms
+at 8 Hz and 125/250 ms at 16 Hz (fresh/delayed-to-stale boundaries); the
+production defaults remain **2 Hz settings / 4 Hz status**. A bounded
+`--experiment-seconds` option quits normally and stops early on a reported
+device/control error.
+
+| Short run | Settings GETs/s | Status GETs/s | Median / p95 settings GET | Observed USB errors |
+|---|---:|---:|---:|---:|
+| 2 Hz settings, 48 Hz status | 1.998 | 48.000 | 0.371 / 0.375 ms | 0 |
+| 8 Hz settings, 48 Hz status | 7.996 | 48.002 | 0.371 / 0.383 ms | 0 |
+| 16 Hz settings, 48 Hz status | 16.008 | 48.001 | 0.371 / 0.384 ms | 0 |
+
+The 8/16 Hz traces captured volume, mute, and selected-channel changes. A later
+16 Hz gain-only run captured 61 gain changes; for those changes the internal
+post-read worker-to-GUI delay was 0.052 ms median, GUI-to-QML event 0.536 ms
+median, and GUI-to-swapped-frame 1.176 ms median. These are **not** physical
+action-to-screen measurements: no independently timestamped hand movement was
+recorded. Different manual movements also make changed-value counts unsuitable
+as a rate-to-rate accuracy comparison.
+
+A further approved **20-minute** run used
+`OPENWITTY_TRACE_LATENCY=2 OPENWITTY_TRACE_METER_FRAMES=1
+build-release/src/gui/openwitty --experimental-status-48hz
+--experimental-settings-16hz --experiment-seconds 1200`. Preflight confirmed
+CONNECT 2 `29c2:0004`, accessible vendor interface 3, attached `snd-usb-audio`,
+ALSA/PipeWire presence, and a free control lease. The bounded GUI exited
+normally and released the lease. No serial, raw payload, or audio capture was
+stored. Analyzed trace sequence 50–57,589 is contiguous: **57,540 status and
+19,180 settings GETs over 19.979 minutes**, equivalent to **48.001/16.000 Hz**.
+The initial 49 status events are excluded from those calculated statistics.
+No USB error, timeout, disconnect, or experiment error-stop appeared in the
+analyzed trace. Status GET median/p95 was 0.267/0.303 ms; settings GET
+median/p95 was 0.372/0.403 ms. Periodic rates at the beginning and end stayed
+near their targets; there was no settings starvation.
+
+Process RSS was 178,068 KiB near minute 2 and 178,152 KiB near minute 19.6
+(+84 KiB); the sampled maximum was 178,580 KiB. Whole-GUI cumulative CPU
+was 0.7% early while mostly idle and 2.9% near the end after sustained meter
+animation, so that difference is **not** an isolated polling-cost measurement.
+Across 167 active-meter frame summaries, median frame cadence was 48.2 FPS
+(47.8–48.9 FPS across summaries), with typical p95 frame gaps around 41 ms.
+The first and last summaries both had medians near 48 FPS; no sustained
+frame-rate degradation was observed. This desktop still does not demonstrate
+the nominal 60 FPS animation target, and frame summaries are not an exact
+dropped-frame counter. The earlier ~18 MiB RSS difference from the pre-7H
+build also appeared in the short 2 Hz baseline, so it is not attributable
+to the 16 Hz settings rate; its cross-build cause remains unisolated.
+
+Post-run checks still found CONNECT 2 in USB, ALSA, and PipeWire, including
+active playback nodes. This shows audio-device coexistence, **not** an
+instrumented absence of XRUNs or audible artifacts. No owner audio report
+for the full 20-minute window had been received when this result was recorded;
+the short interactive comparisons were explicitly reported click/dropout-free.
+Release **186/186**, ASan/UBSan **185/185**, USB call-site audit, and
+`git diff --check` passed after the stability run. The preferred 16 Hz settings
+rate remains **experimental and opt-in**; no production-default change or
+hardware write was made.
