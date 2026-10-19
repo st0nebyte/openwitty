@@ -27,7 +27,7 @@ set(CPACK_DEBIAN_PACKAGE_RELEASE "1")
 # and the Qt platform plugins are loaded at run time and must be declared by hand.
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "qml6-module-qtquick, qml6-module-qtquick-window, qt6-qpa-plugins")
+    "qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-shapes, qt6-qpa-plugins")
 set(CPACK_DEBIAN_PACKAGE_SUGGESTS "usbutils, alsa-utils")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${CMAKE_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_SOURCE_DIR}/packaging/debian/postrm")

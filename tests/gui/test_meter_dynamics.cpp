@@ -125,3 +125,38 @@ TEST(MeterDynamics, EightChannelsStayIndependent) {
         EXPECT_DOUBLE_EQ(m.channel(i).peakDb, sample[i]);
     }
 }
+
+TEST(MeterDynamics, FloorSamplesDoNotCreateOrRenewAStuckPeak) {
+    MeterDynamics m;
+    m.setSourceState(State::Fresh, at(0));
+    m.observe(all(-60), at(0));
+    EXPECT_DOUBLE_EQ(m.channel(0).peakDb, -60);
+    EXPECT_FALSE(m.needsFrames());
+    m.observe(all(-6), at(100));
+    m.observe(all(-60), at(200));
+    for (int t = 300; t <= 4000; t += 100) {
+        m.observe(all(-60), at(t));
+        m.advance(at(t));
+    }
+    EXPECT_DOUBLE_EQ(m.channel(0).peakDb, -60);
+    EXPECT_DOUBLE_EQ(m.channel(0).displayDb, -60);
+    EXPECT_FALSE(m.needsFrames());
+    m.observe(all(-60), at(4100));
+    EXPECT_FALSE(m.needsFrames());
+}
+
+TEST(MeterDynamics, InvalidAndReconnectClearPeakImmediately) {
+    MeterDynamics m;
+    m.setSourceState(State::Fresh, at(0));
+    m.observe(all(-3), at(0));
+    auto bad = all(-60);
+    bad[0] = std::numeric_limits<double>::quiet_NaN();
+    m.observe(bad, at(100));
+    EXPECT_FALSE(m.channel(0).valid);
+    EXPECT_DOUBLE_EQ(m.channel(0).peakDb, -60);
+    m.setSourceState(State::Unavailable, at(200));
+    m.setSourceState(State::Fresh, at(300));
+    EXPECT_FALSE(m.channel(1).valid);
+    m.observe(all(-60), at(400));
+    EXPECT_DOUBLE_EQ(m.channel(1).peakDb, -60);
+}

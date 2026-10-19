@@ -1,4 +1,4 @@
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Svg)
 qt_standard_project_setup()
 
 # Backend facade as a static library so it can be tested without the QML app.
@@ -27,7 +27,18 @@ qt_add_qml_module(openwitty
 set_source_files_properties(${CMAKE_SOURCE_DIR}/assets/icons/png/256x256/openwitty.png PROPERTIES QT_RESOURCE_ALIAS openwitty.png)
 qt_add_resources(openwitty "branding" PREFIX "/" FILES ${CMAKE_SOURCE_DIR}/assets/icons/png/256x256/openwitty.png)
 
-target_link_libraries(openwitty PRIVATE lewitt_gui_backend Qt6::Qml Qt6::Quick)
+set(LEWITT_UI_ICON_NAMES mic guitar repeat monitor-speaker headphones shuffle shield-check laptop settings)
+set(LEWITT_UI_ICON_FILES)
+foreach(n IN LISTS LEWITT_UI_ICON_NAMES)
+    set(icon_file ${CMAKE_SOURCE_DIR}/assets/icons/lucide/${n}.svg)
+    set_source_files_properties(${icon_file} PROPERTIES QT_RESOURCE_ALIAS icons/${n}.svg)
+    list(APPEND LEWITT_UI_ICON_FILES ${icon_file})
+endforeach()
+set_source_files_properties(${CMAKE_SOURCE_DIR}/assets/icons/ui/lowcut.svg PROPERTIES QT_RESOURCE_ALIAS icons/lowcut.svg)
+list(APPEND LEWITT_UI_ICON_FILES ${CMAKE_SOURCE_DIR}/assets/icons/ui/lowcut.svg)
+qt_add_resources(openwitty "ui_icons" PREFIX "/" FILES ${LEWITT_UI_ICON_FILES})
+
+target_link_libraries(openwitty PRIVATE lewitt_gui_backend Qt6::Qml Qt6::Quick Qt6::Svg)
 # Distribution packages must not carry an RPATH/RUNPATH (qt_standard_project_setup adds
 # $ORIGIN/../lib); the system loader finds Qt and libusb through ld.so.cache.
 set_target_properties(openwitty PROPERTIES INSTALL_RPATH "" INSTALL_RPATH_USE_LINK_PATH OFF)
@@ -38,6 +49,7 @@ if(LEWITT_BUILD_TESTS)
     target_link_libraries(lewitt_meter_tests PRIVATE lewitt_gui_backend GTest::gtest_main)
     gtest_discover_tests(lewitt_meter_tests)
     add_executable(lewitt_gui_tests ${CMAKE_SOURCE_DIR}/tests/gui/test_gui.cpp)
+    qt_add_resources(lewitt_gui_tests "ui_icons_test" PREFIX "/" FILES ${LEWITT_UI_ICON_FILES})
     target_link_libraries(lewitt_gui_tests PRIVATE lewitt_gui_backend Qt6::Qml Qt6::Quick GTest::gtest_main)
     target_compile_definitions(lewitt_gui_tests PRIVATE LEWITT_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
     # Qt needs a platform plugin; tests always run offscreen.

@@ -16,8 +16,8 @@ pkgrel=1
 pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2 (not hardware-validated)'
 arch=('x86_64')
 url='https://github.com/st0nebyte/openwitty'
-license=('MIT')
-depends=('qt6-base' 'qt6-declarative' 'libusb' 'hicolor-icon-theme')
+license=('MIT' 'ISC')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'libusb' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'gtest')
 optdepends=('usbutils: lsusb for manual diagnostics'
             'alsa-utils: aplay/amixer for manual diagnostics')

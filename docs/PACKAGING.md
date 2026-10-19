@@ -18,8 +18,11 @@ root and nothing is installed on the build host.
   from `src/version.hpp.in`). `.sysroot/`, `.tools/`, `.venv/` and `research/` are
   development-only, git-ignored and never packaged.
 * The `.deb` Depends come from `dpkg-shlibdeps` plus `qml6-module-qtquick`,
-  `qml6-module-qtquick-window` and `qt6-qpa-plugins` (QML modules are loaded at runtime, so
+  `qml6-module-qtquick-window`, `qml6-module-qtquick-shapes` and `qt6-qpa-plugins` (QML modules are loaded at runtime, so
   shlibdeps cannot see them).
+* Qt SVG is required for the bundled Lucide UI pictograms (`qt6-svg` on Arch;
+  Ubuntu 24.04 ships its SVG image plugin in `libqt6svg6`). The upstream Lucide
+  ISC/Feather MIT notice is installed as `LICENSE-LUCIDE` beside the project license.
 * Identity is explicitly unofficial: package name `openwitty`, desktop name
   "OpenWitty", own icon (no LEWITT artwork).
 * Mock-only builds (`-DLEWITT_ENABLE_USB=OFF`) have no libusb dependency and an

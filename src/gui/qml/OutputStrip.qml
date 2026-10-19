@@ -6,6 +6,7 @@ Item {
     property string group: "spk"       // loop | spk | hp
     property bool interactive: false
     property bool physicalSelected: false
+    property real stageScale: 1
     function v(k, d) { var x = device.values[root.group + "." + k]; return x === undefined ? d : x; }
     readonly property bool hasFader: group !== "loop"
     readonly property bool pending: device.values["pending." + root.group + ".volume"] === true
@@ -19,6 +20,7 @@ Item {
                 kind: group === "loop" ? "loop" : group === "spk" ? "speakers" : "headphones"
                 color: "#f0f0f0" }
     LevelMeter { x: group === "loop" ? 7 : 5; y: 44; height: 187; stereo: true; scale: true
+                 stageScale: root.stageScale
                  objectName: root.group === "loop" ? "meterLoopback" : root.group === "spk" ? "meterSpeaker" : "meterHeadphone"
                  meterL: device.meters.channel(root.group === "loop" ? 2 : root.group === "spk" ? 4 : 6)
                  meterR: device.meters.channel(root.group === "loop" ? 3 : root.group === "spk" ? 5 : 7)

@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import QtQuick.Shapes
 
 // Vertical dB meter: dark well, olive bar that turns amber toward the top, scale
 // labels (0 … -54, -∞) on the left. A shared FrameAnimation advances presentation
@@ -14,8 +16,20 @@ Item {
     property bool scale: false
     property real minDb: -60
     property int barWidth: 8
+    property real stageScale: 1
+    readonly property real pixelRatio: root.Window.window ? root.Window.window.devicePixelRatio : Screen.devicePixelRatio
+    readonly property real pixelsPerUnit: Math.max(0.01, stageScale * pixelRatio)
     implicitWidth: (scale ? 26 : 0) + (stereo ? 2 * barWidth + 2 : barWidth); implicitHeight: 187
     function frac(v) { return Math.max(0, Math.min(1, (v - minDb) / -minDb)); }
+    function snappedPeakY(bar, db) {
+        // Snap in screen-pixel space, including the stage's fractional offset.
+        // Only the peak indicator is snapped; the moving level keeps its envelope.
+        var top = bar.mapToItem(null, 0, 0).y;
+        var ideal = bar.height * (1 - frac(db));
+        var physical = Math.round((top + ideal * stageScale) * pixelRatio);
+        var local = (physical / pixelRatio - top) / stageScale;
+        return Math.max(0, Math.min(bar.height - 1 / pixelsPerUnit, local));
+    }
 
     Repeater {   // dB labels
         model: root.scale ? [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, "-∞"] : []
@@ -30,6 +44,9 @@ Item {
         Repeater {
             model: root.stereo ? 2 : 1
             Rectangle {
+                id: bar
+                property int channelIndex: index
+                objectName: "meterBar" + channelIndex
                 width: root.barWidth; height: root.height; color: Theme.well
                 property var sample: index === 0 ? root.meterL : root.meterR
                 property bool sampleValid: sample ? sample.valid : true
@@ -47,11 +64,24 @@ Item {
                     height: parent.height * (root.frac(parent.v) - root.frac(-12))
                     color: Theme.meterAmber
                 }
-                Rectangle {   // sampled peak hold; not an unobserved inter-sample peak
-                    visible: parent.usable && parent.sample !== null && parent.sample.peakDb > root.minDb
-                    x: 0; width: parent.width; height: 2
-                    y: Math.max(0, Math.min(parent.height - height, parent.height * (1 - root.frac(parent.sample ? parent.sample.peakDb : root.minDb))))
-                    color: Theme.meterAmber
+                Shape {   // sampled peak hold; not an unobserved inter-sample peak
+                    id: peak
+                    objectName: "sampledPeakMarker" + bar.channelIndex
+                    // A marker overlapping the live bar looks like a duplicate
+                    // row. Show it only when a held observed peak is separated
+                    // from the current envelope by at least one screen pixel.
+                    visible: parent.usable && parent.sample !== null
+                             && (root.frac(parent.sample.peakDb) - root.frac(parent.v))
+                                * parent.height * root.pixelsPerUnit >= 1
+                    x: 0; width: parent.width; height: 1 / root.pixelsPerUnit
+                    y: root.snappedPeakY(parent, parent.sample ? parent.sample.peakDb : root.minDb)
+                    ShapePath {
+                        strokeColor: Theme.meterAmber
+                        strokeWidth: 1 / root.pixelsPerUnit
+                        fillColor: "transparent"
+                        startX: 0; startY: peak.height / 2
+                        PathLine { x: peak.width; y: peak.height / 2 }
+                    }
                 }
             }
         }

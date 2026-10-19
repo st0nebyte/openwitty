@@ -214,3 +214,4 @@
   with no clicks heard. **Pending:** longer-duration validation, frame-pacing
   investigation, meter/peak semantics, and a separate decision before any
   production-default change. Keep the real GUI read-only.
+- Phase 7H: ✔ coherent licensed SVG pictograms; ✔ software-rendered one-row held peaks and silence recovery across 100/125/150/200% scale; ✔ narrow mock layout captures. Pending: owner review of the updated real read-only GUI, actual post-change CPU/frame measurements, and comparison against the reported peak artifact. Keep 4 Hz default and opt-in 48 Hz unchanged; no writes.

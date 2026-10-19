@@ -54,11 +54,13 @@ public:
             if (!c.valid) {
                 c.valid = true;
                 c.observedDb = c.targetDb = c.displayDb = c.peakDb = db;
-                c.peakHoldUntil = now + kPeakHold;
+                c.peakHoldUntil = db > kFloorDb ? now + kPeakHold : now;
                 continue;
             }
             c.observedDb = c.targetDb = db;
-            if (db >= c.peakDb) {
+            // A floor sample is silence in this display, not a new peak event.
+            // Repeated floor samples must not restart a hold period.
+            if (db > kFloorDb && db >= c.peakDb) {
                 c.peakDb = db;
                 c.peakHoldUntil = now + kPeakHold;
             }
@@ -82,6 +84,12 @@ public:
             if (now > decayStart)
                 c.peakDb -= kPeakDecayDbPerSecond * std::chrono::duration<double>(now - decayStart).count();
             c.peakDb = std::clamp(std::max(c.peakDb, c.displayDb), kFloorDb, 0.0);
+            // The frame clock stops below the 0.03 dB movement threshold. Snap
+            // the last sub-threshold residue to the floor so it cannot survive
+            // forever as a nominally valid peak after true silence.
+            if (c.targetDb == kFloorDb && c.displayDb == kFloorDb &&
+                c.peakDb - kFloorDb < 0.03)
+                c.peakDb = kFloorDb;
         }
         lastFrame_ = now;
     }

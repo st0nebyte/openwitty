@@ -184,6 +184,7 @@ install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_AC
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES packaging/udev/70-openwitty.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE)
+install(FILES assets/icons/lucide/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE-LUCIDE)
 
 # Debian changelog and man pages are compressed at configure time with a timestamp-free
 # gzip (-n) so the output is reproducible.

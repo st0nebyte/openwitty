@@ -7,6 +7,7 @@ Item {
     property int index: 1
     property bool interactive: false
     property bool physicalSelected: false
+    property real stageScale: 1
     readonly property string p: "in" + index + "."
     readonly property bool mic: index === 1
     function v(k, d) { var x = device.values[p + k]; return x === undefined ? d : x; }
@@ -17,6 +18,7 @@ Item {
                 border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
 
     LevelMeter { x: -9; y: 40; height: 187; scale: true; barWidth: 8
+                 stageScale: root.stageScale
                  objectName: root.mic ? "meterMic" : "meterInstrument"
                  meterL: device.meters.channel(root.mic ? 0 : 1)
                  sourceFreshness: device.meters.freshness
@@ -49,7 +51,7 @@ Item {
     // pending-edit marker: a small dot while a write is in flight / unconfirmed
     Rectangle { visible: root.pending; x: 128; y: 84; width: 6; height: 6; radius: 3; color: Theme.warn }
 
-    ToggleButton { x: 29; y: 147; width: 24; height: 24; icon: "autogain"; flat: true
+    ToggleButton { x: 29; y: 147; width: 24; height: 24; text: "A"; fontSize: 15; flat: true
                    tip: "Automatically set up your input gain"
                    enabled: root.interactive; onClicked: device.trigger("autogain" + root.index) }
 

@@ -2,12 +2,18 @@
 #include <gtest/gtest.h>
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QTemporaryDir>
+#include <cmath>
+#include <functional>
 #include <optional>
 
 #include "DeviceController.hpp"
@@ -289,6 +295,181 @@ TEST(Qml, EightMetersBindToObservedPresentationAndClearOnDisconnect) {
         EXPECT_DOUBLE_EQ(channel->displayDb(), -60);
     }
     EXPECT_FALSE(c.meters()->needsFrames());
+}
+
+TEST(Qml, StandardIconsLoadFromBundledVectorResources) {
+    app();
+    QQmlEngine engine;
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/GlyphIcon.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* glyph = qobject_cast<QQuickItem*>(root.get());
+    ASSERT_TRUE(glyph);
+    glyph->setWidth(24);
+    glyph->setHeight(24);
+    auto* image = root->findChild<QObject*>("glyphImage");
+    ASSERT_TRUE(image);
+    for (const char* kind : {"mic", "guitar", "loop", "speakers", "headphones", "shuffle",
+                             "lowcut", "clipguard", "laptop", "settings"}) {
+        root->setProperty("kind", kind);
+        ASSERT_TRUE(waitFor([&] { return image->property("status").toInt() == 1; })) << kind;
+        EXPECT_TRUE(image->property("source").toUrl().toString().endsWith(".svg"));
+        EXPECT_GE(image->property("sourceSize").toSize().width(), 4 * root->property("width").toInt());
+    }
+    root->setProperty("kind", "mic");
+    QQuickWindow window;
+    window.setColor(Qt::black);
+    window.resize(40, 40);
+    glyph->setParentItem(window.contentItem());
+    glyph->setPosition(QPointF(8, 8));
+    window.show();
+    QCoreApplication::processEvents();
+    const QImage rendered = window.grabWindow();
+    ASSERT_FALSE(rendered.isNull());
+    int brightPixels = 0;
+    for (int y = 0; y < rendered.height(); ++y)
+        for (int x = 0; x < rendered.width(); ++x)
+            if (rendered.pixelColor(x, y).red() > 160) ++brightPixels;
+    EXPECT_GT(brightPixels, 10) << "icon must be visible with the software renderer";
+}
+
+TEST(Qml, PeakMarkerIsUniquePixelAlignedAndHiddenAtFloorOrLiveLevel) {
+    app();
+    QQmlEngine engine;
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/LevelMeter.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* meter = qobject_cast<QQuickItem*>(root.get());
+    ASSERT_TRUE(meter);
+    QQuickItem stage;
+    stage.setTransformOrigin(QQuickItem::TopLeft);
+    meter->setParentItem(&stage);
+    MeterChannel sample;
+    lewitt::MeterDynamics::Channel state;
+    state.valid = true;
+    state.displayDb = -40;
+    state.peakDb = -10;
+    sample.apply(state);
+    meter->setProperty("meterL", QVariant::fromValue(static_cast<QObject*>(&sample)));
+    meter->setProperty("sourceFreshness", "fresh");
+    std::function<void(QQuickItem*, QList<QQuickItem*>&)> findMarkers =
+        [&](QQuickItem* item, QList<QQuickItem*>& out) {
+            if (item->objectName() == "sampledPeakMarker0") out.push_back(item);
+            for (auto* child : item->childItems()) findMarkers(child, out);
+        };
+    QList<QQuickItem*> markers;
+    findMarkers(meter, markers);
+    ASSERT_EQ(markers.size(), 1);
+    auto* marker = markers.front();
+    ASSERT_TRUE(marker);
+    const double dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+    for (double factor : {1.0, 1.25, 1.5, 2.0}) {
+        stage.setScale(factor);
+        meter->setProperty("stageScale", factor);
+        QCoreApplication::processEvents();
+        ASSERT_TRUE(marker->isVisible()) << factor;
+        EXPECT_NEAR(marker->height() * factor * dpr, 1.0, 0.001) << factor;
+        const double physicalY = marker->mapToScene(QPointF(0, 0)).y() * dpr;
+        EXPECT_NEAR(physicalY, std::round(physicalY), 0.001) << factor;
+    }
+    state.displayDb = state.peakDb;
+    sample.apply(state);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(marker->isVisible()) << "bar top is already the current peak";
+    state.displayDb = state.peakDb = -60;
+    sample.apply(state);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(marker->isVisible()) << "floor/silence is not a held peak";
+    meter->setProperty("sourceFreshness", "stale");
+    EXPECT_FALSE(marker->isVisible());
+}
+
+TEST(Qml, RenderedPeakIsOneRowAndDisappearsAtSilence) {
+    app();
+    QQmlEngine engine;
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/LevelMeter.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* meter = qobject_cast<QQuickItem*>(root.get());
+    ASSERT_TRUE(meter);
+    meter->setWidth(36);
+    meter->setHeight(187);
+    meter->setProperty("scale", true); // show the labelled 26-unit left gutter
+    MeterChannel sample;
+    lewitt::MeterDynamics::Channel state;
+    state.valid = true;
+    state.displayDb = -40;
+    state.peakDb = -10;
+    sample.apply(state);
+    meter->setProperty("meterL", QVariant::fromValue(static_cast<QObject*>(&sample)));
+    meter->setProperty("sourceFreshness", "fresh");
+    QQuickWindow window;
+    window.setColor(Qt::black);
+    window.resize(60, 200);
+    meter->setParentItem(window.contentItem());
+    window.show();
+    QCoreApplication::processEvents();
+    int capture = 0;
+    EXPECT_NEAR(meter->property("pixelRatio").toDouble(), window.devicePixelRatio(), 0.001);
+    std::function<QQuickItem*(QQuickItem*)> markerIn = [&](QQuickItem* item) -> QQuickItem* {
+        if (item->objectName() == "sampledPeakMarker0") return item;
+        for (auto* child : item->childItems())
+            if (auto* match = markerIn(child)) return match;
+        return nullptr;
+    };
+    auto* marker = markerIn(meter);
+    ASSERT_TRUE(marker);
+    EXPECT_NEAR(marker->height() * window.devicePixelRatio(), 1.0, 0.001);
+    const double physicalTop = marker->mapToScene(QPointF(0, 0)).y() * window.devicePixelRatio();
+    EXPECT_NEAR(physicalTop, std::round(physicalTop), 0.001);
+    auto amberRows = [&]() {
+        const QImage image = window.grabWindow();
+        if (image.isNull()) return -1;
+        const QString outputDir = qEnvironmentVariable("OPENWITTY_VISUAL_OUTPUT_DIR");
+        if (!outputDir.isEmpty()) image.save(QDir(outputDir).filePath(
+            QStringLiteral("openwitty-peak-%1.png").arg(++capture)));
+        const int x = static_cast<int>(30 * window.devicePixelRatio());
+        int rows = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            const QColor c = image.pixelColor(x, y);
+            if (c.red() > 200 && c.green() > 100 && c.blue() < 100) ++rows;
+        }
+        return rows;
+    };
+    ASSERT_EQ(amberRows(), 1);
+    state.displayDb = state.peakDb = -60;
+    sample.apply(state);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(amberRows(), 0);
+}
+
+TEST(Qml, MockWindowRendersAtNarrowAndRegularWidths) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    auto* window = qobject_cast<QQuickWindow*>(root.get());
+    ASSERT_TRUE(window);
+    const QString outputDir = qEnvironmentVariable("OPENWITTY_VISUAL_OUTPUT_DIR");
+    for (const QSize size : {QSize(1008, 566), QSize(720, 440)}) {
+        window->resize(size);
+        QCoreApplication::processEvents();
+        const QImage image = window->grabWindow();
+        ASSERT_FALSE(image.isNull());
+        EXPECT_EQ(image.size(), size * window->devicePixelRatio());
+        if (!outputDir.isEmpty())
+            EXPECT_TRUE(image.save(QDir(outputDir).filePath(QStringLiteral("openwitty-mock-%1x%2.png")
+                .arg(size.width()).arg(size.height()))));
+    }
 }
 
 TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {

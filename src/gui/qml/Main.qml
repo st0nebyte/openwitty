@@ -98,7 +98,7 @@ Window {
                                                               : "Set by the audio system (not controlled here)" }
                 MouseArea { id: rateMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
             }
-            ToggleButton { x: 686; y: 16; width: 21; height: 22; icon: ""; text: "⚙"; fontSize: 13
+            ToggleButton { x: 686; y: 16; width: 21; height: 22; icon: "settings"
                            tip: "Open the settings panel"; onClicked: win.showSettings = true }
         }
         Column {
@@ -133,11 +133,11 @@ Window {
         Rectangle { x: 480; y: 78; width: 1; height: 267; color: "#1a1a1a" }
         Rectangle { x: 565; y: 50; width: 1; height: 295; color: "#000" }
 
-        InputStrip { x: 3; y: 78; index: 1; interactive: win.interactive; physicalSelected: win.selectedChannel === "microphone" }
-        InputStrip { x: 157; y: 78; index: 2; interactive: win.interactive; physicalSelected: win.selectedChannel === "instrument" }
-        OutputStrip { x: 310; y: 78; group: "loop"; interactive: win.interactive }
-        OutputStrip { x: 395; y: 78; group: "spk"; interactive: win.interactive; physicalSelected: win.selectedChannel === "speaker" }
-        OutputStrip { x: 480; y: 78; group: "hp"; interactive: win.interactive; physicalSelected: win.selectedChannel === "headphone" }
+        InputStrip { x: 3; y: 78; index: 1; stageScale: stage.scale; interactive: win.interactive; physicalSelected: win.selectedChannel === "microphone" }
+        InputStrip { x: 157; y: 78; index: 2; stageScale: stage.scale; interactive: win.interactive; physicalSelected: win.selectedChannel === "instrument" }
+        OutputStrip { x: 310; y: 78; group: "loop"; stageScale: stage.scale; interactive: win.interactive }
+        OutputStrip { x: 395; y: 78; group: "spk"; stageScale: stage.scale; interactive: win.interactive; physicalSelected: win.selectedChannel === "speaker" }
+        OutputStrip { x: 480; y: 78; group: "hp"; stageScale: stage.scale; interactive: win.interactive; physicalSelected: win.selectedChannel === "headphone" }
         MonitorSection { x: 568; y: 78; interactive: win.interactive }
 
         // overlays

@@ -121,3 +121,8 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
   speaker and headphone bars, with no clicks heard. The production default
   remains 4 Hz; exact meter/peak semantics remain unverified and no GUI
   hardware writes were added.
+
+## Phase 7H visual quality (software-tested)
+
+* General GUI pictograms use one Lucide SVG outline family with bundled ISC/Feather MIT notices; the low-cut response curve is an original vector exception, auto gain stays a text label, and the OpenWitty logo is unchanged. SVG loading and visible rendering were tested with a software scene graph.
+* Held-peak lines now use screen-pixel-aligned shapes, appear only above the live level, and clear after silence/hold decay. Rendered one-row/floor tests passed at 100%, 125%, 150%, and 200% scaling. The updated GUI still needs owner review on real hardware; the earlier 48 Hz visual acceptance applies to the previous build.
