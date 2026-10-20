@@ -10,9 +10,13 @@ Windows driver/audio graph has not been examined here.
 
 `python3 tools/diagnostics/connect2_topology_snapshot.py` emits a timestamped
 JSON snapshot to stdout; `--output <new-file>` creates a private (0600) file
-and refuses to overwrite an existing one. It reads sysfs, `/proc/asound`,
-`aplay`, `amixer`, `pw-dump`, and `pactl info`. It never opens a USB control
-handle, issues a SET, writes a mixer value, or changes a PipeWire object.
+and refuses to overwrite an existing one. As of Phase 8A.2 it reads sysfs,
+`/proc/asound`, `pw-dump`, and `pactl info`, **without querying ALSA mixer
+controls**. Earlier snapshots in this investigation did include `aplay` and
+`amixer` queries; those cannot be treated as strictly passive because USB-audio
+control-information queries may trigger deferred kernel SET_CUR probing.
+The revised tool never opens a USB control handle, writes a mixer value, or
+changes a PipeWire object; it does not prove mixer-control presence/absence.
 It allowlists fields and replaces the serial-bearing part of CONNECT 2 node
 names; do not commit raw `pw-dump`, `udevadm --property`, USB descriptors with
 strings, or full application-process listings. Snapshot output includes

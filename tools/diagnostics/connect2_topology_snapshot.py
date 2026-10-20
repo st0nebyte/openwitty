@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only, serial-free CONNECT 2 USB/ALSA/PipeWire topology snapshot.
+"""Passive, serial-free CONNECT 2 USB/ALSA/PipeWire topology snapshot.
 
-No USB control transfer, mixer setter, PipeWire setter, or daemon restart.
+Uses sysfs, /proc and PipeWire queries; never queries ALSA mixer controls.
+Some USB-audio control-info queries can cause deferred kernel SET_CUR probes.
 Output is a small allowlisted JSON document, never a raw pw-dump/USB capture.
 """
 
@@ -94,57 +95,20 @@ def stream_capabilities(card):
     return result
 
 
-def mixer_controls(card):
-    contents = run("amixer", "-c", str(card), "contents") or ""
-    result = []
-    current = None
-    for line in contents.splitlines():
-        match = re.match(r"numid=\d+,iface=\w+,name='([^']+)'", line)
-        if match:
-            current = {"name": match.group(1)}
-            result.append(current)
-        elif current and line.strip().startswith("; type="):
-            spec = line.strip()
-            for key in ("type", "access", "values", "min", "max"):
-                found = re.search(rf"\b{key}=([^,]+)", spec)
-                if found:
-                    current[key] = found.group(1)
-        elif current and line.strip().startswith(": values="):
-            current["current"] = line.split("=", 1)[1].strip()
-    return result
-
-
-def usb_mixer_units(card):
-    text = read(Path(f"/proc/asound/card{card}/usbmixer")) or ""
-    result = []
-    unit = None
-    for line in text.splitlines():
-        unit_match = re.match(r"  Unit: (\d+)", line)
-        control_match = re.match(r'    Control: name="([^"]+)"', line)
-        if unit_match:
-            unit = int(unit_match.group(1))
-        elif control_match and unit is not None:
-            result.append({"unit": unit, "name": control_match.group(1)})
-    return result
-
-
 def alsa_snapshot():
     cards = read(Path("/proc/asound/cards")) or ""
+    pcms = read(Path("/proc/asound/pcm")) or ""
     result = []
-    playback = run("aplay", "-l") or ""
     for match in re.finditer(r"^\s*(\d+) \[C2\s*\]:.*CONNECT 2", cards, re.M):
         index = int(match.group(1))
         devices = []
-        for line in playback.splitlines():
-            pcm = re.match(r"card (\d+): .*device (\d+): (.*)", line)
+        for line in pcms.splitlines():
+            pcm = re.match(r"(\d+)-(\d+): ([^:]+) : [^:]+ : playback \d+", line)
             if pcm and int(pcm.group(1)) == index:
                 devices.append({"number": int(pcm.group(2)),
-                                "description": pcm.group(3).split(" [", 1)[0]})
-        controls = run("amixer", "-c", str(index), "scontrols") or ""
-        control_names = re.findall(r"Simple mixer control '([^']+)'", controls)
+                                "description": pcm.group(3).strip()})
         result.append({"card_number": index, "card_id": "C2", "playback_devices": devices,
-                       "simple_controls": control_names, "mixer_controls": mixer_controls(index),
-                       "usb_mixer_units": usb_mixer_units(index),
+                       "mixer_controls_queried": False,
                        "stream": stream_capabilities(index)})
     return result
 
