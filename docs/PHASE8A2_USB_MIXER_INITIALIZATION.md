@@ -108,6 +108,10 @@ control information. Keep detailed output private; redact serials before
 sharing or committing.
 
 ```bash
+cat /proc/sys/kernel/random/boot_id
+uptime -s
+uname -r
+pacman -Q pipewire wireplumber
 journalctl -k -b --no-pager -o short-iso | rg '29c2|CONNECT 2|sticky mixer|snd-usb-audio'
 journalctl --user -b -u wireplumber.service -u pipewire.service --no-pager -o short-iso
 python3 tools/diagnostics/connect2_topology_snapshot.py --output "$HOME/connect2-next-boot-topology.json"

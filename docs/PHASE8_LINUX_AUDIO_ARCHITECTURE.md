@@ -19,6 +19,26 @@ Therefore neither permanent software-only volume nor reliable ALSA-backed
 hardware volume may be assumed. The one-sink recommendation remains, but
 the volume bridge must safely handle **both** mixer-exposure states and prevent
 unwanted restoration before any implementation is approved.
+Phase 8A.2 found that the installed udev rule invokes `alsactl restore` on
+card addition, while WirePlumber has stored route volume; neither is yet
+proven to have sent the observed hardware-changing write. See the
+[Phase 8A.3 boot/trace plan](PHASE8A3_BOOT_AND_VOLUME_TRACE_PLAN.md) before
+choosing a policy workaround.
+
+### Mixer-exposure states are separate runtime cases
+
+| Runtime observation | Architecture constraint |
+|---|---|
+| ALSA PCM Playback Volume absent; `route.hw-volume=false` | The KDE/PipeWire soft value is not a hardware reading. Do not restore or mirror it to CONNECT 2. A future bridge must keep playback at unity while exposing hardware-derived display/intent semantics, or refuse hardware-targeted operations until it can. |
+| ALSA PCM Playback Volume present; `route.hw-volume=true` | This is still a single control of unproven scope, not a Speaker/Headphone target selector. Prevent generic route restoration, ALSA clients and OpenWitty from becoming competing hardware writers. Establish which output the control changes and how it interacts with mute before enabling a command path. |
+
+Transitions between these states may occur across USB enumeration without a
+change in the number of playback sinks. A service cannot infer authority from
+`route.hw-volume` alone: it must read both independent hardware levels,
+reconcile them without writing, and suppress hardware-derived update feedback.
+No ordinary startup or reconnect may copy a saved Linux volume into either
+output. The exact writer of the first observed Speaker jump is still unknown;
+do not disable restoration or add a kernel quirk as an unverified fix.
 
 ## Non-negotiable semantics
 
