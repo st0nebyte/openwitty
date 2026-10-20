@@ -22,7 +22,7 @@ This project is not about criticizing LEWITT or its software. It's about making 
 
 ## Project Status
 
-**Experimental — partially validated on real CONNECT 2 hardware.**
+**CONNECT 2 read-only GUI validated on one physical device; broader control features remain under development.**
 
 The initial target is the **LEWITT CONNECT 2**; **CONNECT 6** support is planned but not implemented.
 
@@ -32,14 +32,12 @@ What exists today:
 - A **Qt 6 / QML** control application and a read-only diagnostic CLI (`openwitty-cli`).
 - A reconstructed **device-control protocol** for the CONNECT 2, derived from static analysis and cross-checked between the macOS and Windows control applications.
 - A **simulated device** (mock mode) that exercises every control in the GUI and is always labelled as simulated.
-- 137 automated tests (protocol, session, hardening, GUI integration, QML loading, packaging), sanitizer runs and a documented security audit.
+- Automated protocol, session, hardening, GUI, QML, packaging, and sanitizer test suites, plus a documented USB security audit.
+- A hardware-validated, read-only CONNECT 2 GUI with **16 Hz settings / 48 Hz status** polling by default; meters render independently with a 60 FPS target.
 - **Ubuntu/Debian (`.deb`) and Arch/CachyOS (PKGBUILD) packaging**, desktop integration and a udev rule (documented, never installed automatically).
 
 What does **not** exist yet:
 
-- Read-only transport, automatic control-interface discovery, and the real GUI have been validated
-  against one CONNECT 2. The documented evidence and scope are in
-  [docs/HARDWARE_TEST_RESULTS.md](docs/HARDWARE_TEST_RESULTS.md).
 - The real-device GUI remains read-only. Broad hardware writes remain disabled by design; the only
   exercised write is the separately gated, narrowly scoped CLI LED-brightness validation.
 - Firmware update and factory reset are intentionally not implemented.
@@ -78,6 +76,13 @@ See [FEATURES.md](FEATURES.md) for the exact list and evidence level.
 cmake --preset release && cmake --build --preset release
 ctest --preset release
 build-release/src/gui/openwitty --mock      # simulated device
+```
+
+With a connected CONNECT 2 and the documented USB permissions, launch the
+hardware-validated **read-only** GUI normally (16 Hz settings / 48 Hz status):
+
+```sh
+build-release/src/gui/openwitty
 ```
 
 Rootless build instructions, packaging and the first real-device procedure:

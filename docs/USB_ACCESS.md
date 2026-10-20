@@ -197,3 +197,13 @@ flags. On reconnect, both timestamps reset; a fresh response of each type clears
 warning. Last-known values may remain visible but are explicitly labeled. The cooperative
 lease still reports `ControlInUse` before USB control I/O when another current OpenWitty owns
 it. No physical concurrency test or permission change was made in Phase 7E.
+
+## Current CONNECT 2 GUI cadence (Phase 7 finalization, 2026-10-20)
+
+The preceding 2/4 Hz description is historical. A normal real-device GUI launch
+now uses **16 Hz settings / 48 Hz status** GETs on the same single-owner,
+serialized, read-only transport. Status freshness is fresh through 75 ms and
+stale after 200 ms; settings is fresh through 125 ms and stale after 250 ms.
+`--diagnostic-legacy-polling` restores the former 2/4 Hz cadence and its
+750/1500 ms settings and 375/750 ms status freshness windows. The lease,
+permissions, interface discovery, and hardware write policy are unchanged.

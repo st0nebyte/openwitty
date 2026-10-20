@@ -364,9 +364,9 @@ void DeviceWorker::poll() {
     }
     // Re-read settings periodically: device-side changes (hardware knob, other software) are
     // merged and pending simulated edits survive. The 48 Hz fractional schedule
-    // has an independent monotonic settings deadline (500 ms by default, or
-    // 125/62.5 ms in the explicit experiment); all GETs remain serialized.
-    // Mock retains its prior 4 Hz settings cadence.
+    // has an independent monotonic settings deadline (62.5 ms normally;
+    // 500 ms only in the legacy diagnostic); all GETs remain serialized.
+    // Mock retains its existing every-tenth-poll settings cadence.
     ++pollCount_;
     const bool settingsTick = mock_ ? pollCount_ % 10 == 0
         : realCadence_.preciseScheduling ? realSchedule_.settingsDue(RealPollSchedule::Clock::now())
@@ -729,13 +729,11 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     publish();
 }
 
-DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz,
-                                   bool experimentalStatus48Hz, int settingsPollingHz)
-    : QObject(parent), worker_(new DeviceWorker(experimentalStatus48Hz ? kStatus48HzExperimental
-                                  : experimentalStatus8Hz ? kStatus8HzExperimental : kStatus4Hz,
-                                  settingsPollingHz)),
-      experimentalStatus8Hz_(experimentalStatus8Hz), experimentalStatus48Hz_(experimentalStatus48Hz),
-      settingsPollingHz_(settingsPollingHz) {
+DeviceController::DeviceController(QObject* parent, bool diagnosticLegacyPolling)
+    : QObject(parent), worker_(new DeviceWorker(diagnosticLegacyPolling ? kStatus4Hz : kStatus48Hz,
+                                               diagnosticLegacyPolling ? 2 : 16)),
+      diagnosticLegacyPolling_(diagnosticLegacyPolling),
+      settingsPollingHz_(diagnosticLegacyPolling ? 2 : 16) {
     traceLevel_ = qEnvironmentVariableIntValue("OPENWITTY_TRACE_LATENCY");
     traceEnabled_ = traceLevel_ > 0;
     qRegisterMetaType<QVariantMap>("QVariantMap");
@@ -745,8 +743,8 @@ DeviceController::DeviceController(QObject* parent, bool experimentalStatus8Hz,
         if (!traceEnabled_) return;
         const auto sequence = t.value("seq").toLongLong();
         const QString changed = t.value("changed").toString();
-        // Level 1: changed reads plus every 20th poll (~5 s default USB,
-        // ~2.5 s experimental 8 Hz USB, ~0.4 s experimental 48 Hz, ~0.8 s mock);
+        // Level 1: changed reads plus every 20th poll (~0.4 s normal USB,
+        // ~5 s legacy diagnostic USB, ~0.8 s mock);
         // level 2: every poll. No trace output unless explicitly enabled.
         // Neither mode records payload bytes, serials, or device-unique identifiers.
         const bool logThisPoll = traceLevel_ >= 2 || !changed.isEmpty() || sequence % 20 == 0;

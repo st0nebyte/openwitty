@@ -22,8 +22,8 @@
 class DeviceWorker : public QObject {
     Q_OBJECT
 public:
-    explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus4Hz,
-                          int settingsHz = 2);
+    explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus48Hz,
+                          int settingsHz = 16);
 public slots:
     void connectMock();
     void connectUsb();
@@ -117,12 +117,11 @@ class DeviceController : public QObject {
     Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
     Q_PROPERTY(bool traceEnabled READ traceEnabled CONSTANT)
     Q_PROPERTY(QObject* meters READ meters CONSTANT)
-    Q_PROPERTY(bool experimentalStatus8Hz READ experimentalStatus8Hz CONSTANT)
-    Q_PROPERTY(bool experimentalStatus48Hz READ experimentalStatus48Hz CONSTANT)
+    Q_PROPERTY(bool diagnosticLegacyPolling READ diagnosticLegacyPolling CONSTANT)
     Q_PROPERTY(int settingsPollingHz READ settingsPollingHz CONSTANT)
+    Q_PROPERTY(int statusPollingHz READ statusPollingHz CONSTANT)
 public:
-    explicit DeviceController(QObject* parent = nullptr, bool experimentalStatus8Hz = false,
-                              bool experimentalStatus48Hz = false, int settingsPollingHz = 2);
+    explicit DeviceController(QObject* parent = nullptr, bool diagnosticLegacyPolling = false);
     ~DeviceController() override;
     QString connection() const { return connection_; }
     QString backend() const { return backend_; }
@@ -131,9 +130,9 @@ public:
     QVariantMap values() const { return values_; }
     QString lastError() const { return lastError_; }
     bool traceEnabled() const { return traceEnabled_; }
-    bool experimentalStatus8Hz() const { return experimentalStatus8Hz_; }
-    bool experimentalStatus48Hz() const { return experimentalStatus48Hz_; }
+    bool diagnosticLegacyPolling() const { return diagnosticLegacyPolling_; }
     int settingsPollingHz() const { return settingsPollingHz_; }
+    int statusPollingHz() const { return diagnosticLegacyPolling_ ? 4 : 48; }
     MeterPresentation* meters() { return &meters_; }
 
     Q_INVOKABLE void connectMock();
@@ -166,9 +165,8 @@ private:
     QVariantMap values_;
     MeterPresentation meters_{this};
     bool traceEnabled_{false};
-    bool experimentalStatus8Hz_{false};
-    bool experimentalStatus48Hz_{false};
-    int settingsPollingHz_{2};
+    bool diagnosticLegacyPolling_{false};
+    int settingsPollingHz_{16};
     int traceLevel_{0};
     qint64 lastLoggedTraceSequence_{0};
     qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};

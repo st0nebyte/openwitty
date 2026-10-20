@@ -1,5 +1,11 @@
 # Original LEWITT CONTROL CENTER meter pipeline — static research
 
+Current implementation note (2026-10-20): the comparisons below are historical.
+After separately validated hardware trials, the normal read-only CONNECT 2 GUI
+now polls status at 48 Hz and settings at 16 Hz. The original Windows
+application's visible-window status cadence was approximately 46.8 Hz; that
+evidence remains distinct from OpenWitty's Linux measurements.
+
 Status: static-analysis findings plus a separately reported native-Windows bus
 capture, 2026-10-18. The static analysis below did not itself measure live USB
 traffic or screen cadence. No proprietary capture or binary is tracked here.
@@ -155,5 +161,5 @@ on all 479 successive comparisons. The owner heard no clicks or other noise.
 These Linux observations show status-meter updates are available near the
 reported original Windows visible acquisition rate; they do not establish
 identical firmware scheduling, meter semantics, or GUI presentation. Neither
-40 nor 48 Hz has become a GUI default. See the
-Phase 7G plan and hardware results for details.
+40 nor 48 Hz had become a GUI default **at the time of these trials**. See the
+Phase 7G plan and hardware results for the later default-rate decision.

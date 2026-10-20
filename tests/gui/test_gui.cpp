@@ -79,47 +79,25 @@ TEST(GuiBackend, MockConnectsAndPublishesState) {
     EXPECT_DOUBLE_EQ(c.values()["in2.gainMax"].toDouble(), 60.0);
 }
 
-TEST(GuiBackend, ExperimentalEightHertzIsExplicitAndMockRemainsUnchanged) {
+TEST(GuiBackend, NormalGuiUsesValidatedRatesAndMockRemainsUnchanged) {
     app();
     DeviceController normal;
-    EXPECT_FALSE(normal.experimentalStatus8Hz());
-    DeviceController experimental(nullptr, true);
-    EXPECT_TRUE(experimental.experimentalStatus8Hz());
-    experimental.connectMock();
-    ASSERT_TRUE(waitFor([&] { return experimental.connection() == "Connected"; }));
-    EXPECT_TRUE(experimental.simulated());
-    EXPECT_TRUE(experimental.writable()); // existing mock-only behavior
-    ASSERT_TRUE(waitFor([&] { return experimental.values().value("ui.state").toString() == "simulated"; }));
+    EXPECT_FALSE(normal.diagnosticLegacyPolling());
+    EXPECT_EQ(normal.statusPollingHz(), 48);
+    EXPECT_EQ(normal.settingsPollingHz(), 16);
+    normal.connectMock();
+    ASSERT_TRUE(waitFor([&] { return normal.connection() == "Connected"; }));
+    EXPECT_TRUE(normal.simulated());
+    EXPECT_TRUE(normal.writable()); // existing mock-only behavior
+    ASSERT_TRUE(waitFor([&] { return normal.values().value("ui.state").toString() == "simulated"; }));
 }
 
-TEST(GuiBackend, ExperimentalFortyEightHertzIsExplicitAndMockRemainsUnchanged) {
+TEST(GuiBackend, LegacyCadenceIsDiagnosticOnly) {
     app();
-    DeviceController normal;
-    EXPECT_FALSE(normal.experimentalStatus48Hz());
-    DeviceController experimental(nullptr, false, true);
-    EXPECT_TRUE(experimental.experimentalStatus48Hz());
-    EXPECT_FALSE(experimental.experimentalStatus8Hz());
-    experimental.connectMock();
-    ASSERT_TRUE(waitFor([&] { return experimental.connection() == "Connected"; }));
-    EXPECT_TRUE(experimental.simulated());
-    EXPECT_TRUE(experimental.writable()); // existing mock-only behavior
-    ASSERT_TRUE(waitFor([&] { return experimental.values().value("ui.state").toString() == "simulated"; }));
-}
-
-TEST(GuiBackend, ExperimentalSettingsRateIsExplicitAndDoesNotChangeMockBehavior) {
-    app();
-    DeviceController normal;
-    EXPECT_EQ(normal.settingsPollingHz(), 2);
-    DeviceController eight(nullptr, false, true, 8);
-    DeviceController sixteen(nullptr, false, true, 16);
-    EXPECT_EQ(eight.settingsPollingHz(), 8);
-    EXPECT_EQ(sixteen.settingsPollingHz(), 16);
-    EXPECT_TRUE(eight.experimentalStatus48Hz());
-    eight.connectMock();
-    ASSERT_TRUE(waitFor([&] { return eight.connection() == "Connected"; }));
-    EXPECT_TRUE(eight.simulated());
-    EXPECT_TRUE(eight.writable());
-    ASSERT_TRUE(waitFor([&] { return eight.values().value("ui.state").toString() == "simulated"; }));
+    DeviceController legacy(nullptr, true);
+    EXPECT_TRUE(legacy.diagnosticLegacyPolling());
+    EXPECT_EQ(legacy.statusPollingHz(), 4);
+    EXPECT_EQ(legacy.settingsPollingHz(), 2);
 }
 
 TEST(GuiBackend, SetValueRoundTripsThroughSession) {
@@ -213,7 +191,7 @@ TEST(GuiBackend, UsbBackendIsReadOnlyAndAbsentDeviceIsReported) {
     app();
     BlockRealUsb block;
     ASSERT_TRUE(block.ready());
-    DeviceController c(nullptr, false, true); // experimental mode must still refuse writes
+    DeviceController c; // production high-rate mode must still refuse writes
     c.connectUsb();   // held test lease refuses before any physical USB I/O
     ASSERT_TRUE(waitFor([&] { return !c.lastError().isEmpty() || c.connection() == "Connected"; }));
     EXPECT_NE(c.connection(), "Connected");
@@ -255,7 +233,7 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     root.reset();
 }
 
-TEST(Qml, ExperimentalStatusRateIsClearlyLabelled) {
+TEST(Qml, LegacyDiagnosticRateIsClearlyLabelled) {
     app();
     DeviceController c(nullptr, true);
     QQmlEngine engine;
@@ -264,21 +242,23 @@ TEST(Qml, ExperimentalStatusRateIsClearlyLabelled) {
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
     ASSERT_TRUE(root);
-    EXPECT_TRUE(root->property("title").toString().contains("EXPERIMENTAL 8 Hz METERS"));
+    EXPECT_TRUE(root->property("title").toString().contains("DIAGNOSTIC 2/4 Hz"));
     EXPECT_TRUE(root->property("title").toString().contains("READ-ONLY"));
 }
 
-TEST(Qml, ExperimentalFortyEightHertzRateIsClearlyLabelled) {
+TEST(Qml, ProductionRateIsNotMarkedExperimental) {
     app();
-    DeviceController c(nullptr, false, true);
+    DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
     ASSERT_TRUE(root);
-    EXPECT_TRUE(root->property("title").toString().contains("EXPERIMENTAL 48 Hz METERS"));
-    EXPECT_TRUE(root->property("title").toString().contains("READ-ONLY"));
+    EXPECT_FALSE(root->property("title").toString().contains("EXPERIMENTAL"));
+    EXPECT_FALSE(root->property("title").toString().contains("DIAGNOSTIC"));
+    EXPECT_EQ(c.statusPollingHz(), 48);
+    EXPECT_EQ(c.settingsPollingHz(), 16);
     EXPECT_FALSE(c.writable());
 }
 

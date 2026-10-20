@@ -48,6 +48,10 @@ front-panel readiness. Initial status-read failure is currently non-fatal.
 * `DeviceSession`/transports are used by the worker thread only; `requestCancel()` is the one
   cross-thread call (atomic flag, non-blocking).
 * GUI thread owns `values_`; worker emits diffed `QVariantMap`s via queued connections.
+* Normal CONNECT 2 USB polling uses one worker and one serialized transport: status GETs
+  at 48 Hz and independent settings GETs at 16 Hz. Absolute monotonic deadlines skip
+  missed ticks rather than issuing catch-up bursts. `--diagnostic-legacy-polling` selects
+  the former 4/2 Hz read-only cadence for comparison; it does not enable writes.
 * Opt-in `OPENWITTY_TRACE_LATENCY=1` logs monotonic poll/GET/decode/merge/GUI/QML/frame stages
   without payloads or identifiers. These markers do not timestamp the physical action itself.
 * `ControlLease` is a per-user, process-lifetime `flock` on a private runtime file. It prevents

@@ -87,15 +87,16 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 * Opt-in `OPENWITTY_TRACE_LATENCY=1` prints payload-free monotonic poll, GET, decode, publication,
   QML-event and frame-swap timings. A read-only physical-control run measured these stages
   (§19 of `docs/HARDWARE_TEST_RESULTS.md`); it cannot alone time an action to visible pixels.
-* Real GUI wording now reports control-data availability, not unverified audio/front-panel
-  readiness. USB cadence remains 4 Hz status, 2 Hz settings; normal hardware writes stay off.
+* Real GUI wording reports control-data availability, not unverified audio/front-panel
+  readiness. The 4 Hz status / 2 Hz settings cadence at this Phase 7D milestone
+  was later superseded; normal hardware writes stay off.
 * The monitoring-mix high-end label is `0:100` rather than `50:50` following the owner's
   observation. The raw high stop was 0.00 on this unit; the acoustic ratio is not calibrated.
 
 ## Phase 7E read-only freshness
 
-* Independent monotonic settings/status freshness is exposed to QML. After the unchanged 2 Hz
-  settings / 4 Hz status schedules miss their age windows, the GUI labels last-known values
+* Independent monotonic settings/status freshness is exposed to QML. When either
+  schedule misses its configured age window, the GUI labels last-known values
   delayed or stale; one successful message type cannot refresh the other. Reconnect resets both.
   This is mock/QML tested; no real-device fault was induced.
 * Lease contention reports a specific `ControlInUse` explanation before USB I/O. Level 1
@@ -104,26 +105,39 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 
 ## Phase 7G meter presentation
 
-* Eight status-derived audio meters now have independent, frame-synchronized display envelopes
-  and sampled-peak markers. The real device remains at 4 status GETs/s and 2 settings GETs/s;
-  ~60 FPS rendering does not create or imply additional hardware samples.
+* Eight status-derived audio meters have independent, frame-synchronized display envelopes
+  and sampled-peak markers. At the initial implementation the GUI used 4 status
+  GETs/s and 2 settings GETs/s; the current default is documented below.
+  A ~60 FPS rendering target does not create or imply additional hardware samples.
 * Delayed status freezes/dims the meters; stale status or disconnection clears their live
   display until a new successful sample. A bounded read-only probe observed additional
   active speaker-meter values at 8 Hz without USB errors. In the real GUI, the owner
-  judged 8 Hz better than 4 Hz but still far from a real-time level bar; visual
-  acceptance and exact meter semantics remain open. An explicitly labelled 8 Hz GUI
-  startup experiment is available. A separately approved 48 Hz read-only probe
+  judged 8 Hz better than 4 Hz but still far from a real-time level bar; at
+  that milestone visual acceptance was pending and exact meter semantics
+  remained open. An explicitly labelled 8 Hz GUI startup experiment was
+  available. A separately approved 48 Hz read-only probe
   returned 480/480 GETs, no errors and changed active meter bytes on every
   comparison; the owner heard no clicks. An explicitly labelled **opt-in 48 Hz
   GUI mode was run on hardware with white-noise playback**: status cadence
   averaged 48.00 GETs/s in a sustained trace, no USB errors were observed,
   and the owner said the meters “look really good,” including simultaneous
-  speaker and headphone bars, with no clicks heard. The production default
-  remains 4 Hz; exact meter/peak semantics remain unverified and no GUI
+  speaker and headphone bars, with no clicks heard. At that milestone the
+  default still remained 4 Hz; exact meter/peak semantics remain unverified and no GUI
   hardware writes were added.
 
 ## Phase 7H visual quality and control responsiveness
 
 * General GUI pictograms use one Lucide SVG outline family with bundled ISC/Feather MIT notices; the low-cut response curve is an original vector exception, auto gain stays a text label, and the OpenWitty logo is unchanged. SVG loading and visible rendering were tested with a software scene graph.
 * Held-peak lines now use screen-pixel-aligned shapes, appear only above the live level, and clear after silence/hold decay. Rendered one-row/floor tests passed at 100%, 125%, 150%, and 200% scaling; the owner subsequently accepted their real-hardware appearance and the updated icons.
-* Explicit read-only `--experimental-settings-8hz` and `--experimental-settings-16hz` options require `--experimental-status-48hz`; the owner preferred 16 Hz for physical control response. A bounded 20-minute 16/48 Hz GUI run completed without observed USB errors, rate drift, or sustained RSS/frame-cadence degradation. Production remains 2 Hz settings / 4 Hz status, with real GUI writes disabled. See `docs/HARDWARE_TEST_RESULTS.md` §29 for limits.
+* The owner preferred 16 Hz settings for physical control response. A bounded 20-minute 16/48 Hz GUI run completed without observed USB errors, rate drift, or sustained RSS/frame-cadence degradation; no audio or UI problems were reported. The former opt-in flags were removed after the validated rates became the normal read-only GUI default.
+
+## Phase 7 final CONNECT 2 polling defaults
+
+* Normal GUI launch uses **16 settings GETs/s and 48 status GETs/s** on one leased,
+  serialized, read-only USB control connection. The frame-driven meter
+  presentation still targets 60 FPS independently of acquisition; measured
+  active-meter cadence on this desktop was about 48.2 FPS, with occasional
+  approximately 41 ms frame gaps.
+* `--diagnostic-legacy-polling` restores the former 2 Hz settings / 4 Hz status
+  read-only cadence for comparison. `--quit-after-seconds N` bounds diagnostic
+  runs and quits normally. Neither option enables hardware writes.

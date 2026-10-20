@@ -1588,3 +1588,39 @@ Release **186/186**, ASan/UBSan **185/185**, USB call-site audit, and
 `git diff --check` passed after the stability run. The preferred 16 Hz settings
 rate remains **experimental and opt-in**; no production-default change or
 hardware write was made.
+
+### 30. Phase 7 finalization — validated 16/48 Hz normal GUI (2026-10-20)
+
+After §29, the owner explicitly confirmed **no audible clicks, dropouts, other
+audio problems, or UI problems during the stability evaluation**. The owner also
+accepted the corrected icons and peak markers, the 48 Hz meter appearance, and
+the 16 Hz physical gain/volume responsiveness. This is subjective owner
+acceptance, not instrumented XRUN monitoring or a true physical-action-to-
+screen latency measurement.
+
+The normal read-only CONNECT 2 GUI now uses **16 Hz settings and 48 Hz status**
+without polling flags. The former `--experimental-status-*` and
+`--experimental-settings-*` GUI switches were removed. For diagnostics only,
+`--diagnostic-legacy-polling` restores 2 Hz settings / 4 Hz status, and
+`--quit-after-seconds N` bounds a run with normal shutdown. The same worker,
+serialized transport, descriptor-selected vendor interface, per-user control
+lease, independent settings/status freshness, and real-GUI write refusal
+remain in force. The presentation layer still targets 60 FPS independently
+of USB sampling. The measured 20-minute active-meter median was ~48.2 FPS;
+occasional ~41 ms gaps remain a minor desktop frame-pacing limitation.
+
+A fresh preflight found CONNECT 2 `29c2:0004`, accessible vendor interface 3,
+no OpenWitty process or lease holder, and ALSA/PipeWire audio-device presence.
+A **normal-rate launch with no polling flags** was bounded only by
+`--quit-after-seconds 60` and opt-in, payload-free latency tracing. The
+contiguous analyzed sequence 49–2884 contained 2,836 status and 945 settings
+GETs over 59.082 seconds: **48.001 and 15.995 GETs/s**. Status GET
+median/p95 was 0.269/0.304 ms; settings GET was 0.372/0.382 ms. No USB
+error or failed polling event appeared. A process sample at ~39 seconds
+showed 0.9% cumulative CPU and 179,204 KiB RSS. No physical control change
+or sustained meter frame summary was captured in this short smoke window, so
+those visual behaviors were **not newly re-measured**; they rely on the
+previously accepted same-scheduler hardware runs. The GUI exited normally,
+released the control lease, and CONNECT 2 remained visible in USB, ALSA,
+and PipeWire. No USB SET, reset, driver detach, DFU, firmware action, or
+audio-routing change was performed.

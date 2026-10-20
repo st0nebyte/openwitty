@@ -1,6 +1,10 @@
 # Phase 7 plan: connecting the Qt/QML GUI to the real CONNECT 2
 
-Historical planning snapshot; superseded for implementation status by the Phase 7B addendum below.
+Historical planning snapshot; the current CONNECT 2 read-only GUI defaults to **16 Hz
+settings / 48 Hz status** after Phase 7H hardware acceptance. Earlier 2/4 Hz
+descriptions below record the cadence at those milestones, not today's default.
+See `HARDWARE_TEST_RESULTS.md` §§29–30 for the validation and default-mode smoke test.
+Superseded for implementation status by the Phase 7B addendum below.
 No new hardware write path was added. Baseline: branch `phase6e-work-preparation` @ `7d8a4c0` (117 tests), which sits on
 `hardware-validation-2026-10-14` @ `d4f99c6` (106 tests). The home computer's unpushed Panic Mute
 commits (108/108 there) are **not** in this tree; section 7 lists where they will collide.

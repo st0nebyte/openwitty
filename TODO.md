@@ -102,7 +102,8 @@
   proves insufficient.
 * An administrator must install `packaging/udev/70-openwitty.rules` (EACCES otherwise).
 * Interruptible control transfers (libusb async + cancel) to bound shutdown latency below 500 ms.
-* Decide whether to poll settings at 1–4 Hz on real hardware or only on events (no interrupt endpoint knowledge yet).
+* ✔ Validated real-hardware polling and promoted 16 Hz settings / 48 Hz status
+  to the normal read-only CONNECT 2 GUI. No interrupt endpoint was assumed.
 * Persist onboarding flag; log file / diagnostics export.
 
 ## Phase 5E follow-ups
@@ -171,8 +172,8 @@
   warnings, including a non-escalating failed stream while the other keeps succeeding. Mock/QML
   tested; real-device fault/visual validation pending (no deliberate USB failure induced).
 - Obtain an externally timestamped physical-action and screen-presentation marker for true
-  end-to-end latency; internal monotonic stage timings alone cannot establish it. Preserve
-  2 Hz settings / 4 Hz status until a read-only hardware comparison supports a change.
+  end-to-end latency; internal monotonic stage timings alone cannot establish it. The
+  validated 16/48 Hz cadence is now the normal read-only GUI configuration.
 - Visually reconfirm the compact `Connected · read-only` header and Phase 7E freshness-warning
   layout on the real device; the automated geometry checks do not replace a screenshot.
 
@@ -214,4 +215,4 @@
   with no clicks heard. **Pending:** longer-duration validation, frame-pacing
   investigation, meter/peak semantics, and a separate decision before any
   production-default change. Keep the real GUI read-only.
-- Phase 7H: ✔ coherent licensed SVG pictograms; ✔ one-row held peaks and silence recovery across 100/125/150/200% scale; ✔ owner visual acceptance on the physical read-only GUI. ✔ Opt-in 8/16 Hz settings with 48 Hz status, owner preference for 16 Hz, and a clean bounded 20-minute 16/48 Hz trace. Pending: independently timestamped physical-action-to-screen latency, full-run audible/XRUN confirmation, cause of the older-build ~18 MiB RSS difference, and the ~48 FPS desktop frame ceiling. Keep production at 2 Hz settings / 4 Hz status; no writes.
+- Phase 7H: ✔ coherent licensed SVG pictograms; ✔ one-row held peaks and silence recovery across 100/125/150/200% scale; ✔ owner visual acceptance. ✔ 20-minute 16/48 Hz run with no observed USB errors or memory growth; owner subsequently confirmed no audible or UI problems. ✔ Promoted 16 Hz settings / 48 Hz status to the normal read-only GUI; `--diagnostic-legacy-polling` retains 2/4 Hz comparison. Pending: independently timestamped action-to-screen latency, objective XRUN monitoring, cause of the older-build ~18 MiB RSS difference, and the ~48 FPS desktop frame ceiling. No hardware writes.

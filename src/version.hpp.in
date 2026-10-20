@@ -4,4 +4,4 @@
 #define LEWITT_APP_NAME "OpenWitty"
 #define LEWITT_APP_DESKTOP_ID "io.github.st0nebyte.openwitty"
 #define LEWITT_BUILD_FLAVOUR "@LEWITT_BUILD_FLAVOUR@"
-#define LEWITT_NOTICE "Unofficial, experimental. Not affiliated with or endorsed by LEWITT. Not validated on real hardware."
+#define LEWITT_NOTICE "Unofficial and independent. Not affiliated with or endorsed by LEWITT. CONNECT 2 read-only GUI validated on one device; other features remain under development."

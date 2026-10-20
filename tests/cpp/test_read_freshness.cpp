@@ -43,8 +43,8 @@ TEST(ReadFreshness, ExperimentalEightHertzBoundaries) {
     EXPECT_EQ(reads.settings(kStart + 1500ms, true), Freshness::Delayed);
 }
 
-TEST(ReadFreshness, ExperimentalFortyEightHertzBoundaries) {
-    ReadFreshness reads(kStatus48HzExperimental.statusFreshness);
+TEST(ReadFreshness, ProductionFortyEightHertzBoundaries) {
+    ReadFreshness reads(kStatus48Hz.statusFreshness, kSettings16HzFreshness);
     reads.markStatus(kStart);
     EXPECT_EQ(reads.status(kStart + 75ms, true), Freshness::Fresh);
     EXPECT_EQ(reads.status(kStart + 76ms, true), Freshness::Delayed);
@@ -58,22 +58,24 @@ TEST(ReadFreshness, ExperimentalFortyEightHertzBoundaries) {
     EXPECT_EQ(reads.status(kStart + 1001ms, true), Freshness::Unavailable);
 }
 
-TEST(ReadFreshness, RealSchedulesKeepSettingsAtTwoHertz) {
+TEST(ReadFreshness, ProductionAndLegacyCadencesAreDistinct) {
     EXPECT_EQ(kStatus4Hz.statusPeriod, 250ms);
     EXPECT_EQ(kStatus4Hz.settingsEveryStatus, 2);
     EXPECT_EQ(kStatus8HzExperimental.statusPeriod, 125ms);
     EXPECT_EQ(kStatus8HzExperimental.settingsEveryStatus, 4);
     EXPECT_EQ(kStatus4Hz.statusPeriod * kStatus4Hz.settingsEveryStatus, 500ms);
     EXPECT_EQ(kStatus8HzExperimental.statusPeriod * kStatus8HzExperimental.settingsEveryStatus, 500ms);
-    EXPECT_EQ(kStatus48HzExperimental.statusPeriod, std::chrono::nanoseconds(20'833'334));
-    EXPECT_TRUE(kStatus48HzExperimental.preciseScheduling);
-    EXPECT_EQ(kStatus48HzExperimental.settingsEveryStatus, 0);
+    EXPECT_EQ(kStatus48Hz.statusPeriod, std::chrono::nanoseconds(20'833'334));
+    EXPECT_TRUE(kStatus48Hz.preciseScheduling);
+    EXPECT_EQ(kStatus48Hz.settingsEveryStatus, 0);
+    EXPECT_EQ(kSettings16HzFreshness.fresh, 125ms);
+    EXPECT_EQ(kSettings16HzFreshness.stale, 250ms);
 }
 
 TEST(ReadFreshness, FortyEightHertzScheduleSkipsMissedTicksWithoutBurst) {
-    RealPollSchedule schedule(kStatus48HzExperimental);
+    RealPollSchedule schedule(kStatus48Hz);
     schedule.reset(kStart);
-    const auto period = kStatus48HzExperimental.statusPeriod;
+    const auto period = kStatus48Hz.statusPeriod;
     EXPECT_EQ(schedule.nextStatusAfter(kStart), kStart + period);
     EXPECT_EQ(schedule.nextStatusAfter(kStart + period), kStart + period * 2);
     const auto late = kStart + 125ms;
@@ -87,21 +89,21 @@ TEST(ReadFreshness, FortyEightHertzScheduleSkipsMissedTicksWithoutBurst) {
 }
 
 TEST(ReadFreshness, FortyEightHertzSettingsDeadlineStaysIndependent) {
-    RealPollSchedule schedule(kStatus48HzExperimental);
+    RealPollSchedule schedule(kStatus48Hz);
     schedule.reset(kStart);
-    EXPECT_FALSE(schedule.settingsDue(kStart + 499ms));
-    EXPECT_TRUE(schedule.settingsDue(kStart + 500ms));
-    EXPECT_FALSE(schedule.settingsDue(kStart + 999ms));
-    EXPECT_TRUE(schedule.settingsDue(kStart + 1000ms));
+    EXPECT_FALSE(schedule.settingsDue(kStart + std::chrono::microseconds(62499)));
+    EXPECT_TRUE(schedule.settingsDue(kStart + std::chrono::microseconds(62500)));
+    EXPECT_FALSE(schedule.settingsDue(kStart + std::chrono::microseconds(124999)));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 125ms));
     EXPECT_TRUE(schedule.settingsDue(kStart + 5s)); // one read, never a catch-up burst
     EXPECT_FALSE(schedule.settingsDue(kStart + 5s));
     schedule.reset(kStart + 10s);
     EXPECT_FALSE(schedule.settingsDue(kStart + 10s));
-    EXPECT_TRUE(schedule.settingsDue(kStart + 10s + 500ms));
+    EXPECT_TRUE(schedule.settingsDue(kStart + 10s + std::chrono::microseconds(62500)));
 }
 
-TEST(ReadFreshness, FortyEightHertzSchedulesTwentySettingsReadsInTenSeconds) {
-    RealPollSchedule schedule(kStatus48HzExperimental);
+TEST(ReadFreshness, ProductionSchedules160SettingsReadsInTenSeconds) {
+    RealPollSchedule schedule(kStatus48Hz);
     schedule.reset(kStart);
     int settingsReads = 0;
     auto statusAt = kStart;
@@ -109,15 +111,15 @@ TEST(ReadFreshness, FortyEightHertzSchedulesTwentySettingsReadsInTenSeconds) {
         statusAt = schedule.nextStatusAfter(statusAt);
         settingsReads += schedule.settingsDue(statusAt);
     }
-    EXPECT_EQ(settingsReads, 20);
-    EXPECT_EQ(statusAt, kStart + kStatus48HzExperimental.statusPeriod * 480);
+    EXPECT_EQ(settingsReads, 160);
+    EXPECT_EQ(statusAt, kStart + kStatus48Hz.statusPeriod * 480);
 }
 
-TEST(ReadFreshness, ExperimentalSettingsRatesUseIndependentDeadlines) {
+TEST(ReadFreshness, AlternativeSettingsRatesUseIndependentDeadlines) {
     const std::array<std::pair<std::chrono::nanoseconds, int>, 2> cases{{
-        {125ms, 80}, {std::chrono::microseconds(62500), 160}}};
+        {500ms, 20}, {125ms, 80}}};
     for (auto [period, expected] : cases) {
-        RealPollSchedule schedule(kStatus48HzExperimental, period);
+        RealPollSchedule schedule(kStatus48Hz, period);
         schedule.reset(kStart);
         int reads = 0;
         auto statusAt = kStart;
@@ -126,7 +128,7 @@ TEST(ReadFreshness, ExperimentalSettingsRatesUseIndependentDeadlines) {
             reads += schedule.settingsDue(statusAt);
         }
         EXPECT_EQ(reads, expected);
-        EXPECT_EQ(statusAt, kStart + kStatus48HzExperimental.statusPeriod * 480);
+        EXPECT_EQ(statusAt, kStart + kStatus48Hz.statusPeriod * 480);
         EXPECT_FALSE(schedule.settingsDue(statusAt)); // no duplicate or catch-up read
         schedule.reset(kStart + 20s);
         EXPECT_FALSE(schedule.settingsDue(kStart + 20s));
@@ -134,11 +136,11 @@ TEST(ReadFreshness, ExperimentalSettingsRatesUseIndependentDeadlines) {
     }
 }
 
-TEST(ReadFreshness, ExperimentalSettingsAgeDoesNotBorrowStatusTimestamp) {
+TEST(ReadFreshness, SettingsAgeDoesNotBorrowStatusTimestamp) {
     for (auto [window, fresh, stale] : {
              std::tuple{kSettings8HzFreshness, 250ms, 500ms},
              std::tuple{kSettings16HzFreshness, 125ms, 250ms}}) {
-        ReadFreshness reads(kStatus48HzExperimental.statusFreshness, window);
+        ReadFreshness reads(kStatus48Hz.statusFreshness, window);
         reads.markSettings(kStart);
         reads.markStatus(kStart + stale + 1ms);
         EXPECT_EQ(reads.settings(kStart + fresh, true), Freshness::Fresh);

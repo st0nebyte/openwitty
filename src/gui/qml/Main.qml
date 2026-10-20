@@ -5,9 +5,7 @@ Window {
     id: win
     width: 1008; height: 566; visible: true
     title: "OpenWitty — Linux control for LEWITT CONNECT 2 (unofficial)"
-           + (device.experimentalStatus48Hz ? " — EXPERIMENTAL 48 Hz METERS / "
-                 + device.settingsPollingHz + " Hz SETTINGS · READ-ONLY"
-              : device.experimentalStatus8Hz ? " — EXPERIMENTAL 8 Hz METERS · READ-ONLY" : "")
+           + (device.diagnosticLegacyPolling ? " — DIAGNOSTIC 2/4 Hz · READ-ONLY" : "")
     color: Theme.footer
     minimumWidth: 720; minimumHeight: 440
 

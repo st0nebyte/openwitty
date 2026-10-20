@@ -22,53 +22,38 @@ int main(int argc, char** argv) {
     QCommandLineParser p;
     QCommandLineOption mock("mock", "Start with the simulated device.");
     p.addOption(mock);
-    QCommandLineOption experimental8Hz("experimental-status-8hz",
-        "EXPERIMENTAL: poll real-device status at 8 Hz (default 4 Hz); settings remain 2 Hz. Read-only.");
-    p.addOption(experimental8Hz);
-    QCommandLineOption experimental48Hz("experimental-status-48hz",
-        "EXPERIMENTAL: poll real-device status at approximately 48 Hz (default 4 Hz); settings default to 2 Hz. Read-only.");
-    p.addOption(experimental48Hz);
-    QCommandLineOption experimentalSettings8Hz("experimental-settings-8hz",
-        "EXPERIMENTAL: poll real-device settings at 8 Hz with --experimental-status-48hz. Read-only.");
-    QCommandLineOption experimentalSettings16Hz("experimental-settings-16hz",
-        "EXPERIMENTAL: poll real-device settings at 16 Hz with --experimental-status-48hz. Read-only.");
-    p.addOption(experimentalSettings8Hz);
-    p.addOption(experimentalSettings16Hz);
+    QCommandLineOption legacyPolling("diagnostic-legacy-polling",
+        "DIAGNOSTIC: use the former read-only 2 Hz settings / 4 Hz status cadence (default 16/48 Hz).");
+    p.addOption(legacyPolling);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
     p.addOption(sizeOpt);
     QCommandLineOption show("show", "Open a page at start: settings | wizard | onboarding.", "page");
     p.addOption(show);
-    QCommandLineOption experimentSeconds("experiment-seconds",
-        "Bound a read-only experimental GUI run; quit normally after 1–1800 seconds.", "seconds");
-    p.addOption(experimentSeconds);
+    QCommandLineOption quitAfterSeconds("quit-after-seconds",
+        "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
+    p.addOption(quitAfterSeconds);
     p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();
     p.addVersionOption();
     p.process(app);
-    const bool settings8 = p.isSet(experimentalSettings8Hz);
-    const bool settings16 = p.isSet(experimentalSettings16Hz);
-    if ((p.isSet(mock) && (p.isSet(experimental8Hz) || p.isSet(experimental48Hz) || settings8 || settings16)) ||
-        (p.isSet(experimental8Hz) && p.isSet(experimental48Hz)) || (settings8 && settings16) ||
-        ((settings8 || settings16) && !p.isSet(experimental48Hz))) {
-        std::fputs("experimental settings require --experimental-status-48hz; do not combine rates or use --mock\n", stderr);
+    if (p.isSet(mock) && p.isSet(legacyPolling)) {
+        std::fputs("--diagnostic-legacy-polling requires a real read-only device, not --mock\n", stderr);
         return 64;
     }
     bool durationOk = false;
-    const int experimentDuration = p.value(experimentSeconds).toInt(&durationOk);
-    if (p.isSet(experimentSeconds) && (!p.isSet(experimental48Hz) || !durationOk ||
-                                        experimentDuration < 1 || experimentDuration > 1800)) {
-        std::fputs("--experiment-seconds requires --experimental-status-48hz and a duration of 1–1800 seconds\n", stderr);
+    const int quitDuration = p.value(quitAfterSeconds).toInt(&durationOk);
+    if (p.isSet(quitAfterSeconds) && (!durationOk || quitDuration < 1 || quitDuration > 1800)) {
+        std::fputs("--quit-after-seconds requires a duration of 1–1800 seconds\n", stderr);
         return 64;
     }
 
-    DeviceController controller(nullptr, p.isSet(experimental8Hz), p.isSet(experimental48Hz),
-                                settings16 ? 16 : settings8 ? 8 : 2);
-    if (p.isSet(experimentSeconds)) {
+    DeviceController controller(nullptr, p.isSet(legacyPolling));
+    if (p.isSet(quitAfterSeconds)) {
         QObject::connect(&controller, &DeviceController::errorChanged, &app, [&] {
             if (!controller.lastError().isEmpty()) {
-                std::fputs("experiment stopped: device/control error\n", stderr);
+                std::fputs("bounded run stopped: device/control error\n", stderr);
                 app.exit(2);
             }
         });
@@ -105,7 +90,7 @@ int main(int argc, char** argv) {
             app.quit();
         });
     }
-    if (p.isSet(experimentSeconds))
-        QTimer::singleShot(experimentDuration * 1000, &app, &QCoreApplication::quit);
+    if (p.isSet(quitAfterSeconds))
+        QTimer::singleShot(quitDuration * 1000, &app, &QCoreApplication::quit);
     return app.exec();
 }

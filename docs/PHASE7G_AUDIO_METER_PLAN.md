@@ -1,11 +1,14 @@
 # Phase 7G plan — smooth, honest, read-only audio meters
 
-Status: **initial implementation complete; hardware visual review in progress** (Phase 7G).
-Do not enable hardware writes, change the production poll schedule, capture audio, or run a
-high-rate GET experiment from this document alone. The sections below preserve the original
-Phase 7F design rationale; implementation details follow at the end.
+Status: **Phase 7 complete**. The normal read-only CONNECT 2 GUI now uses
+**16 Hz settings / 48 Hz status** and frame-driven meter presentation; the
+validated default decision and remaining frame-pacing limitation are at the
+end of this document. Sections below preserve the earlier Phase 7F–7H
+research and planning chronology; their 2/4 Hz descriptions are historical.
+Do not enable hardware writes or run new high-rate GET experiments from this
+document alone.
 
-## Evidence and current pipeline
+## Evidence and original Phase 7F pipeline (historical)
 
 `DeviceWorker::poll()` serially reads one 64-byte `Status` message every 250 ms (4 Hz), then
 one 128-byte `Settings` message every second poll (2 Hz). `DeviceSession::refreshStatus()`
@@ -409,3 +412,20 @@ confirmation limitation are in `HARDWARE_TEST_RESULTS.md` §29. The experimental
 16 Hz setting is preferred for further evaluation, but making it a production
 default requires a separate decision; neither status nor settings default was
 changed here.
+
+### Phase 7 final default decision (2026-10-20)
+
+That separate decision has now been made. The owner confirmed no audio or UI
+problems during the stability evaluation and approved **16 Hz settings / 48 Hz
+status** as the normal read-only CONNECT 2 GUI cadence. No experimental polling
+flag is required. `--diagnostic-legacy-polling` retains the former 2/4 Hz rate
+for comparison, and `--quit-after-seconds N` bounds a read-only diagnostic
+session. A one-minute default-mode hardware smoke trace measured 15.995/48.001
+GETs/s without observed USB errors; see `HARDWARE_TEST_RESULTS.md` §30.
+
+Rendering remains frame-driven with a 60 FPS target, decoupled from USB
+acquisition. The 20-minute active-meter summary median on this desktop was
+~48.2 FPS with occasional ~41 ms gaps, not a proven 60 FPS output cadence.
+Neither a higher meter sample rate nor unseen signal peaks are implied by the
+rendering target. No hardware write capability or audio-routing change was
+added by the default-rate promotion.

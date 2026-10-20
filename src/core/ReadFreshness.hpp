@@ -17,8 +17,9 @@ constexpr const char* freshnessName(Freshness state) {
     return "unavailable";
 }
 
-// Production USB settings are scheduled every 500 ms, status every 250 ms.
-// Experimental schedules supply their own independent freshness windows.
+// The legacy diagnostic schedule uses 500 ms settings / 250 ms status.
+// Production 16/48 Hz uses independent faster freshness windows supplied by
+// DeviceWorker; successful reads of one type never refresh the other.
 struct FreshnessWindow {
     std::chrono::milliseconds fresh;
     std::chrono::milliseconds stale;
