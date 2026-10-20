@@ -7,6 +7,19 @@ GUI slider that tracks a second software gain. The existing one-stereo-sink
 topology already satisfies the single-destination requirement; preserve it
 unless a native control-plane bridge proves insufficient.
 
+**Phase 8A.1 constraint:** repeated physical reconnects retained one settled
+playback sink, but the ALSA `PCM Playback Volume` control was absent at initial
+system enumeration and present after reconnect. The kernel logged a sticky
+mixer rejection for unit 2 only at initial enumeration. PipeWire accordingly
+changed from `route.hw-volume=false` to `true`; the first reconnect coincided
+with the hardware Speaker changing to the previously displayed Linux sink
+level, without an OpenWitty write. See
+[`PHASE8A1_HOTPLUG_REENUMERATION.md`](PHASE8A1_HOTPLUG_REENUMERATION.md).
+Therefore neither permanent software-only volume nor reliable ALSA-backed
+hardware volume may be assumed. The one-sink recommendation remains, but
+the volume bridge must safely handle **both** mixer-exposure states and prevent
+unwanted restoration before any implementation is approved.
+
 ## Non-negotiable semantics
 
 * CONNECT 2 hardware is the source of truth. Startup reads hardware; it never
@@ -49,7 +62,7 @@ hardware mute while preserving its stored hardware volume.
 
 | Approach | Fit and cost | Decision gate |
 |---|---|---|
-| A. Existing PipeWire sink with ALSA hardware mixer | Simplest if the ALSA route actually exposes hardware volume and KDE can use it. Present evidence is against it: no ALSA playback-volume element, `route.hw-volume=false`, and active `softVolumes`. A generic sink `HARDWARE` flag is not sufficient. | Re-examine only if a validated driver/UCM mechanism exposes **both** independent CONNECT 2 output levels without another gain stage. |
+| A. Existing PipeWire sink with ALSA hardware mixer | Simplest when the ALSA PCM volume exists, but exposure is inconsistent: absent at initial boot, present after physical reconnect. It is one PCM control, not proven to represent both independent outputs. The first reconnect coincided with a hardware Speaker-level change to the saved Linux volume. A generic sink `HARDWARE` flag is not sufficient. | Prove reliable exposure and exact mapping for both Speaker and Headphone without startup restoration or volume jumps; the current direct path does not meet this gate. |
 | B. One existing sink plus a WirePlumber/PipeWire control-plane bridge to the OpenWitty service | Preferred research direction: keep the real ALSA playback sink and per-app streams; observe KDE/PipeWire sink-volume intents, map them to the chosen hardware output, and publish hardware-derived target state back. No extra audio node is required **if** the installed PipeWire/WirePlumber APIs can expose a KDE-visible logical value while the actual sink DSP remains unity. WirePlumber's documented hooks are suitable for policy events, but interception/representation at this exact boundary is **not yet proven**. | In an isolated mock PipeWire graph, prove KDE volume keys/slider/mute, target switching, readback and reconnect without soft master attenuation, feedback or WirePlumber restoration races. Then hardware-write authorization is a separate decision. |
 | C. Virtual/proxy playback sink in front of the physical sink | Could offer a custom KDE-facing volume representation if B cannot. But it adds a graph node, routing policy, lifecycle, latency, stream-migration and fallback risks; a naïve virtual sink also adds attenuation and violates the requirement. | Consider only after B fails a documented proof-of-concept; prove unity forwarding, stable identity, per-app stream handling, disconnect behavior and no processing engine. |
 | D. Other native kernel/ALSA solution | A suitable standard hardware mixer control could let the ordinary sink reflect hardware state with little policy code. Current ALSA inventory does not expose one, and fabricating one or replacing the kernel driver would be disproportionate. | Only pursue with evidence of a maintainable upstreamable control path; do not issue UAC SETs or detach `snd-usb-audio` to test it. |

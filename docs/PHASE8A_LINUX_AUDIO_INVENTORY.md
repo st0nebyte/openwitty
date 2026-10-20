@@ -6,6 +6,16 @@ No mixer, profile, default-device, route, stream, or USB setting was changed.
 Commands below are inventory queries; committed results omit the device serial
 and other unique identifiers. Numeric PipeWire/ALSA IDs are ephemeral.
 
+**Phase 8A.1 update:** these are the *pre-reconnect* control observations.
+Two later physical reconnects kept one stereo playback PCM and one PipeWire
+sink but exposed an ALSA `PCM Playback Volume` control absent here; the route
+then reported `route.hw-volume=true`. The first reconnect coincided with
+Speaker volume changing from 0.00 to −20.50 dB without an OpenWitty SET.
+The kernel had rejected USB mixer unit 2 as sticky at initial system
+enumeration but not on either reconnect. See
+[`PHASE8A1_HOTPLUG_REENUMERATION.md`](PHASE8A1_HOTPLUG_REENUMERATION.md)
+before relying on the mixer/soft-volume entries below.
+
 ## Evidence
 
 | Query | CONNECT 2 observation |
