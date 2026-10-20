@@ -1,18 +1,54 @@
 # Phase 8A.3 — normal-boot evidence and hardware-volume writer attribution plan
 
-Research plan only, prepared on 2026-10-20. **No new normal start has been
-reported by the owner**, so no fresh boot snapshot or post-boot hardware GET
-was taken for this phase. No tracing, reconnect, mixer query, audio-policy
-change, hardware SET, or Phase 8B implementation was performed. Compare with
+Prepared on 2026-10-20 and updated after the owner reported a normal shutdown
+and start the same evening. A fresh **passive** boot snapshot and one validated
+vendor-interface settings GET were taken. No tracing, deliberate reconnect,
+ALSA mixer query, audio-policy change, hardware SET, or Phase 8B implementation
+was performed. Compare with
 [Phase 8A inventory](PHASE8A_LINUX_AUDIO_INVENTORY.md),
 [hotplug findings](PHASE8A1_HOTPLUG_REENUMERATION.md), and
-[mixer analysis](PHASE8A2_USB_MIXER_INITIALIZATION.md); do not promote old
-observations to new boot results.
+[mixer analysis](PHASE8A2_USB_MIXER_INITIALIZATION.md).
+
+## New normal-boot evidence: owner-reported shutdown/start
+
+The worktree was clean at `4deec9d7166d96a3bae0bf2480586ab6812af2a8`
+before capture. The host booted at approximately **23:46:20 CEST** with the
+same `7.2.10-1-cachyos` kernel, PipeWire `1:1.6.9-1` and WirePlumber
+`0.5.18-1.1`. The private 0600 topology snapshot was captured at 23:47:35
+CEST, outside Git. It includes no serial-bearing raw `pw-dump`. The source
+tool was reviewed first: it does not invoke ALSA mixer-control queries.
+
+| Layer/time (CEST) | New observation | Comparison/limit |
+|---|---|---|
+| USB, 23:46:22 | CONNECT 2 `29c2:0004`, release 1.21, high-speed, configuration 1; expected AudioControl, two AudioStreaming, vendor interface 3 and DFU interface 4. Audio interfaces bound to `snd-usb-audio`; vendor/DFU unbound. | Same visible configuration/interface set as before. DFU was not accessed. |
+| Kernel, 23:46:30 | Unit `2:0` again logged `sticky mixer values (-15360/0/128 => -5248), disabling`; unit `5:0` also rejected. | **Boot-only unit-2 rejection reproduced on a second normal system start.** The previous boot readback was `-6363`; different readbacks do not by themselves identify firmware timing or control mapping. |
+| ALSA, after settling | One CONNECT 2 stereo playback PCM (`card 0, device 0`; FL/FR, 44.1/48/96 kHz capability). | Same functional PCM count as prior boot/reconnect. The new tool deliberately did not query ALSA mixer-control information; kernel rejection and PipeWire route capability are indirect evidence of the missing volume control. |
+| Session, 23:46:31 onward | One PipeWire analog-stereo sink, one analog-surround-4.0 source, previous duplex profile and one analog-output route; CONNECT 2 is the default sink. Route `hw-volume=false`, `hw-mute=true`, displayed volume data 0.091123 per channel, matching its `softVolumes`. | Reproduces the earlier **software-backed** boot state, not the post-reconnect `hw-volume=true` state. No duplicate playback destination. |
+| Boot services/state | `alsa-restore.service` began at 23:46:27; `alsa-state.service` inactive. WirePlumber `device.restore-routes=true`. `default-routes` remained last modified at 18:24:42. | Service execution and saved state do not prove a specific hardware write. Standard session logs gave no route-volume writer trace. |
+| Prior-shutdown ALSA state | `/var/lib/alsa/asound.state` was modified at 23:44:54 before this boot; `state.C2` now **does** contain `PCM Playback Volume` step 79/120 (−20.50 dB). | Unlike the file examined in Phase 8A.2, it was saved after the mixer control became available. A future hotplug restore now has a saved volume candidate; this file alone does not show whether it was applied at boot. |
+| Kernel, 23:46:37 | One `usb_set_interface failed (-110)` timeout for the device's audio interface appeared after driver registration. | Unexpected initialization warning; the settled PCM/sink and later GET worked. No reset, retry, detach or audio-routing action was attempted. Cause and audible impact were not tested. |
+| One optional GET, after the passive snapshot | No OpenWitty process held the control lease; USB identity/permissions checked. `openwitty-cli read settings --interface auto` exited successfully and decoded Speaker **−20.50 dB**, Headphones **−27.26 dB muted**. The lease was released afterward. | Speaker matches the prior post-reconnect reading. A single later GET cannot rule out a transient change or prove whether the level persisted through power-off versus being restored during boot. No OpenWitty SET was sent. |
+
+The successful CLI GET generated a later usbfs warning that the process had
+not claimed vendor interface 3 before use. The interface was unbound and
+OpenWitty did not claim/detach it; the request succeeded. This warning is
+separate from the earlier `usb_set_interface` timeout and is **not** evidence
+of a volume write. Raw CLI settings bytes and device identifiers were not
+included in this document.
+
+**Conclusion of this boot capture:** initial system enumeration again causes
+the unit-2 sticky rejection and software-backed PipeWire route, whereas the
+two earlier owner-operated reconnects did not reject unit 2 and exposed a
+hardware-backed route. The trigger for the different mixer response and the
+writer of the earlier Speaker change remain unknown. Do not infer that
+WirePlumber restored −20.50 dB on this boot merely because that value appears
+in both its audio state and the hardware GET.
 
 ## Next *natural* boot: passive evidence gate
 
-Wait for the owner to say that a normal system start has occurred. Do not
-request a reboot or unplug merely to collect this evidence. Before opening a
+The above capture was made only after the owner confirmed a normal start.
+For any later natural boot, do not request a reboot or unplug merely to
+collect evidence. Before opening a
 mixer UI or running `amixer`/`alsactl` control-information queries:
 
 1. Record boot ID, boot time, kernel release and installed PipeWire/WirePlumber
@@ -43,13 +79,13 @@ the repeatability assessment; it would **not** establish why earlier boot and
 reconnect differed. If the control is again absent and the warning appears,
 the old pattern is reproduced without deliberately perturbing the device.
 
-| Comparison | Earlier evidence | Next-boot question |
+| Comparison | Earlier evidence | This normal boot / remaining question |
 |---|---|---|
-| USB/ALSA graph | One stereo PCM after settling; no extra playback sink | Same PCM/interface/profile identity, ignoring card numbers? |
-| Kernel unit 2 | Sticky at initial enumeration; no warning on two physical reconnects | Does a naturally occurring start repeat the rejection, and when relative to driver binding? |
-| PipeWire output route | `route.hw-volume=false` initially, then `true` after reconnect | Which capability is reported after this boot? |
-| Hardware Speaker | 0.00 dB before first reconnect, −20.50 dB afterward | Does a safe post-boot GET show a new change? A single value cannot identify its writer. |
-| WirePlumber route state | Stored analog-output ~45% before first reconnect | Is restoration enabled and is state present? No state file alone proves a write. |
+| USB/ALSA graph | One stereo PCM after settling; no extra playback sink | Same functional PCM/interface/profile identity; numeric card IDs are not the acceptance criterion. |
+| Kernel unit 2 | Sticky at initial enumeration; no warning on two physical reconnects | **Repeated** at this natural boot; cause still unknown. |
+| PipeWire output route | `route.hw-volume=false` initially, then `true` after reconnect | **False again** after this natural boot. |
+| Hardware Speaker | 0.00 dB before first reconnect, −20.50 dB afterward | **−20.50 dB** after this boot; persistence versus restoration remains unproven. |
+| WirePlumber route state | Stored analog-output ~45% before first reconnect | Restoration remains enabled and state present. No state file alone proves a write. |
 
 ## Two separate causal questions
 
@@ -87,7 +123,9 @@ Potential writers are kernel mixer probing/restore, udev-triggered `alsactl
 restore`, WirePlumber's saved-route application through PipeWire's ALSA
 backend, another ALSA/PipeWire client, or device firmware. The installed
 udev rule runs `alsactl --export restore` on sound control-card add; the
-available `state.C2` had no saved playback-volume entry. WirePlumber's
+Phase 8A.2 `state.C2` had no saved playback-volume entry, but the new
+pre-shutdown state file does. Neither state file proves a particular write.
+WirePlumber's
 `device.restore-routes=true` and saved route volume support a hypothesis, not
 an attribution. Its [documented route hooks](https://pipewire.pages.freedesktop.org/wireplumber/scripting/existing_scripts/device.html)
 can apply stored route properties. The value match alone is insufficient;

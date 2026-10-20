@@ -12,10 +12,10 @@ Speaker level has **not** been identified.
 |---|---|---|
 | `uname -r`; installed packages | `7.2.10-1-cachyos`; PipeWire `1:1.6.9-1`; WirePlumber `0.5.18-1.1` | Installed kernel headers do not include `sound/usb/mixer.c`; upstream source below is not proven byte-identical to this build. |
 | Prior USB/ALSA/PipeWire snapshots | One stereo playback PCM and one sink in settled states. At initial boot, ALSA PCM playback *volume* was absent and PipeWire `route.hw-volume=false`. After reconnect, that control was present and `route.hw-volume=true`. | The PCM playback *switch* was present in both states. These are not two output sinks. |
-| This boot's kernel journal | At 18:16:43 local time, `2:0: sticky mixer values (-15360/0/128 => -6363), disabling` and a unit-5 sticky warning. Reconnects at 23:18:44 and 23:21:55 logged only unit 5. | Unit 2 correlates with the playback-volume control seen after reconnect; the journal does not explain the different device responses. |
+| Prior boot's kernel journal | At 18:16:43 local time, `2:0: sticky mixer values (-15360/0/128 => -6363), disabling` and a unit-5 sticky warning. Reconnects at 23:18:44 and 23:21:55 logged only unit 5. | Unit 2 correlates with the playback-volume control seen after reconnect; the journal does not explain the different device responses. |
 | Prior read-only CONNECT 2 settings GETs | Speaker 0.00 dB before first reconnect, −20.50 dB afterward; Headphone −27.26 dB muted in both. PipeWire stayed at displayed 45% (−20.81 dB). | OpenWitty sent no SET. No transfer-level writer trace exists. |
 | Current `/usr/lib/udev/rules.d/90-alsa-restore.rules` | On `sound/controlC*` add, the rule runs `alsactl --export restore $ALSA_CARD_NUMBER` unless state-daemon mode is configured. | An ALSA restore action exists on each hotplug, not only at login; it is not evidence that it changed this volume. |
-| `/var/lib/alsa/asound.state` | File last modified before this boot. Its `state.C2` section contains PCM Playback Switch but **no PCM Playback Volume**. | The current file cannot explain a saved −20.50 dB value via `alsactl`; a different historical state file was not observed. |
+| `/var/lib/alsa/asound.state` at this Phase 8A.2 capture | File last modified before the then-current boot. Its `state.C2` section contained PCM Playback Switch but **no PCM Playback Volume**. | That snapshot could not explain a saved −20.50 dB value via `alsactl`. The file later changed at shutdown; see Phase 8A.3. |
 | `systemctl show` | `alsa-restore.service` ran at 18:16:40 and exited successfully; `alsa-state.service` was inactive. WirePlumber started at 18:16:44, after the 18:16:43 sticky warning. | The service's boot invocation is separate from the udev per-card restore rule. Per-device udev execution was not independently traced. |
 | WirePlumber 0.5.18 state/settings | `device.restore-routes=true`. Private `default-routes` state (mtime 18:24:42, before first reconnect) already stored the CONNECT 2 `analog-output` channel volumes as `[0.091123, 0.091123]`, mute false. | That linear value corresponds to roughly −20.81 dB/45% display, but saved intent does not prove a hardware write. Serial-bearing state keys remain private. |
 
@@ -23,6 +23,11 @@ The physical selected-control channel is not a Linux playback route. The
 present ALSA PCM Playback Volume tracks the CONNECT 2 **Speaker** level in the
 one before/after comparison; its effect on Headphones, simultaneous outputs,
 and mute semantics has **not** been experimentally established.
+
+**Later evidence:** After the owner's next normal shutdown/start, unit 2 was
+rejected again, PipeWire returned to `route.hw-volume=false`, and the saved
+ALSA state now contained PCM Playback Volume step 79/−20.50 dB from before
+shutdown. See [Phase 8A.3](PHASE8A3_BOOT_AND_VOLUME_TRACE_PLAN.md#new-normal-boot-evidence-owner-reported-shutdownstart).
 
 ## Kernel probe path and the boot/reconnect difference
 
@@ -74,7 +79,7 @@ ALSA backend. The old 45% display, new −20.50 dB hardware step, and changed
 
 Other plausible writers are the kernel's mixer probe/restore sequence, udev's
 `alsactl restore`, another ALSA/PipeWire client, or firmware behavior. The
-current ALSA state lacks a saved playback-volume entry, making *this stored
+then-available ALSA state lacked a saved playback-volume entry, making *that stored
 ALSA state* a weaker explanation for the particular −20.50 dB outcome. The
 kernel sticky path tends to test endpoints/restore a saved value, not obviously
 the previously displayed 45% value, but no exact transfer trace was captured.
@@ -85,7 +90,8 @@ property applied through PipeWire/ALSA when hardware volume became available;
 the saved value and quantized hardware result are unusually close. (2) Kernel
 probe or another PipeWire/ALSA client changed the control coincidentally;
 possible without a writer trace. (3) Udev's ALSA restore; the rule runs, but
-the available `state.C2` has no stored volume entry. (4) Firmware behavior
+the Phase 8A.2 `state.C2` had no stored volume entry; the later shutdown state
+does include one. (4) Firmware behavior
 independent of host volume policy. This ranking could change completely with
 a timestamped trace; no mechanism should be disabled based on it alone.
 

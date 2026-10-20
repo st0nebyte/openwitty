@@ -24,6 +24,14 @@ card addition, while WirePlumber has stored route volume; neither is yet
 proven to have sent the observed hardware-changing write. See the
 [Phase 8A.3 boot/trace plan](PHASE8A3_BOOT_AND_VOLUME_TRACE_PLAN.md) before
 choosing a policy workaround.
+The next owner-reported normal start **reproduced** the unit-2 sticky warning
+and `route.hw-volume=false`, with one settled sink. The prior shutdown's ALSA
+state now includes PCM Playback Volume step 79/−20.50 dB, and a later safe GET
+still showed Speaker −20.50 dB. This is not evidence that ALSA restored that
+value during boot: no host-write trace or immediate pre/post power-state
+measurement exists. One `usb_set_interface failed (-110)` initialization
+warning also appeared; do not hide it by treating successful later graph
+enumeration as proof that every boot operation succeeded.
 
 ### Mixer-exposure states are separate runtime cases
 
