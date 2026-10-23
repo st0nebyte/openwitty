@@ -150,6 +150,12 @@ endif()
 if(LEWITT_BUILD_TESTS AND UNIX)
     add_test(NAME audit_usb_call_sites
              COMMAND ${CMAKE_SOURCE_DIR}/tools/audit/check_usb_call_sites.sh ${CMAKE_SOURCE_DIR})
+
+    # Pure synthetic FU2 observer policy tests; no BPF load, USB, or audio APIs.
+    set_source_files_properties(tools/diagnostics/test_fu2_observer_logic.c
+                                PROPERTIES LANGUAGE CXX)
+    add_executable(fu2_observer_offline tools/diagnostics/test_fu2_observer_logic.c)
+    add_test(NAME fu2_observer_offline COMMAND fu2_observer_offline)
 endif()
 
 # Packaging check: install into an isolated DESTDIR and verify layout, RPATH, dev-path

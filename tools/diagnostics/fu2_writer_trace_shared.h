@@ -12,9 +12,15 @@ struct fu2_event {
     __u16 w_value;
     __u16 w_index;
     __u16 requested_len;
+    __u16 vendor;
+    __u16 product;
     __u8 request_type;
     __u8 request;
     __u8 data_len;
+    __u8 entry_seen;
+    __u8 capture_error;
+    __u8 busnum;
+    __u8 devnum;
     __u8 data[8];
     char comm[16];
     __u64 stack[10];
