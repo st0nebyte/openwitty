@@ -127,6 +127,9 @@ the 0.5 s difference. Correlation with the controller/port is real in this sampl
 **not shown to be causal**; per-controller init order or per-port power sequencing are candidate
 mechanisms, untested.
 
+> **Update (Phase 8A.18, 7th boot):** the device on `3-2` registered at ≈10.92 s in a later boot, so the
+> port/controller inference above is contradicted; see `PHASE8A18_USB_CONTROL_TIMEOUT_DEBUG_BOOT.md`.
+
 ## 7. Boot versus reconnect
 Reconnect (8A.9 and the recorded reconnects at monotonic ≈2691–2697 s in b-2 and ≈4460 s in b-1): module and ALSA already loaded, dependencies
 present, no module-load or card-creation cost; enumeration → `strings` → FU2 sticky/accept within

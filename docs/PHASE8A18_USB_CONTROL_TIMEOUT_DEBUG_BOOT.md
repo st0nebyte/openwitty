@@ -1,7 +1,8 @@
 # Phase 8A.18 — USB control-timeout debug boot (one boot)
 
-**Status: PREPARED — NOT AUTHORIZED TO EXECUTE** (written 2026-10-23 ~22:00 CEST, running boot still
-carries the Phase 8A.13 one-time `usbcore.quirks` edit; nothing below has been done).
+**Status: EXECUTED ONCE — INCONCLUSIVE (the intended parameter was not applied; see Results).**
+Original checkpoint text (prepared 2026-10-23 ~22:00 CEST, authorization given and the six safety
+confirmations recorded in chat right before the shutdown) follows; results are appended at the end.
 
 If this chat is gone after a shutdown: read this file, `PHASE8A17_SND_USB_AUDIO_PROBE_DELAY_ANALYSIS.md`
 and `PHASE8A13_DELAY_INIT_SINGLE_BOOT_TEST.md`, check `git status`, then follow "Resume after boot".
@@ -135,3 +136,59 @@ of the Phase 8A.13 token worked).
 Readiness: **CONDITIONAL-GO** for exactly one dyndbg-only shutdown→power-on boot after the user's
 explicit approval of this experiment and the immediate safety confirmation in §6. Phase 8A.13's
 authorization does **not** carry over. No shutdown has been requested or performed.
+
+---
+
+# Results (recorded 2026-10-23 ~22:05 CEST, after the single boot)
+
+## Procedure record
+User authorized this experiment and confirmed safety points 1–6. One normal shutdown (21:56) and one
+manual power-on (21:59); CONNECT 2 stayed in its port (`3-2`); the Limine editor was available and the
+one-time edit was applied (the running command line has the original arguments, **no**
+`usbcore.quirks` — so the Phase 8A.13 edit was indeed one-time).
+
+## Parameter verification: FAILED
+`/proc/cmdline` ends with `dyndbg"file drivers/usb/core/message.c line 88 +p"` — the **`=` after
+`dyndbg` is missing** (probably lost in the bootloader editor's key handling; the closing quote is present).
+Consequences, all observed read-only:
+- The kernel treated it as one unrelated token (no `dyndbg` parameter); `/proc/dynamic_debug/control`
+  still shows `message.c:88 [usbcore]usb_start_wait_urb =_` (disabled); enabled count unchanged (24).
+- No `timed out or killed` line exists in the kernel log for this boot (including the positive-control
+  moment at 17.0 s), as expected for a disabled site.
+- PID 1 was started with the extra argument `splash` only; the malformed token produced no kernel
+  notice besides the usual "unknown parameter" for `splash`.
+**Classification: INCONCLUSIVE — the debug site was never enabled, so nothing was learned about
+timeouts.** The one-boot allowance is used; **no retry was or will be started automatically.** A second
+attempt would be a new experiment needing fresh explicit approval and a safety re-confirmation.
+
+## Lessons for any future attempt (not authorized)
+- The user must read back the typed text character by character before F10, specifically
+  `dyndbg` **`=`** `"`; the `=` followed by `"` may be the problem key sequence on this keyboard layout
+  (dead-key / layout mapping under UEFI). The earlier `usbcore.quirks=29c2:0004:g` (`=` followed by a digit)
+  worked.
+- A pre-agreed fallback must not be improvised; abort rules in §6 stand.
+
+## Incidental observation (a seventh normal boot, no quirk, device on `3-2`)
+Elapsed times (monotonic): enumeration 2.0466 s; real-root first udevd line 5.357; `btusb` 5.479;
+FU2 sticky 10.924; `snd-usb-audio` registered 10.937; PLM *Started* 10.944 (+6.8 ms); `usb_set_interface
+failed (-110)` 17.000 (**+6.076 s** after sticky, same constant as all six earlier boots); sticky values
+`-15360/0/128 => -1024`. ALSA `PCM Playback Volume` absent, `route.hw-volume=false`, one sink, KDE 0.40.
+- **This contradicts the port inference in Phase 8A.17 §6:** on the *same* port `3-2` the sticky line was
+  at 10.924 s here but 11.41–11.44 s in the three earlier `3-2` boots. Port and controller do **not**
+  explain the two timing groups.
+- Across all seven boots the two groups (≈10.92 s and ≈11.43 s, 0.5 s apart) separate cleanly by the
+  first real-root udevd line: ≤5.428 s → ≈10.92 s; ≥5.439 s → ≈11.43 s (and by `btusb` time: ≤5.491 s vs
+  ≥5.548 s); real-root systemd start does not separate them. A **step** of 0.5 s rather than a
+  continuous dependence suggests the end of the hold is quantized (a periodic event or retry cadence of
+  ≈0.5 s) — e.g. a stall of ≈5.0 s counted from a start ≈0.5 s after udevd, whose end is reported at the
+  next ≈0.5 s tick. This is a **hypothesis from n=7**, two free parameters, not a result; it does not
+  identify the mechanism or the 0.5 s source.
+
+## User observations
+Not yet collected at the time of writing (ask: clicks, level changes, USB instability).
+
+## Next
+Do not repeat the boot automatically. Options requiring fresh approval and safety confirmation: a second
+dyndbg attempt with a read-back check; or the udev-debug boot (weaker). Offline: examine what has a
+≈0.5 s cadence in the USB/ALSA probe path (candidates: host/xHCI polling, workqueue delays, the
+device) using the exact-tag source and installed binaries.
