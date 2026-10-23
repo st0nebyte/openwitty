@@ -40,18 +40,46 @@ cross-checked against the real binary at `/usr/src/linux-cachyos/vmlinux`
   and read the device descriptor — and **before** `usb_new_device()` (the call that attaches
   drivers, including `snd-usb-audio`). No comment in-source explains the mechanism; this is a
   plain, unconditional 2000 ms sleep on the port/enumeration thread.
-- No additional 200 ms delay anywhere in `hub.c` is gated on `USB_QUIRK_DELAY_INIT`. The only
-  quirk-gated delay elsewhere is `USB_QUIRK_HUB_SLOW_RESET` (`o`) adding 100 ms to port-reset
-  recovery — unrelated bit, not part of this proposal. (A 2014 stable-3.8 backport once
-  implemented DELAY_INIT as "100 ms between two Get Configuration requests"; that is a
-  superseded, older implementation — the current mainline/CachyOS behavior is the single
-  2000 ms sleep quoted above, confirmed directly from current source.)
-- Local independent confirmation: `nm /usr/src/linux-cachyos/vmlinux` shows `hub_port_init`,
-  `usb_detect_quirks`, and `quirks_param_set` as real, non-weak symbols in this exact kernel
-  build. `hub_port_connect` itself has no standalone global symbol (CachyOS enables LTO, which
-  can inline it into a caller) — so the exact compiled instruction sequence could not be
-  disassembled directly by name; the confirmation here is of the surrounding, present
-  machinery, not a disassembly of the inlined body itself.
+- **CORRECTION (second delay site).** The first version of this document stated there is no
+  additional 200 ms delay. That was wrong; it came from a lossy summary of `hub.c` only, and
+  `config.c` had not been inspected. `drivers/usb/core/config.c`, `usb_get_configuration()`:
+  ```c
+  for (cfgno = 0; cfgno < ncfg; cfgno++) {
+      /* ... read 9-byte configuration header, allocate bigbuffer ... */
+      if (dev->quirks & USB_QUIRK_DELAY_INIT)
+          msleep(200);
+      /* "skip the second read if we already got everything" check follows */
+      /* ... optional full-length usb_get_descriptor() read ... */
+  }
+  ```
+  The 200 ms sleep is inside the per-configuration loop, after the 9-byte header read and
+  before the full-length read, so it runs **once per configuration descriptor** (up to
+  `bNumConfigurations` × 200 ms), even when the second read is skipped. It is not per retry.
+  This device reports `bNumConfigurations = 1` (read from sysfs, no USB traffic), so the expected
+  extra cost is **one** 200 ms sleep. This runs earlier than the 2000 ms site, inside
+  `hub_port_init()`/descriptor fetching, and thus before the 2000 ms sleep.
+- Other quirk-gated delay: `USB_QUIRK_HUB_SLOW_RESET` (`o`) adds 100 ms to port-reset recovery —
+  unrelated bit, not part of this proposal. (A 2014 stable-3.8 backport once implemented
+  DELAY_INIT as "100 ms between Get Configuration requests"; that is the ancestor of the
+  `config.c` site and is **not** superseded — it still exists, now as 200 ms per configuration.)
+- **Evidence tiers for the two delay sites:**
+  1. *Upstream release-source evidence* (current `torvalds/linux`): both sites present as quoted.
+     The exact `cachyos-7.2.10-1` tag source was not fetchable; CachyOS carries no known
+     `drivers/usb/core` patches.
+  2. *Installed-binary evidence* (read-only `objdump -d` of `/usr/src/linux-cachyos/vmlinux`,
+     whose `version` file is `7.2.10-1-cachyos`, matching `uname -r`):
+     - `usb_get_configuration`: `testb $0x40,0x53c(%r13)` / `je` / `mov $0xc8,%edi` /
+       `call msleep` — i.e. test of quirk bit 6 (`0x40`, DELAY_INIT) in `udev->quirks`, then
+       `msleep(200)`.
+     - `hub_event` (where `hub_port_connect` is inlined, LTO): `testb $0x40,0x53c(%r12)` / `je` /
+       `mov $0x7d0,%edi` / `call msleep` — i.e. `msleep(2000)` gated on the same bit and the same
+       struct offset, immediately after a `mutex_unlock`, matching the source shape.
+     This vmlinux is the build-tree image shipped with the installed headers package; it is
+     strong evidence about the installed kernel but not a read of the memory image of the running
+     kernel itself.
+  3. *Unverified:* actual runtime effect on the device; no test has been performed.
+- Total added enumeration delay when the flag is set on this device: ~200 ms (config.c) +
+  2000 ms (hub.c) ≈ 2.2 s, each only after the quirk is set for this VID:PID.
 
 ## 2. Toggle semantics vs. existing quirk state (the critical pre-check)
 
@@ -118,8 +146,9 @@ device enumerates and fails identically regardless of path.) This exactly reprod
 ~9-second enumeration-to-sticky-failure gap documented in Phase 8A.10, now confirmed across
 multiple additional boots, not just the one originally sampled.
 
-`DELAY_INIT`'s 2000 ms sleep runs once, immediately after `hub_port_init()` and before
-`usb_new_device()` — i.e. in the first ~2 seconds of the device's life, well before the ~11.4 s
+`DELAY_INIT`'s two sleeps (one 200 ms per configuration in `usb_get_configuration()`, then one
+2000 ms in `hub_port_connect()` after `hub_port_init()` and before
+`usb_new_device()`) add ~2.2 s in the first moments of the device's life, well before the ~11.4 s
 mixer probe. The device already receives roughly 9 additional seconds of "settling time" today
 between enumeration and the point of failure, through ordinary driver-load and probe sequencing
 alone, and the failure still occurs.
@@ -184,27 +213,44 @@ power-on**, not a warm reboot, to match the method that has actually been observ
 **Preferred mechanism — Limine's non-persistent, menu-time command-line edit (not a new boot
 entry at all):**
 
-Limine's boot-selection menu supports pressing `e` on the highlighted entry to edit its kernel
-command line for that single boot only; the edit is never written back to `limine.conf` and
-disappears on the next boot. This is confirmed as intended Limine behavior per the Arch Wiki's
-kernel-parameters documentation, and is architecturally safer than creating a persistent extra
-entry:
+Evidence for this mechanism: (a) the installed Limine 12.9.3 docs
+(`/usr/share/doc/limine/CONFIG.md`) describe a boot-menu *config editor* controlled by
+`editor_enabled` and list the per-entry `cmdline` option (`kernel_cmdline` is an alias) that is
+"passed to the kernel"; (b) the Arch Wiki states that pressing `e` at the entry menu edits the
+command line for the current boot only. The installed docs do **not** explicitly state that edits
+are never persisted; the single-boot property rests on the Arch Wiki plus the fact that the
+menu-time editor has no documented save-to-disk facility. It must be visually confirmed at the
+menu, not assumed. Note the editor edits the entry's config text, so the operator must locate the
+`cmdline:` line within it. Compared with a persistent extra entry this is expected to be safer:
 
 - No `limine.conf` write, so nothing to roll back if the boot fails badly.
 - No `limine-mkinitcpio`/initramfs regeneration needed.
-- No interaction with `ENABLE_ENROLL_LIMINE_CONFIG` checksum enrollment (verified currently
-  **unset/no** in `/etc/default/limine` and `/etc/limine-entry-tool.conf`, so this is moot
-  today regardless, but the live-edit path would stay safe even if it were enabled later).
+- No `limine.conf` modification, so no hash re-enrollment is triggered. **However**, per
+  `CONFIG.md`/`USAGE.md`, the editor is *unavailable* when a config hash is enrolled and Secure
+  Boot is active, and defaults to disabled-capable when a hash is enrolled. Read-only checks:
+  `SecureBoot` EFI variable = 0 (inactive), `SetupMode` = 1; `ENABLE_ENROLL_LIMINE_CONFIG` is not
+  set in `/etc/default/limine` (tool default `no`). Whether a hash is actually enrolled in the
+  Limine EFI binary could not be read (`/boot` is root-only), and `editor_enabled` in the
+  generated `/boot/limine.conf` could not be read either. So editor availability is
+  **unverified** until seen at the menu.
 - The default entry's stored `KERNEL_CMDLINE[default]` (currently
   `quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=00000000-...`, read from
   `/etc/default/limine`) is never touched.
 
 **Minimal proposed difference for the one test boot:** at the Limine menu, press `e` on the
-normal/default entry and append exactly one token to the shown command line:
+normal/default entry, **preserve every existing argument unchanged**, and append exactly one
+token to the end of the existing `cmdline` value:
 ```
 usbcore.quirks=29c2:0004:g
 ```
-Nothing else is added, removed, or reordered. Boot that single edited line once.
+Nothing else is added, removed, or reordered. Boot that single edited entry once.
+
+**Abort conditions (no improvising another method):** if the editor does not open or is disabled;
+if the normal known-good entry cannot be positively identified; if the existing `cmdline` is
+ambiguous, truncated, or does not match the baseline `rw rootflags=subvol=/@ root=UUID=...`
+form recorded in this document; or if it is unclear whether the edit will persist — then boot
+the unmodified entry and report back. Do not fall back to editing `limine.conf`,
+`/etc/default/limine`, modprobe files, or sysfs.
 
 **Could not be fully verified:** the live `/boot/limine.conf` file itself is unreadable by the
 current user (`/boot` is mounted `fmask=0077,dmask=0077` — root-only); this assessment relies on
@@ -220,8 +266,25 @@ any other boot parameter. Confirmed: no such change is staged anywhere in this d
 
 ## 8. Passive success/failure criteria for the future test
 
-All GET-only / observational, none side-effectful:
-1. `cat /proc/cmdline` after boot — confirms the edited line was actually used.
+All GET-only / observational, none side-effectful. Outcomes are scored **separately**:
+
+- **A.** Feature Unit 2 sticky rejection absent or present (criterion 4).
+- **B.** ALSA `PCM Playback Volume` present or missing (criterion 5).
+- **C.** PipeWire `route.hw-volume` true or false (criterion 6).
+- **D.** The single stereo playback sink still present (criterion 7).
+- **E.** The separate AudioStreaming `usb_set_interface … (-110)` timeout occurs or not (criterion 8).
+
+A missing sticky warning (A) is **not sufficient** if B or C show the hardware mixer is still
+unavailable. A good A/B/C result is **not** a failure merely because E persists: E is a separate
+interface-level timeout. `/proc/cmdline` (criterion 1) proves only that the parameter string was
+passed to the kernel; it is **not** proof the USB delay executed. Direct evidence of execution is
+indirect at best: a shifted enumeration-to-bind timeline in `journalctl -k -o short-monotonic`
+(roughly +2.2 s between `New USB device found` and the first driver bind for `29c2:0004`,
+compared with the ~0 s baseline in earlier boots) — and even that is inferential, not a
+measurement of the quirk bit.
+
+1. `cat /proc/cmdline` after boot — confirms the edited line was passed to the kernel (not that
+   the delay ran).
 2. `cat /sys/module/usbcore/parameters/quirks` — likely still empty (command-line quirks are
    not mirrored into this sysfs file; this file only reflects values written to it at runtime).
    Do not treat an empty value here as evidence the quirk didn't apply — see next criterion.
@@ -244,14 +307,16 @@ All GET-only / observational, none side-effectful:
     requirements, not measured by any new mechanism introduced here.
 
 **Interpretation:**
-- **Positive evidence**: criterion 3 true, criterion 1 confirms the parameter was live, and
-  criterion 4 finds no sticky/−110 failure this boot.
-- **Negative evidence**: criteria 1 and 3 true, but criterion 4 still finds the failure.
+- **Positive evidence**: criterion 1 shows the parameter, criterion 3 shows normal enumeration,
+  the enumeration→bind timeline shows the expected shift, A is absent **and** B and C show a
+  working hardware volume. E may persist without changing this classification.
+- **Negative evidence**: same preconditions, but A (sticky rejection) still occurs, or A is
+  absent while B/C show the hardware volume is still missing.
 - **Inconclusive**: criterion 1 false (edit didn't take), criterion 3 false (device didn't
   enumerate normally for an unrelated reason), or the boot wasn't a genuine shutdown→power-on
   cycle (see §7).
 
-One successful boot is evidence, not proof of permanent reliability — this mirrors the
+One successful boot is promising evidence, not proof of permanent reliability — this mirrors the
 project's existing position on the one Phase 8A.9 reconnect trace.
 
 ## 9. Physical audio safety
@@ -310,14 +375,18 @@ configuration was changed in this phase in the first place.
   could fetch; the semantic claims in §1–§2 are sourced from current upstream
   `torvalds/linux` plus a symbol-level cross-check against the actual installed
   `7.2.10-1-cachyos` `vmlinux`, not a byte-identical source diff of the CachyOS tree.
-  `hub_port_connect` itself is not independently disassemblable due to LTO inlining.
+  `hub_port_connect` is inlined into `hub_event` (LTO); the binary check in §1 was therefore
+  done on `hub_event` and `usb_get_configuration`.
   CachyOS's own patch repository shows no USB-core patches, which is the basis for treating
   upstream behavior as authoritative here.
 - The timing hypothesis (§4) is plausible and testable but unproven; the 9-second existing gap
   not being sufficient is suggestive, not conclusive, of why `DELAY_INIT`'s specific placement
   might matter.
 - Reproducibility was confirmed across 5 of 5 recently sampled shutdown→power-on cycles, which
-  is strong but not unlimited evidence; a single future test boot is one more data point, not a
+  is strong but not unlimited evidence. Note that a long shutdown gap does **not** by itself
+  prove CONNECT 2 lost USB standby power (the host port may keep VBUS powered while "off"; that
+  is unmeasured here), so "shutdown→power-on" identifies the observed startup *method*, not a
+  proven device power state; a single future test boot is one more data point, not a
   statistical guarantee in either direction.
 
 ## 12. GO / CONDITIONAL / NO-GO
