@@ -122,8 +122,7 @@ User confirmed all six safety conditions (playback/recording stopped, external a
 protected, headphones isolated, no reliance on software/hardware mute, instructions retained,
 one shutdown→power-on accepted) and then did one normal shutdown (20:28) and one manual power-on
 (20:30). Boot 0 is a genuine shutdown→power-on boot (`last -x`: shutdown 20:28, boot 20:30).
-The user did not report anything unusual during the boot at the time of writing; an explicit
-audible-behavior report was **not yet collected** (see "User-reported behavior").
+The user later reported the boot as uneventful (see "User-reported behavior").
 Whether the Limine editor was available and used as instructed is evidenced only indirectly: the
 kernel command line contains exactly the baseline arguments plus the one new token.
 
@@ -173,9 +172,15 @@ measurement), compared with the pre-shutdown snapshot at 20:25:58:
 No hardware writes by OpenWitty. No change in these values was observed. Note the kernel's own
 mixer probe happened between the snapshots; it either did not alter these values or restored them.
 
-## User-reported behavior
-Not yet collected. Question for the user: any clicks, speaker-on sounds, level changes, USB
-instability? (Subjective, not instrumented.)
+## User-reported behavior (subjective, not instrumented)
+1. **The boot experiment itself was uneventful from the user's perspective:** no clicks,
+   speaker-on sounds, unexpected volume changes, or USB instability were noticed.
+2. **Separate, later event:** after the experiment the user accidentally moved the Linux/KDE
+   volume slider from 85% down to 40%. This was a manual, accidental UI adjustment and is not an
+   effect of the DELAY_INIT quirk. No hardware measurement was taken after that adjustment; the
+   last measured physical Speaker state remains -4.00 dB, unmuted (20:31:40 CEST). Because
+   `route.hw-volume=false` on this boot, the Linux slider is a software attenuation; it must not
+   be assumed that the physical Speaker level followed it (or did not).
 
 ## Classification: NEGATIVE
 The parameter was accepted by the kernel, CONNECT 2 enumerated normally, and the Feature Unit 2
