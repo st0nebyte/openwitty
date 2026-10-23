@@ -329,7 +329,9 @@ from `endpoint_set_interface`; dynamic-debug tie 0.061 ms. Same request *type* (
 and caller. The following identical requests complete in ≈0.12 ms.
 
 ## Audio observations
-Reported by the user: (pending at the time of writing — see below). GET-only snapshot 23:05:05 CEST after the run: Speaker −4.00 dB
+**Attempt 2 (user report): no crackle, no clicking and no other audible problem.** This is separate from attempt 1, where the user
+reported two very quiet crackles (subjective; timing relative to the writes unknown). The unchanged snapshot below does not exclude transient
+changes during the kernel's initialization. GET-only snapshot 23:05:05 CEST after the run: Speaker −4.00 dB
 unmuted, Headphone −32.40 dB muted, Mic/Instrument muted (identical to every earlier snapshot). ALSA `PCM Playback Volume` absent,
 `route.hw-volume=false`, one sink, KDE 0.40.
 
