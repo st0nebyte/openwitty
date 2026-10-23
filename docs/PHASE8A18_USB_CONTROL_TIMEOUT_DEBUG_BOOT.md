@@ -183,6 +183,8 @@ failed (-110)` 17.000 (**+6.076 s** after sticky, same constant as all six earli
   ≈0.5 s) — e.g. a stall of ≈5.0 s counted from a start ≈0.5 s after udevd, whose end is reported at the
   next ≈0.5 s tick. This is a **hypothesis from n=7**, two free parameters, not a result; it does not
   identify the mechanism or the 0.5 s source.
+  **Explained in Phase 8A.19:** the 5000-jiffy timeout expires on the timer wheel's 512-jiffy (0.512 s) grid, so the end of the stall
+  snaps to one of two adjacent grid points.
 
 ## User observations
 Not yet collected at the time of writing (ask: clicks, level changes, USB instability).
