@@ -165,6 +165,12 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                                 PROPERTIES LANGUAGE CXX)
     add_executable(fu2_boot_lifecycle_offline tools/diagnostics/test_fu2_boot_lifecycle.c)
     add_test(NAME fu2_boot_lifecycle_offline COMMAND fu2_boot_lifecycle_offline)
+    # Boot-time USB EP0 trace decoder/lifecycle (synthetic traces and fake tracefs only).
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME usb_ep0_trace_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_trace.py)
+    endif()
 endif()
 
 # Packaging check: install into an isolated DESTDIR and verify layout, RPATH, dev-path
