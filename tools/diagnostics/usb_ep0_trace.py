@@ -30,7 +30,9 @@ LIMINE_CONF = "/boot/limine.conf"
 ENTRY_BEGIN = "# OPENWITTY-8A19-BEGIN (temporary USB trace entry; remove after use)"
 ENTRY_END = "# OPENWITTY-8A19-END"
 ENTRY_NAME = "OpenWitty USB trace (temporary)"
-BUF_ARG = "trace_buf_size=8M"
+# `ftrace=nop` makes the kernel expand the boot ring buffer to trace_buf_size at once
+# (trace.c set_cmdline_ftrace); without it the global buffer stays at its 7 KB/CPU minimum (Phase 8A.19 attempt 1).
+BUF_ARGS = ["ftrace=nop", "trace_buf_size=8M"]
 DYNDBG_ARG = 'dyndbg="file drivers/usb/core/message.c line 88 +p"'
 
 # struct offsets of the installed 7.2.10-1-cachyos build (pahole on its BTF).
@@ -58,7 +60,7 @@ def boot_arg():
 
 
 def extra_cmdline_args():
-    return [boot_arg(), BUF_ARG, DYNDBG_ARG]
+    return [boot_arg()] + BUF_ARGS + [DYNDBG_ARG]
 
 
 # ---------------------------------------------------------------- USB setup decoding
@@ -333,6 +335,9 @@ def collect(out_dir, tracefs=TRACEFS, require_root=True):
     if not os.path.isdir(ev):
         sys.exit("no %s events present (was the trace entry booted?)" % GROUP)
     _write(os.path.join(ev, "enable"), "0")  # stop recording our events only
+    bufsize = _read(os.path.join(tracefs, "buffer_size_kb")).splitlines()[0]
+    if "expanded" in bufsize:
+        print("WARNING: ring buffer was never expanded (%s): early events were almost certainly overwritten" % bufsize)
     trace = _read(os.path.join(tracefs, "trace"))
     raw = os.path.join(out_dir, "raw_trace.txt")
     fd = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

@@ -64,6 +64,11 @@ class ProbeDefinitions(unittest.TestCase):
         for _, d in T.PROBES:
             self.assertIn(T.GROUP + "/", d)
 
+    def test_ring_buffer_is_expanded_at_boot(self):
+        args = T.extra_cmdline_args()
+        self.assertIn("ftrace=nop", args)
+        self.assertIn("trace_buf_size=8M", args)
+
     def test_no_stale_quirk_argument(self):
         self.assertNotIn("usbcore.quirks", " ".join(T.extra_cmdline_args()))
 

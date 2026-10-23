@@ -110,6 +110,10 @@ reconnect path ran the same code in ~0.18 s).
 > **Update (Phase 8A.18 attempt 2):** a `(udev-worker)` `ep0out len=0/0` timeout on CONNECT 2 was logged at
 > 11.347 s, 69 ms before the FU2 sticky line — direct support for candidate A (not for the exact call).
 
+> **Correction (Phase 8A.19):** the stalled probe call is not one of the four `stream.c` calls but the
+> `usb_set_interface(dev, interface, 0)` "reset the current interface" call in `snd_usb_create_stream`
+> (`card.c:320`), proven by the return address in the boot trace; it is a SET_INTERFACE with alternate 0.
+
 ## 5. Module-dependency and synchronization alternatives
 - Zstd-compressed module (`CONFIG_MODULE_COMPRESS_ZSTD`, all modules) and signature checking add
   ms-scale cost; they cannot by themselves explain 5 s unless storage/CPU is saturated, and `btusb`
