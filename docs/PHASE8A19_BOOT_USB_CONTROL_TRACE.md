@@ -150,17 +150,25 @@ timed-out request was lost.
    wLength=0` = **standard `SET_INTERFACE`, interface 2, alternate 0**. The independent `usb_set_interface` probe
    returned −110 from `endpoint_set_interface` at 17.4957 s. The dynamic-debug line (17.491078) ties to it within 2 ms.
    17.5277 s: the same `SET_INTERFACE(2, alt 0)` completes in 0.123 ms.
-2. **The first (udev-worker) timeout — return captured, entry lost.** `usb_set_interface` returned **−110** at
-   11.351722 s in task `(udev-worker)` with the return address `snd_usb_create_stream+0x189`; the dynamic-debug
-   "timed out" line is at 11.347443 s (the return follows 4.3 ms later). In the installed module the only
-   `usb_set_interface` call in `snd_usb_create_stream` is `mov %r14,%rdi; mov %ebx,%esi; xor %edx,%edx; call
-   usb_set_interface` right after `snd_usb_parse_audio_interface` returns 0 — source `card.c:320`
-   "reset the current interface" — so the request is **SET_INTERFACE with alternate setting 0**
-   (`wValue=0`) (binary-proven). The interface number (`wIndex`) was in the lost entry record. Inference only:
-   interface 1, because the next surviving udev-worker record, a clock-source rate query for the *following* stream
-   (`GET_RANGE`, entity 0x29, 11.351773 s), starts 51 µs after the return and the streams are processed 1 then 2.
-   **This corrects Phase 8A.17's candidate list:** the stalled call is the card.c reset call, not one of the four
-   `stream.c:1261–1267` calls (those completed quickly, e.g. `SET_INTERFACE(1, alt 0)` at 5.796396 s in 0.6 ms).
+2. **The first (udev-worker) timeout — `usb_set_interface` call fully captured, control-URB records lost.**
+   (Corrected after re-analysis with the new `usb_set_interface` pairing; the first write-up of this run wrongly said
+   the entry was lost and the interface only inferred.) The `si`/`sir` probes of task `(udev-worker)`-563 on one CPU
+   survived: `si iface=1 alt=1` at 5.798512 s → `sir ret=0` at 5.842917 s (caller
+   `__snd_usb_parse_audio_interface+0xdb6`, 44 ms); then **`si iface=1 alt=0` at 5.842918 s → `sir ret=−110` at
+   11.351722 s** with return address `snd_usb_create_stream+0x189`, i.e. the `card.c:320` "reset the current interface"
+   call (binary: `xor %edx,%edx; call usb_set_interface` right after `snd_usb_parse_audio_interface` returns 0).
+   So the first stalled request is **SET_INTERFACE, interface 1, alternate 0, measured** (call duration 5.509 s).
+   Its SETUP follows from the arguments: `bmRequestType=0x01, bRequest=0x0b, wValue=0x0000, wIndex=0x0001,
+   wLength=0` — **derived, not observed**: the `uw`/`uwr` records of the control URB were overwritten. The
+   dynamic-debug "timed out" line at 11.347443 puts the URB submission at ≈6.347 s (11.347 − 5.000), i.e. about
+   **0.504 s after the call began** (5.843 s) — time spent inside `usb_set_interface` before the control request
+   (LPM handling and the xHCI bandwidth/endpoint reconfiguration step); the equivalent prefix before WirePlumber's
+   stalled call was 29.7 ms (12.378 → 12.408 s). This ≈0.5 s prefix is a candidate for the ≈0.5 s step between the two
+   sticky-time groups of Phase 8A.18 (Group A ≈10.92 s vs B ≈11.43 s): 5.843 + prefix + 5.0 + ≈0.07 s reproduces
+   11.42 s for a 0.5 s prefix and ≈10.9 s for none — a hypothesis from one measured case, not shown.
+   The dynamic-debug line (11.347443) is 4.3 ms before the `sir` return at 11.351722.
+   **This corrects Phase 8A.17's candidate list:** the stalled call is the `card.c:320` reset call, not one of the
+   four `stream.c:1261–1267` calls (those completed in 0.6 ms and 44 ms).
 3. **Earliest udev-worker probe traffic that survived (5.7958–5.7978 s):** clock-source `GET_RANGE`
    (entity 0x29, `wValue 0x0100`, `wLength 2`), `SET_INTERFACE(1, alt 0)` (0.6 ms, OK), two `GET_CUR` of the
    sample-rate control — each 0.56–0.75 ms and successful. Between 5.798 s and the timeout nothing survived.
@@ -185,17 +193,72 @@ those two writes is possible but unmeasured and subjective.
 
 ## Interpretation
 - **Transport failure:** the stall is a **`SET_INTERFACE` (alternate 0) control transfer that receives no completion
-  for the full 5 s timeout**, once in the probe (udev-worker, `usb_set_interface(iface, 0)`, interface 1 inferred) and
-  once from userspace (WirePlumber, interface 2, certain). Observable at the host-controller wait; it is not an
+  for the full 5 s timeout**, once in the probe (udev-worker, `usb_set_interface(1, 0)`, measured by the call-entry probe) and
+  once from userspace (WirePlumber, interface 2). Observable at the host-controller wait; it is not an
   error response (a STALL would return −32 quickly).
 - **Device vs host:** a request that is neither completed nor stalled is consistent with a device that does not
   answer (or a controller that does not complete it); this data cannot separate the two. The same request type
   later completes in 0.12 ms, so it is not a permanent inability.
 - **Causality:** the timeout precedes the FU2 sticky verdict by ≈66 ms; no evidence here shows that it causes it.
   The reconnect path runs the same code without a stall and accepts FU2.
-- **Not established:** interface number of the first stall; the FU2 prefix; the 5.798–6.347 s gap.
+- **Not established:** the SETUP bytes of the first stall as observed (derived only); the FU2 prefix; what the ≈0.5 s before the control URB consists of.
 
 ## Next
 No automatic retry. A second attempt would be the same entry plus `ftrace=nop` (already in the tool) — it would
 capture the submission and the SETUP of the first stalled request and the complete FU2 sequence; it needs a new
 physical shutdown/power-on and the same safety confirmation.
+
+---
+
+# Attempt 2 — PREPARED (2026-10-23 ~23:35 CEST)
+
+**Status: prepared, not yet executed. The user authorized one additional controlled trace boot; the physical
+audio-safety confirmation immediately before shutdown is still required. No third attempt follows automatically.**
+
+## Why attempt 1 was partial
+The probes and boot-time events worked, but the global ring buffer stayed at its ≈7 KB/CPU minimum
+(`buffer_size_kb` read `7 (expanded: 8192)`), so roughly 100 events per CPU survived. Retained by luck: the complete
+`usb_set_interface` timeline of the udev worker (its CPU was quiet) and the tail of the FU2 sequence; lost: the
+control-URB records of the first stall (observed SETUP and exact submit time), the mute/range/first-GET prefix of FU2.
+
+## New boot arguments (exactly, appended to the unchanged normal arguments of the `linux-cachyos` entry)
+`kprobe_event=<four probes, unchanged>` `ftrace=nop` `trace_buf_size=8M` `dyndbg="file drivers/usb/core/message.c line 88 +p"`.
+No `usbcore.quirks`. `ftrace=nop` appears exactly once (offline test). Mechanism (exact tag, `kernel/trace/trace.c`):
+`set_cmdline_ftrace()` runs `trace_set_ring_buffer_expanded(NULL)` ("We are using ftrace early, expand it") and
+`tracer_alloc_buffers()` then allocates `trace_buf_size` instead of the 1-page minimum. `nop` is the do-nothing tracer.
+**Expected after boot:** `buffer_size_kb` = `8192` per CPU (not `7 (expanded: …)`), 16 CPUs → 128 MiB.
+
+## Tool changes (offline, 61 tests)
+- `collect` records the pre-collect buffer text, `expanded` verdict, header counts and **per-CPU `stats`** (entries,
+  overrun, commit overrun, oldest event ts) into `collect_report.json` (mode 0600), restores `buffer_size_kb` to the
+  **expanded size recorded before the boot** (baseline saved by `entry install` in
+  `/var/lib/openwitty-8a19/tracefs_baseline.json`, not a hard-coded value), restores `tracing_on`, and `verify-clean`
+  compares tracing_on/tracer/set_event/kprobe_events/instances/buffer with that baseline.
+- `analyze --report collect_report.json` gives a strict **COMPLETENESS** verdict: INVALID if the buffer was not
+  expanded, any CPU overrun, header loss, or coverage starts after 3 s; PARTIAL if the first timed-out request's
+  `uw`/`uwr` records, any entry/return pairing, or the FU2 prefix (must start with a GET and contain a volume SET) is
+  missing; COMPLETE only when none of these applies. A decoded request list alone is never accepted as complete.
+- `usb_set_interface` entry/return pairing (interface, alternate, caller, duration); the earliest timeout is chosen
+  across requests and calls; a SETUP derived from call arguments is labelled "derived, not observed".
+
+## Verification and abort conditions after boot
+Proceed only if `/proc/cmdline` has the arguments and no `usbcore.quirks`; four `owtrace` events exist and are enabled;
+`buffer_size_kb` is expanded. If the buffer is still unexpanded: save what remains, mark PARTIAL, do **not** retry.
+Abort the whole plan (boot the normal entry) if the temporary entry is missing or the menu behaves unexpectedly.
+
+## Cleanup and rollback
+`collect` (saves raw outside Git, removes only the four probes, restores recorded buffer/tracing state, verifies),
+then `entry remove` (exact block removal) and `entry status`; `limine.conf` must equal the pre-change backup unless
+`limine-snapper-sync` changed it meanwhile. Fallbacks if the trace boot fails: power-cycle once and choose the normal
+`linux-cachyos` entry (the LTS entry and snapshot entries exist but are not claimed to have been tested).
+
+## Audio safety
+The kernel's probe can write FU2 volume (0 dB fallback seen); attempt 1 produced a very quiet, subjective crackle with an
+unchanged GET-only snapshot afterwards (Speaker −4.00 dB unmuted, Headphone −32.40 dB muted), which cannot exclude a
+transient. Playback and recording stopped; speakers/amplifiers disconnected, off or independently safe; headphones and
+listeners protected; no reliance on KDE (40%) or CONNECT 2 mute; no deliberate level/mute change.
+
+## Resume after boot
+`git status`; `/proc/cmdline`; `buffer_size_kb`; `sudo python3 -I tools/diagnostics/usb_ep0_trace.py collect --out-dir
+~/.local/state/openwitty/trace-8a19-attempt2`; `analyze … --report …/collect_report.json --dmesg <timeout lines>`; passive
+FU2/ALSA/PipeWire state; one GET-only snapshot; `entry remove` + `entry status` + `verify-clean`; document; commit/push.

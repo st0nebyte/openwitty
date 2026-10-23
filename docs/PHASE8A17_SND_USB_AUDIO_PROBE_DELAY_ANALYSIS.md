@@ -112,7 +112,8 @@ reconnect path ran the same code in ~0.18 s).
 
 > **Correction (Phase 8A.19):** the stalled probe call is not one of the four `stream.c` calls but the
 > `usb_set_interface(dev, interface, 0)` "reset the current interface" call in `snd_usb_create_stream`
-> (`card.c:320`), proven by the return address in the boot trace; it is a SET_INTERFACE with alternate 0.
+> (`card.c:320`), proven by the return address in the boot trace; it is `SET_INTERFACE(interface 1, alt 0)` (measured by
+> the call-entry probe, see Phase 8A.19).
 
 ## 5. Module-dependency and synchronization alternatives
 - Zstd-compressed module (`CONFIG_MODULE_COMPRESS_ZSTD`, all modules) and signature checking add

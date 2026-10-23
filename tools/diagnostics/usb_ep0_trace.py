@@ -149,7 +149,7 @@ def parse_trace(text):
         for k, v in KV.findall(m.group("kv")):
             kv[k] = int(v, 0)
         recs.append({"comm": m.group("comm"), "pid": int(m.group("pid")), "cpu": int(m.group("cpu")),
-                     "ts": float(m.group("ts")), "ev": m.group("ev"), "kv": kv})
+                     "ts": float(m.group("ts")), "ev": m.group("ev"), "where": m.group("where"), "kv": kv})
     info["malformed_lines"] = bad
     info["loss"] = loss
     return recs, info
@@ -171,6 +171,36 @@ def pair_requests(recs):
             out.append({"entry": e, "ret": r})
     unpaired += len(open_by_pid)
     return out, unpaired
+
+
+CALLER = re.compile(r"^(?P<caller>.+?)\s+<-\s+")
+
+
+def pair_set_interface(recs, vid=TARGET_VID, pid=TARGET_PID):
+    """Pair `si` (entry) with the next `sir` (return) of the same task.
+
+    Returns (calls, orphan_returns). An orphan return (entry overwritten or never recorded) keeps its
+    status and caller but has no interface/alternate; it must never be reported as a complete call."""
+    open_by_pid, calls, orphans = {}, [], []
+    for r in recs:
+        if r["ev"] == "si":
+            open_by_pid[r["pid"]] = r
+        elif r["ev"] == "sir":
+            e = open_by_pid.pop(r["pid"], None)
+            m = CALLER.match(r["where"])
+            caller = m.group("caller") if m else r["where"]
+            ret = r["kv"].get("ret")
+            if e is None:
+                orphans.append({"ts_return": r["ts"], "task": r["comm"], "ret": ret,
+                                "ret_name": ERRNO.get(ret, str(ret)), "caller": caller})
+                continue
+            if e["kv"].get("vid") != vid or e["kv"].get("pid") != pid:
+                continue
+            calls.append({"ts_entry": e["ts"], "ts_return": r["ts"], "elapsed_s": round(r["ts"] - e["ts"], 6),
+                          "task": e["comm"], "devnum": e["kv"].get("devnum"), "interface": e["kv"].get("iface"),
+                          "alternate": e["kv"].get("alt"), "ret": ret, "ret_name": ERRNO.get(ret, str(ret)),
+                          "caller": caller})
+    return calls, orphans
 
 
 def build_requests(recs, vid=TARGET_VID, pid=TARGET_PID):
@@ -235,7 +265,62 @@ def fu2_timeline(reqs):
     return out
 
 
-def analyze(text, dmesg=None):
+def first_timeout_detail(reqs, calls, orphans):
+    """Everything known about the EARLIEST timed-out EP0 operation, with explicit gaps.
+
+    Candidates are (a) paired uw/uwr requests that timed out, (b) usb_set_interface calls that returned -110
+    and (c) orphan usb_set_interface returns. The earliest by completion time wins; a usb_set_interface call
+    is joined with a timed-out request that falls inside its interval (same task)."""
+    cands = []
+    for q in reqs:
+        if "error" not in q and is_timeout(q):
+            cands.append((q["ts_complete"], "req", q))
+    for c in calls:
+        if c["ret"] == -110:
+            cands.append((c["ts_return"], "si", c))
+    for o in orphans:
+        if o["ret"] == -110:
+            cands.append((o["ts_return"], "orphan", o))
+    if not cands:
+        return None
+    cands.sort(key=lambda x: x[0])
+    _, kind, item = cands[0]
+    si, req, orphan = None, None, None
+    if kind == "req":
+        req = item
+        si = next((c for c in calls if c["ret"] == -110 and c["task"] == req["comm"]
+                   and c["ts_entry"] <= req["ts_submit"] <= c["ts_return"]), None)
+    elif kind == "si":
+        si = item
+        req = next((q for q in reqs if "error" not in q and is_timeout(q) and q["comm"] == si["task"]
+                    and si["ts_entry"] <= q["ts_submit"] <= si["ts_return"]), None)
+    else:
+        orphan = item
+    d = {"request_captured": req is not None, "set_interface_entry_captured": si is not None}
+    if req is not None:
+        d.update({"task": req["comm"], "bus": req["bus"], "devnum": req["devnum"], "setup": req["setup"],
+                  "meaning": req["desc"]["name"], "interface": req["desc"].get("interface"),
+                  "alternate": req["desc"].get("alternate"), "ts_submit": req["ts_submit"],
+                  "ts_complete": req["ts_complete"], "duration_s": round(req["elapsed"], 6), "ret": req["ret"]})
+    if si is not None:
+        d["usb_set_interface"] = si
+        if req is None:
+            # The control URB records are missing: the SETUP below is derived from the call arguments
+            # (SET_INTERFACE is bm=0x01 b=0x0b wValue=alternate wIndex=interface wLength=0), not observed.
+            d.update({"task": si["task"], "interface": si["interface"], "alternate": si["alternate"],
+                      "ret": si["ret"], "devnum": si["devnum"], "setup_derived_not_observed": {
+                          "bmRequestType": 0x01, "bRequest": 0x0B, "wValue": si["alternate"],
+                          "wIndex": si["interface"], "wLength": 0}})
+    if req is None:
+        d["missing"] = "uw/uwr records (SETUP packet, submit and completion of the control URB)"
+        if si is None:
+            d["missing"] += " and the usb_set_interface entry"
+        if orphan is not None:
+            d["orphan_return"] = orphan
+    return d
+
+
+def analyze(text, dmesg=None, report=None):
     recs, info = parse_trace(text)
     reqs, other, unpaired, malformed = build_requests(recs)
     timeouts = [q for q in reqs if is_timeout(q)]
@@ -261,6 +346,10 @@ def analyze(text, dmesg=None):
                 "ts_submit": q["ts_submit"], "elapsed_s": round(q["elapsed"], 6), "task": q["comm"],
                 "interface": q["desc"].get("interface"), "alternate": q["desc"].get("alternate"),
                 "ret": q["ret"], "ret_name": q["ret_name"]})
+    calls, orphans = pair_set_interface(recs)
+    res["usb_set_interface_calls"] = calls
+    res["orphan_set_interface_returns"] = orphans
+    res["first_timeout"] = first_timeout_detail(reqs, calls, orphans)
     first_to = timeouts[0] if timeouts else None
     if first_to is not None:
         after = [f for f in res["fu2"] if f["t"] >= first_to["ts_complete"]]
@@ -268,6 +357,7 @@ def analyze(text, dmesg=None):
             res["first_timeout_to_first_fu2_s"] = round(after[0]["t"] - first_to["ts_complete"], 6)
     if dmesg:
         res["debug_message_ties"] = tie_debug_messages(dmesg, timeouts)
+    res["completeness"] = completeness(res, report)
     return res
 
 
@@ -286,6 +376,69 @@ def tie_debug_messages(dmesg_text, timeouts, tol=0.005):
         ties.append({"dmesg_ts": ts, "task": m.group("task"), "matched_request": bool(match),
                      "delta_ms": round((ts - match[0]["ts_complete"]) * 1000, 3) if match else None})
     return ties
+
+
+# ---------------------------------------------------------------- completeness
+
+def parse_cpu_stats(text):
+    """Parse one per_cpu/cpuN/stats file -> dict of ints (floats for timestamps)."""
+    out = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*([a-z ]+?):\s*([0-9.]+)\s*$", line)
+        if m:
+            k, v = m.group(1).strip().replace(" ", "_"), m.group(2)
+            out[k] = float(v) if "." in v else int(v)
+    return out
+
+
+def buffer_expanded(buffer_text):
+    first = buffer_text.splitlines()[0] if buffer_text else ""
+    if "expanded" in first:
+        return False
+    m = re.match(r"\s*(\d+)", first)
+    return bool(m) and int(m.group(1)) >= 4096
+
+
+def completeness(res, report=None):
+    """Strict verdict. COMPLETE only if nothing indicates loss and the key sequences are whole."""
+    reasons = []
+    if report is None:
+        reasons.append("no collect report: buffer expansion and per-CPU overwrite unknown")
+    else:
+        if not report.get("buffer_expanded"):
+            reasons.append("ring buffer was not expanded (%s)" % report.get("buffer_size_kb"))
+        if report.get("cpu_overrun_total", 0) > 0:
+            reasons.append("per-CPU overrun events: %d" % report["cpu_overrun_total"])
+        oldest = report.get("oldest_event_ts_min")
+        if oldest is not None and oldest > 3.0:
+            reasons.append("oldest retained event is at %.3fs (boot coverage starts late)" % oldest)
+    if res["info"]["loss"]:
+        reasons.append("trace header shows overwritten entries")
+    if res["unpaired_events"]:
+        reasons.append("%d unpaired entry/return events" % res["unpaired_events"])
+    if res["malformed_setups"] or res["info"]["malformed_lines"]:
+        reasons.append("malformed records present")
+    ft = res.get("first_timeout")
+    if ft is not None and not ft["request_captured"]:
+        reasons.append("first timed-out request entry is missing (%s)" % ft.get("missing"))
+    if res["timeouts"] == [] and ft is None:
+        reasons.append("no timed-out request in the trace (nothing to attribute)")
+    fu2 = res["fu2"]
+    if not fu2:
+        reasons.append("no FU2 requests recorded")
+    else:
+        first = fu2[0]
+        if first["dir"] != "IN":
+            reasons.append("FU2 sequence starts with a SET (prefix lost)")
+        if not any(f["dir"] == "OUT" and f["kind"] == "volume" for f in fu2):
+            reasons.append("FU2 sequence has no volume SET")
+    if not reasons:
+        return {"verdict": "COMPLETE", "reasons": []}
+    # Integrity failures make every other statement unreliable (INVALID); missing sequences with
+    # intact integrity are PARTIAL.
+    integrity = any(r.startswith(("ring buffer was not expanded", "per-CPU overrun", "trace header",
+                                  "oldest retained event")) for r in reasons)
+    return {"verdict": "INVALID" if integrity else "PARTIAL", "reasons": reasons}
 
 
 # ---------------------------------------------------------------- privileged helpers
@@ -317,17 +470,64 @@ def tracefs_command(path, text):
         os.close(fd)
 
 
-def verify_clean(tracefs=TRACEFS):
+def _lines(p):
+    return [l for l in _read(p).splitlines() if l.strip()]
+
+
+def tracefs_baseline(tracefs=TRACEFS):
+    """Snapshot of the tracefs state we must leave unchanged (taken before the trace boot)."""
+    def first(name):
+        return (_read(os.path.join(tracefs, name)).splitlines() or [""])[0]
+    return {"buffer_size_kb": first("buffer_size_kb"), "tracing_on": first("tracing_on"),
+            "current_tracer": first("current_tracer"), "trace_clock": first("trace_clock"),
+            "set_event": _lines(os.path.join(tracefs, "set_event")),
+            "kprobe_events": _lines(os.path.join(tracefs, "kprobe_events")),
+            "instances": sorted(os.listdir(os.path.join(tracefs, "instances")))
+            if os.path.isdir(os.path.join(tracefs, "instances")) else []}
+
+
+def baseline_buffer_kb(baseline):
+    """KB to restore: the expanded size from '7 (expanded: 1408)', or the plain size."""
+    if not baseline:
+        return None
+    text = baseline.get("buffer_size_kb", "")
+    m = re.search(r"expanded:\s*(\d+)", text)
+    if m:
+        return int(m.group(1))
+    m = re.match(r"\s*(\d+)", text)
+    return int(m.group(1)) if m else None
+
+
+def verify_clean(tracefs=TRACEFS, baseline=None):
     problems = []
     ke = _read(os.path.join(tracefs, "kprobe_events"))
     if GROUP + "/" in ke:
         problems.append("kprobe_events still contains %s probes" % GROUP)
     if os.path.isdir(os.path.join(tracefs, "events", GROUP)):
         problems.append("events/%s still present" % GROUP)
+    if baseline:
+        now = tracefs_baseline(tracefs)
+        for k in ("tracing_on", "current_tracer", "set_event", "kprobe_events", "instances"):
+            if now[k] != baseline[k]:
+                problems.append("%s differs from baseline: %r != %r" % (k, now[k], baseline[k]))
+        want = baseline_buffer_kb(baseline)
+        if want is not None and not re.match(r"\s*%d\b" % want, now["buffer_size_kb"]):
+            problems.append("buffer_size_kb %r != baseline %d" % (now["buffer_size_kb"], want))
     return problems
 
 
-def collect(out_dir, tracefs=TRACEFS, require_root=True):
+def read_cpu_stats(tracefs):
+    out = {}
+    base = os.path.join(tracefs, "per_cpu")
+    if os.path.isdir(base):
+        for name in sorted(os.listdir(base)):
+            sp = os.path.join(base, name, "stats")
+            if os.path.isfile(sp):
+                out[name] = parse_cpu_stats(_read(sp))
+    return out
+
+
+def collect(out_dir, tracefs=TRACEFS, require_root=True, baseline=None):
     _need_root(require_root)
     os.makedirs(out_dir, mode=0o700, exist_ok=True)
     os.chmod(out_dir, 0o700)
@@ -335,22 +535,47 @@ def collect(out_dir, tracefs=TRACEFS, require_root=True):
     if not os.path.isdir(ev):
         sys.exit("no %s events present (was the trace entry booted?)" % GROUP)
     _write(os.path.join(ev, "enable"), "0")  # stop recording our events only
-    bufsize = _read(os.path.join(tracefs, "buffer_size_kb")).splitlines()[0]
-    if "expanded" in bufsize:
-        print("WARNING: ring buffer was never expanded (%s): early events were almost certainly overwritten" % bufsize)
+    buf_text = (_read(os.path.join(tracefs, "buffer_size_kb")).splitlines() or [""])[0]
+    expanded = buffer_expanded(buf_text)
+    cpu_stats = read_cpu_stats(tracefs)
     trace = _read(os.path.join(tracefs, "trace"))
     raw = os.path.join(out_dir, "raw_trace.txt")
     fd = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(trace)
+    header = HEADER.search(trace)
+    removed = []
     for name, _ in PROBES:  # remove only our probes
         try:
             tracefs_command(os.path.join(tracefs, "kprobe_events"), "-:%s/%s\n" % (GROUP, name))
+            removed.append(name)
         except OSError as e:
             print("warning: could not remove %s: %s" % (name, e), file=sys.stderr)
-    _write(os.path.join(tracefs, "buffer_size_kb"), "1408")  # undo trace_buf_size growth
-    problems = verify_clean(tracefs)
+    want = baseline_buffer_kb(baseline)
+    restored_kb = want if want is not None else 1408
+    _write(os.path.join(tracefs, "buffer_size_kb"), str(restored_kb))  # undo trace_buf_size growth
+    if baseline and baseline.get("tracing_on") is not None:
+        _write(os.path.join(tracefs, "tracing_on"), baseline["tracing_on"])
+    problems = verify_clean(tracefs, baseline)
+    oldest = [v["oldest_event_ts"] for v in cpu_stats.values() if "oldest_event_ts" in v and v.get("entries", 0) > 0]
+    report = {"buffer_size_kb": buf_text, "buffer_expanded": expanded,
+              "entries_in_buffer": int(header.group(1)) if header else None,
+              "entries_written": int(header.group(2)) if header else None,
+              "cpu_stats": cpu_stats,
+              "cpu_overrun_total": sum(v.get("overrun", 0) + v.get("commit_overrun", 0) for v in cpu_stats.values()),
+              "oldest_event_ts_min": min(oldest) if oldest else None,
+              "probes_removed": removed, "buffer_restored_kb": restored_kb,
+              "baseline_used": bool(baseline), "cleanup_problems": problems}
+    rp = os.path.join(out_dir, "collect_report.json")
+    fd = os.open(rp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(report, f, indent=1)
     print("raw trace saved: %s (%d bytes)" % (raw, len(trace)))
+    print("buffer before cleanup: %r expanded=%s | header %s/%s | cpu overrun total=%d"
+          % (buf_text, expanded, report["entries_in_buffer"], report["entries_written"],
+             report["cpu_overrun_total"]))
+    if not expanded:
+        print("WARNING: ring buffer was never expanded: early events were almost certainly overwritten")
     print("cleanup:", "clean" if not problems else "; ".join(problems))
     return 0 if not problems else 1
 
@@ -431,6 +656,8 @@ def entry_cmd(action, conf=LIMINE_CONF, state_dir=None):
     stat = os.stat(conf)
     if action == "install":
         new = add_entry(text)
+        with open(os.path.join(state_dir, "tracefs_baseline.json"), "w") as f:
+            json.dump(tracefs_baseline(), f, indent=1)
         backup = os.path.join(state_dir, "limine.conf.before")
         with open(backup, "wb") as f:
             f.write(data)
@@ -456,7 +683,14 @@ def entry_cmd(action, conf=LIMINE_CONF, state_dir=None):
 # ---------------------------------------------------------------- CLI
 
 def report(res):
-    lines = ["records=%d target_requests=%d non_target=%d unpaired=%d malformed=%d loss=%s complete=%s"
+    cp = res.get("completeness")
+    lines = []
+    if cp:
+        lines.append("COMPLETENESS: %s%s" % (cp["verdict"], "" if not cp["reasons"] else " - " + "; ".join(cp["reasons"])))
+    ft = res.get("first_timeout")
+    if ft:
+        lines.append("FIRST TIMEOUT: %s" % json.dumps(ft, sort_keys=True))
+    lines += ["records=%d target_requests=%d non_target=%d unpaired=%d malformed=%d loss=%s complete=%s"
              % (res["records"], res["target_requests"], res["non_target_requests"],
                 res["unpaired_events"], res["info"]["malformed_lines"], res["info"]["loss"], res["complete"])]
     for t in res["timeouts"]:
@@ -480,8 +714,10 @@ def main(argv=None):
     a.add_argument("trace")
     a.add_argument("--dmesg")
     a.add_argument("--json")
+    a.add_argument("--report", help="collect_report.json written by collect")
     c = sub.add_parser("collect")
     c.add_argument("--out-dir", required=True)
+    c.add_argument("--baseline", default="/var/lib/openwitty-8a19/tracefs_baseline.json")
     sub.add_parser("verify-clean")
     e = sub.add_parser("entry")
     e.add_argument("action", choices=["status", "install", "remove"])
@@ -493,17 +729,22 @@ def main(argv=None):
         print("\nboot arguments:\n " + "\n ".join(extra_cmdline_args()))
         return 0
     if args.cmd == "analyze":
-        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None)
+        rep_ = json.load(open(args.report)) if args.report else None
+        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None, rep_)
         print(report(res))
         if args.json:
             with open(args.json, "w") as f:
                 json.dump(res, f, indent=1)
         return 0
     if args.cmd == "collect":
-        return collect(args.out_dir)
+        base = json.load(open(args.baseline)) if os.path.exists(args.baseline) else None
+        if base is None:
+            print("note: no tracefs baseline found; buffer will be restored to the kernel default 1408 KB")
+        return collect(args.out_dir, baseline=base)
     if args.cmd == "verify-clean":
         _need_root()
-        p = verify_clean()
+        bp = "/var/lib/openwitty-8a19/tracefs_baseline.json"
+        p = verify_clean(baseline=json.load(open(bp)) if os.path.exists(bp) else None)
         print("clean" if not p else "; ".join(p))
         return 0 if not p else 1
     return entry_cmd(args.action, conf=args.conf)

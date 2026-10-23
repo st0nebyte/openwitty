@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -251,6 +252,202 @@ class DebugMessageTie(unittest.TestCase):
         txt = trace(uw(1.0, "(udev-worker)", 7, SET_IFACE_2_1), uwr(6.0, "(udev-worker)", 7, ret=-110))
         dm = "[   17.491004] usb 3-2: wireplumber timed out or killed on ep0out len=0/0\n"
         self.assertFalse(T.analyze(txt, dm)["debug_message_ties"][0]["matched_request"])
+
+
+def si_line(ts, comm, pid, iface, alt, vid=TARGET[0], pid_=TARGET[1], devnum=2):
+    return ("%s-%d [001] ..... %.6f: si: (usb_set_interface+0x4/0x1e0) devnum=%d vid=0x%x pid=0x%x iface=%d alt=%d"
+            % (comm, pid, ts, devnum, vid, pid_, iface, alt))
+
+
+def sir_line(ts, comm, pid, ret, caller="snd_usb_create_stream+0x189/0x220 [snd_usb_audio]"):
+    return ("%s-%d [001] ..... %.6f: sir: (%s <- usb_set_interface) ret=%d" % (comm, pid, ts, caller, ret))
+
+
+class SetInterfaceAndFirstTimeout(unittest.TestCase):
+    def test_full_first_timeout_with_interface_and_alternate(self):
+        w = "(udev-worker)"
+        txt = trace(si_line(6.3471, w, 7, 1, 0), uw(6.3472, w, 7, SET_IFACE_1_0), uwr(11.3472, w, 7, ret=-110),
+                    sir_line(11.3517, w, 7, -110))
+        res = T.analyze(txt)
+        ft = res["first_timeout"]
+        self.assertTrue(ft["request_captured"] and ft["set_interface_entry_captured"])
+        self.assertEqual((ft["interface"], ft["alternate"], ft["ret"], ft["task"]), (1, 0, -110, w))
+        self.assertEqual(ft["setup"]["bRequest"], 0x0B)
+        self.assertAlmostEqual(ft["duration_s"], 5.0, places=6)
+        self.assertEqual(ft["usb_set_interface"]["interface"], 1)
+        self.assertEqual(ft["usb_set_interface"]["caller"], "snd_usb_create_stream+0x189/0x220 [snd_usb_audio]")
+        self.assertNotIn("missing", ft)
+
+    def test_return_only_timeout_is_reported_as_incomplete_not_complete(self):
+        txt = trace(sir_line(11.3517, "(udev-worker)", 7, -110))
+        res = T.analyze(txt)
+        ft = res["first_timeout"]
+        self.assertFalse(ft["request_captured"])
+        self.assertIn("missing", ft)
+        self.assertEqual(ft["orphan_return"]["ret"], -110)
+        self.assertNotIn("interface", ft)
+        self.assertEqual(res["timeouts"], [])
+
+    def test_earliest_timeout_wins_and_derived_setup_is_labelled(self):
+        w = "(udev-worker)"
+        txt = trace(si_line(5.842918, w, 7, 1, 0), sir_line(11.351722, w, 7, -110),
+                    si_line(12.377972, "wireplumber", 9, 2, 0), uw(12.407676, "wireplumber", 9, SET_IFACE_1_0),
+                    uwr(17.493069, "wireplumber", 9, ret=-110), sir_line(17.495691, "wireplumber", 9, -110,
+                                                                            caller="endpoint_set_interface+0x51/0x140 [snd_usb_audio]"))
+        ft = T.analyze(txt)["first_timeout"]
+        self.assertEqual((ft["task"], ft["interface"], ft["alternate"]), (w, 1, 0))
+        self.assertFalse(ft["request_captured"])
+        self.assertTrue(ft["set_interface_entry_captured"])
+        self.assertEqual(ft["setup_derived_not_observed"], {"bmRequestType": 1, "bRequest": 11, "wValue": 0,
+                                                            "wIndex": 1, "wLength": 0})
+        self.assertNotIn("setup", ft)
+        self.assertIn("missing", ft)
+        self.assertAlmostEqual(ft["usb_set_interface"]["elapsed_s"], 5.508804, places=6)
+
+    def test_non_target_set_interface_ignored(self):
+        txt = trace(si_line(1.0, "a", 1, 3, 1, vid=0x1D6B, pid_=3), sir_line(1.1, "a", 1, 0))
+        self.assertEqual(T.analyze(txt)["usb_set_interface_calls"], [])
+
+
+def full_trace(first_set_prefix=True, with_timeout=True, mutate=None):
+    w, ls = "(udev-worker)", []
+    if with_timeout:
+        ls += [si_line(6.3471, w, 7, 1, 0), uw(6.3472, w, 7, SET_IFACE_1_0), uwr(11.3472, w, 7, ret=-110),
+               sir_line(11.3517, w, 7, -110)]
+    t = 11.416
+    seq = [(FU2_MUTE_GET, 0, 1), (setup_u64(0xA1, 2, 0x0200, 0x0200, 8), 0x0000, 8), (FU2_VOL_GET, 0xFC00, 2),
+           (FU2_VOL_SET, 0xC400, 2), (FU2_VOL_GET, 0xFC00, 2), (FU2_VOL_SET, 0x0000, 2)]
+    if not first_set_prefix:
+        seq = seq[3:]
+    for st, val, n in seq:
+        out = (st >> 0) & 0x80 == 0
+        ls += [uw(t, w, 7, st, outdata=val if out else 0),
+               uwr(t + 0.0004, w, 7, ret=n, indata=0 if out else val, actual=n)]
+        t += 0.001
+    return trace(*ls)
+
+
+GOOD_REPORT = {"buffer_expanded": True, "buffer_size_kb": "8192", "cpu_overrun_total": 0,
+               "oldest_event_ts_min": 0.78}
+
+
+class Completeness(unittest.TestCase):
+    def test_complete_when_everything_whole(self):
+        v = T.analyze(full_trace(), report=GOOD_REPORT)["completeness"]
+        self.assertEqual(v["verdict"], "COMPLETE", v)
+
+    def test_unexpanded_buffer_is_invalid(self):
+        r = dict(GOOD_REPORT, buffer_expanded=False, buffer_size_kb="7 (expanded: 8192)")
+        v = T.analyze(full_trace(), report=r)["completeness"]
+        self.assertEqual(v["verdict"], "INVALID")
+        self.assertTrue(any("not expanded" in x for x in v["reasons"]))
+
+    def test_cpu_overrun_is_invalid(self):
+        v = T.analyze(full_trace(), report=dict(GOOD_REPORT, cpu_overrun_total=3))["completeness"]
+        self.assertEqual(v["verdict"], "INVALID")
+
+    def test_late_coverage_is_invalid(self):
+        v = T.analyze(full_trace(), report=dict(GOOD_REPORT, oldest_event_ts_min=11.0))["completeness"]
+        self.assertEqual(v["verdict"], "INVALID")
+
+    def test_header_loss_is_invalid(self):
+        txt = re.sub(r"entries-in-buffer/entries-written: \d+/\d+", "entries-in-buffer/entries-written: 10/200", full_trace())
+        self.assertIn("10/200", txt)
+        self.assertEqual(T.analyze(txt, report=GOOD_REPORT)["completeness"]["verdict"], "INVALID")
+
+    def test_missing_first_timeout_entry_is_partial(self):
+        txt = trace(sir_line(11.3517, "(udev-worker)", 7, -110))
+        v = T.analyze(txt, report=GOOD_REPORT)["completeness"]
+        self.assertEqual(v["verdict"], "PARTIAL")
+        self.assertTrue(any("first timed-out request entry is missing" in x for x in v["reasons"]))
+
+    def test_fu2_prefix_lost_is_partial(self):
+        v = T.analyze(full_trace(first_set_prefix=False), report=GOOD_REPORT)["completeness"]
+        self.assertEqual(v["verdict"], "PARTIAL")
+        self.assertTrue(any("starts with a SET" in x for x in v["reasons"]))
+
+    def test_no_report_is_never_complete(self):
+        self.assertNotEqual(T.analyze(full_trace())["completeness"]["verdict"], "COMPLETE")
+
+    def test_no_timeout_means_nothing_to_attribute(self):
+        v = T.analyze(full_trace(with_timeout=False), report=GOOD_REPORT)["completeness"]
+        self.assertNotEqual(v["verdict"], "COMPLETE")
+
+    def test_full_sequence_reconstructed_in_order(self):
+        fu2 = T.analyze(full_trace())["fu2"]
+        self.assertEqual([(f["dir"], f["kind"], f["request"]) for f in fu2],
+                         [("IN", "mute", "UAC_CUR"), ("IN", "volume", "UAC_RANGE"), ("IN", "volume", "UAC_CUR"),
+                          ("OUT", "volume", "UAC_CUR"), ("IN", "volume", "UAC_CUR"), ("OUT", "volume", "UAC_CUR")])
+        self.assertEqual(fu2[4]["db"], -4.0)   # unchanged after the -60 dB write
+        self.assertEqual(fu2[5]["db"], 0.0)    # last attempted write: 0 dB, no restore
+
+
+class BufferHelpers(unittest.TestCase):
+    def test_buffer_expansion_detection(self):
+        self.assertFalse(T.buffer_expanded("7 (expanded: 1408)"))
+        self.assertFalse(T.buffer_expanded("1410"))
+        self.assertTrue(T.buffer_expanded("8192"))
+        self.assertFalse(T.buffer_expanded(""))
+
+    def test_baseline_buffer_parse(self):
+        self.assertEqual(T.baseline_buffer_kb({"buffer_size_kb": "7 (expanded: 1408)"}), 1408)
+        self.assertEqual(T.baseline_buffer_kb({"buffer_size_kb": "2048"}), 2048)
+        self.assertIsNone(T.baseline_buffer_kb(None))
+
+    def test_cpu_stats_parse(self):
+        st = T.parse_cpu_stats("entries: 12\noverrun: 3\ncommit overrun: 0\nbytes: 900\n"
+                               "oldest event ts:   11.418409\nnow ts:   99.1\ndropped events: 0\nread events: 0\n")
+        self.assertEqual((st["entries"], st["overrun"], st["commit_overrun"]), (12, 3, 0))
+        self.assertAlmostEqual(st["oldest_event_ts"], 11.418409)
+
+
+class BaselineRestore(unittest.TestCase):
+    def make(self, d, buf="8192\n", on="0\n"):
+        os.makedirs(os.path.join(d, "events", T.GROUP))
+        os.makedirs(os.path.join(d, "instances"))
+        os.makedirs(os.path.join(d, "per_cpu", "cpu0"))
+        files = {"trace": "# entries-in-buffer/entries-written: 5/9   #P:1\n", "kprobe_events": "",
+                 "buffer_size_kb": buf, "tracing_on": on, "current_tracer": "nop\n", "trace_clock": "[local] global\n",
+                 "set_event": "", os.path.join("events", T.GROUP, "enable"): "1",
+                 os.path.join("per_cpu", "cpu0", "stats"): "entries: 5\noverrun: 4\ncommit overrun: 0\nbytes: 10\noldest event ts: 11.2\n"}
+        for name, content in files.items():
+            with open(os.path.join(d, name), "w") as f:
+                f.write(content)
+
+    def test_collect_restores_recorded_baseline_exactly_and_reports_loss(self):
+        with tempfile.TemporaryDirectory() as tf:
+            fake, out = os.path.join(tf, "t"), os.path.join(tf, "out")
+            os.makedirs(fake)
+            self.make(fake)
+            base = {"buffer_size_kb": "7 (expanded: 2048)", "tracing_on": "1", "current_tracer": "nop",
+                    "trace_clock": "[local] global", "set_event": [], "kprobe_events": [], "instances": []}
+            T.collect(out, tracefs=fake, require_root=False, baseline=base)
+            self.assertEqual(open(os.path.join(fake, "buffer_size_kb")).read(), "2048")
+            self.assertEqual(open(os.path.join(fake, "tracing_on")).read(), "1")
+            rep = json.load(open(os.path.join(out, "collect_report.json")))
+            self.assertEqual((rep["buffer_restored_kb"], rep["cpu_overrun_total"], rep["entries_written"]), (2048, 4, 9))
+            self.assertTrue(rep["buffer_expanded"])
+            self.assertEqual(stat.S_IMODE(os.stat(os.path.join(out, "collect_report.json")).st_mode), 0o600)
+
+    def test_collect_without_baseline_uses_default_and_says_so(self):
+        with tempfile.TemporaryDirectory() as tf:
+            fake, out = os.path.join(tf, "t"), os.path.join(tf, "out")
+            os.makedirs(fake)
+            self.make(fake, buf="7 (expanded: 8192)\n")
+            T.collect(out, tracefs=fake, require_root=False)
+            rep = json.load(open(os.path.join(out, "collect_report.json")))
+            self.assertFalse(rep["buffer_expanded"])
+            self.assertFalse(rep["baseline_used"])
+
+    def test_verify_clean_flags_foreign_state_changes(self):
+        with tempfile.TemporaryDirectory() as tf:
+            self.make(tf)
+            shutil.rmtree(os.path.join(tf, "events", T.GROUP))
+            base = T.tracefs_baseline(tf)
+            self.assertEqual(T.verify_clean(tf, base), [])
+            with open(os.path.join(tf, "set_event"), "w") as f:
+                f.write("sched:sched_switch\n")
+            self.assertTrue(any("set_event" in p for p in T.verify_clean(tf, base)))
 
 
 CONF = """timeout: 5
