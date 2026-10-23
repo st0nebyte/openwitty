@@ -126,7 +126,7 @@ state for this device to accidentally clear.
 **Already present on the command line?** `/proc/cmdline` (read-only check) currently contains
 no `usbcore.quirks=` term at all:
 ```
-quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=00000000-...
+quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=<redacted>
 ```
 `/sys/module/usbcore/parameters/quirks` (read-only check) is currently empty. No conflicting or
 pre-existing override exists to interact with the proposed one.
@@ -256,7 +256,7 @@ menu, not assumed. Note the editor edits the entry's config text, so the operato
   generated `/boot/limine.conf` could not be read either. So editor availability is
   **unverified** until seen at the menu.
 - The default entry's stored `KERNEL_CMDLINE[default]` (currently
-  `quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=00000000-...`, read from
+  `quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=<redacted>`, read from
   `/etc/default/limine`) is never touched.
 
 **Minimal proposed difference for the one test boot:** at the Limine menu, press `e` on the
@@ -394,8 +394,9 @@ configuration was changed in this phase in the first place.
 - `/boot/limine.conf` could not be read directly (permission-restricted ESP mount); the design
   relies on `/etc/default/limine`, `/etc/limine-entry-tool.conf`, and documented Limine/Arch
   Wiki menu-edit behavior rather than a direct read of the live generated config.
-- The exact CachyOS git tag named in the task brief does not correspond to a tag this session
-  could fetch; the semantic claims in §1–§2 are sourced from current upstream
+- **(Corrected in Phase 8A.17: the exact tag `cachyos-7.2.10-1` IS fetchable via `gh api`, and the
+  DELAY_INIT/toggle/no-`29c2`-entry facts below were re-verified against it.)** The exact CachyOS git
+  tag named in the task brief was not fetchable by this session's web tool at the time; the semantic claims in §1–§2 are sourced from current upstream
   `torvalds/linux` plus a symbol-level cross-check against the actual installed
   `7.2.10-1-cachyos` `vmlinux`, not a byte-identical source diff of the CachyOS tree.
   `hub_port_connect` is inlined into `hub_event` (LTO); the binary check in §1 was therefore
