@@ -24,7 +24,7 @@ struct {
     __uint(max_entries, 1);
     __type(key, __u32);
     __type(value, __u64);
-} lost SEC(".maps"), emitted SEC(".maps");
+} lost SEC(".maps"), emitted SEC(".maps"), overcap SEC(".maps");
 
 static __always_inline void mark_loss(void)
 {
@@ -108,8 +108,18 @@ int BPF_PROG(core_exit, struct usb_device *dev, unsigned int pipe,
         return 0;
     }
     count = bpf_map_lookup_elem(&emitted, &zero);
-    if (!count || __sync_fetch_and_add(count, 1) >= FU2_CORE_MAX_EVENTS) {
+    if (!count) {
         mark_loss();
+        bpf_map_delete_elem(&pending, &key);
+        return 0;
+    }
+    if (__sync_fetch_and_add(count, 1) >= FU2_CORE_MAX_EVENTS) {
+        // Intentional suppression at the cap: kept apart from genuine loss.
+        __u64 *extra = bpf_map_lookup_elem(&overcap, &zero);
+        if (extra)
+            __sync_fetch_and_add(extra, 1);
+        else
+            mark_loss();
         bpf_map_delete_elem(&pending, &key);
         return 0;
     }

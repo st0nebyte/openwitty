@@ -26,7 +26,7 @@ struct fake {
     int owned[8];         // link id -> experiment-owned
     int reader_open, maps_alive, pins;
     int fail_detach, fail_counters, fail_reader, fail_maps, fail_verify;
-    uint64_t lost, pending;
+    uint64_t lost, pending, overcap;
     int detach_calls, unowned_detach_attempts, counter_reads;
 };
 
@@ -43,7 +43,7 @@ static int f_detach(void *c, int id)
     f->present[id] = 0;
     return 0;
 }
-static int f_counters(void *c, uint64_t *lost, uint64_t *pending)
+static int f_counters(void *c, uint64_t *lost, uint64_t *pending, uint64_t *overcap)
 {
     struct fake *f = (struct fake *)c;
     ++f->counter_reads;
@@ -51,6 +51,7 @@ static int f_counters(void *c, uint64_t *lost, uint64_t *pending)
         return -1;
     *lost = f->lost;
     *pending = f->pending;
+    *overcap = f->overcap;
     return 0;
 }
 static int f_reader(void *c)
@@ -172,7 +173,7 @@ static int f_detach_close_fd(void *c, int id)
     }
     return 0;
 }
-static int ok_counters(void *c, uint64_t *l, uint64_t *p) { (void)c; *l = 0; *p = 0; return 0; }
+static int ok_counters(void *c, uint64_t *l, uint64_t *p, uint64_t *o) { (void)c; *l = 0; *p = 0; *o = 0; return 0; }
 static int ok_nop(void *c) { (void)c; return 0; }
 
 static pid_t spawn_reader(int mode, int *rfd)
@@ -346,21 +347,33 @@ int main(void)
     }
     CHECK(lc.reason == LCR_EVENT_CAP && lc.events == 256);
     CHECK(f.detach_calls == 2); // late events after DONE caused nothing
-    // Over-cap arrivals counted as BPF-side "lost" after the cap decision are benign...
+    // Over-cap suppression is counted separately and is benign after a cap stop...
     lc_armed(&lc, &f, cfg);
-    f.lost = 3;
+    f.overcap = 3;
     for (i = 0; i < 256; ++i) {
         e = vget(-1024);
         fu2_lc_on_event(&lc, &e, T0 + SEC);
     }
     CHECK(lc.reason == LCR_EVENT_CAP && lc.integrity == LCI_OK && lc.overcap_lost == 3);
     CHECK(fu2_lc_outcome_of(&lc) == LCO_TRUNCATED);
-    // ...but loss already seen by polling before the cap is still invalidating.
+    // ...whereas any genuine loss at the same moment stays invalidating, even at the cap.
     lc_armed(&lc, &f, cfg);
+    f.overcap = 3;
     f.lost = 1;
-    fu2_lc_on_lost(&lc, 1);
-    CHECK(lc.reason == LCR_LOSS && fu2_lc_outcome_of(&lc) == LCO_INVALID);
-
+    for (i = 0; i < 256; ++i) {
+        e = vget(-1024);
+        fu2_lc_on_event(&lc, &e, T0 + SEC);
+    }
+    CHECK(lc.reason == LCR_EVENT_CAP && lc.integrity == LCI_LOSS);
+    CHECK(fu2_lc_outcome_of(&lc) == LCO_INVALID);
+    // A cap stop with pending (missing return) records remains incomplete.
+    lc_armed(&lc, &f, cfg);
+    f.pending = 1;
+    for (i = 0; i < 256; ++i) {
+        e = vget(-1024);
+        fu2_lc_on_event(&lc, &e, T0 + SEC);
+    }
+    CHECK(lc.integrity == LCI_INCOMPLETE && fu2_lc_outcome_of(&lc) == LCO_INVALID);
     // 12. Time deadlines: hard limit after first event; total limit; clock regress.
     lc_armed(&lc, &f, cfg);
     e = vget(-1024); fu2_lc_on_event(&lc, &e, T0 + SEC);

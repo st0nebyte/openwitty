@@ -1,5 +1,10 @@
 # Phase 8A.15 — boot observer lifecycle, startup ordering, fail-closed cleanup
 
+> **Update (Phase 8A.16):** the `/sys/module` absence proof and the "~5.5 s margin" in this document
+> are superseded: the module load is requested at ~5.5 s and completes at ~11 s, so the proof is
+> usable only before ~5.5 s. The over-cap heuristic described below was replaced by a separate
+> BPF `overcap` counter (lifecycle test now 68 checks). See `PHASE8A16_SND_USB_AUDIO_LOAD_TRIGGER_ATTRIBUTION.md`.
+
 Offline research and implementation only (2026-10-23). **No reboot, USB request, BPF load or attach,
 hook, trace, boot/initramfs/service/udev change, or audio change occurred.** Nothing here installs or
 enables a live path: there is no loader, no service unit file and no attach code in the repository;

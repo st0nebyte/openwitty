@@ -62,7 +62,9 @@ static inline uint64_t fu2_lc_supervisor_limit_ns(const struct fu2_lc_config *c)
 struct fu2_lc_ops {
     void *ctx;
     int (*detach_link)(void *ctx, int link_id);
-    int (*read_counters)(void *ctx, uint64_t *lost, uint64_t *pending);
+    // lost: genuine loss only. overcap: events intentionally suppressed at the cap.
+    int (*read_counters)(void *ctx, uint64_t *lost, uint64_t *pending,
+                         uint64_t *overcap);
     int (*release_reader)(void *ctx);
     int (*destroy_maps)(void *ctx);
     int (*verify_clean)(void *ctx);
@@ -83,7 +85,7 @@ struct fu2_lc {
     unsigned cleanup_runs;
     unsigned fail_mask;
     uint64_t attach_ns, first_ns, last_ns, lost, pending_left;
-    uint64_t last_lost_polled, overcap_lost;
+    uint64_t overcap_lost;
     int started_once;
 };
 
@@ -107,7 +109,7 @@ static inline void fu2_lc_init(struct fu2_lc *lc, const struct fu2_lc_config *cf
     lc->link_count = lc->events = lc->stop_requests = lc->cleanup_runs = 0;
     lc->fail_mask = 0;
     lc->attach_ns = lc->first_ns = lc->last_ns = lc->lost = lc->pending_left = 0;
-    lc->last_lost_polled = lc->overcap_lost = 0;
+    lc->overcap_lost = 0;
     lc->started_once = 0;
 }
 
@@ -129,24 +131,18 @@ static inline int fu2_lc_register_link(struct fu2_lc *lc, int link_id)
 static inline void fu2_lc_cleanup(struct fu2_lc *lc)
 {
     unsigned i;
-    uint64_t lost = 0, pending = 0;
+    uint64_t lost = 0, pending = 0, overcap = 0;
     ++lc->cleanup_runs; // exactly once per lifecycle; never retried automatically
     for (i = 0; i < lc->link_count; ++i)
         if (lc->ops.detach_link(lc->ops.ctx, lc->links[i]) != 0)
             lc->fail_mask |= LC_FAIL_DETACH;
     // Pending/lost are read after detaching so no new records can appear.
-    if (lc->ops.read_counters(lc->ops.ctx, &lost, &pending) != 0) {
+    if (lc->ops.read_counters(lc->ops.ctx, &lost, &pending, &overcap) != 0) {
         lc->fail_mask |= LC_FAIL_COUNTERS;
     } else {
         lc->lost = lost;
         lc->pending_left = pending;
-        // The BPF side counts events beyond its own 256 cap as "lost". When the
-        // application stopped at the cap with no loss reported by polling, those
-        // arrivals between the stop decision and detach are benign over-cap.
-        if (lc->reason == LCR_EVENT_CAP && lc->last_lost_polled == 0 && lost != 0) {
-            lc->overcap_lost = lost;
-            lost = 0;
-        }
+        lc->overcap_lost = overcap; // expected after a cap stop; never counted as loss
         lc->integrity = lost != 0 ? LCI_LOSS :
                         (fu2_core_incomplete(pending, lost) ? LCI_INCOMPLETE : LCI_OK);
     }
@@ -235,7 +231,6 @@ static inline void fu2_lc_on_lost(struct fu2_lc *lc, uint64_t lost_now)
 {
     if (fu2_lc_done(lc))
         return;
-    lc->last_lost_polled = lost_now;
     if (lost_now != 0)
         fu2_lc_stop(lc, LCR_LOSS);
 }
