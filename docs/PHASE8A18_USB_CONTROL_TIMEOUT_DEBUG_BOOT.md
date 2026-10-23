@@ -192,3 +192,27 @@ Do not repeat the boot automatically. Options requiring fresh approval and safet
 dyndbg attempt with a read-back check; or the udev-debug boot (weaker). Offline: examine what has a
 ≈0.5 s cadence in the USB/ALSA probe path (candidates: host/xHCI polling, workqueue delays, the
 device) using the exact-tag source and installed binaries.
+
+---
+
+# Second attempt (prepared 2026-10-23 ~22:10 CEST — authorization given in chat, safety confirmation pending)
+
+**Status: PREPARED FOR ONE SECOND ATTEMPT — the user explicitly asked to retry ("i wanna try it again").
+It is a new experiment: the safety points 1–6 of §6 must be re-confirmed immediately before shutdown, and no
+third attempt follows automatically.** The first attempt's user-observation question is still unanswered.
+
+Changes to the procedure (everything else in §2–§8 is unchanged):
+- Type the parameter in this order and **read each step back** before continuing:
+  1. `dyndbg` — check it is there.
+  2. `=` — check the `=` is visible directly after `dyndbg` **before** typing anything else.
+  3. `"` — check the `=` is still there afterwards.
+  4. the query `file drivers/usb/core/message.c line 88 +p`, then the closing `"`.
+- If the `=` vanishes when `"` is typed (dead-key/layout effect), type the `"` first and then move the cursor one
+  step left and insert `=`; accept only if the final text reads exactly
+  `dyndbg="file drivers/usb/core/message.c line 88 +p"`.
+- Final read-back (character by character) before F10: `dyndbg` `=` `"` `file drivers/usb/core/message.c
+  line 88 +p` `"`, preceded by the unchanged original arguments, with no `usbcore.quirks`.
+- If the exact text cannot be produced after two careful tries: ESC, boot the unmodified entry, report.
+  The shorter variant `dyndbg="file message.c line 88 +p"` is equally acceptable.
+- Success check after boot: `/proc/cmdline` has `dyndbg="file …"` **with** `=`, and `/proc/dynamic_debug/control` shows
+  `message.c:88 … =p`.
