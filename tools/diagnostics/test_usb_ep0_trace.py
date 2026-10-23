@@ -52,7 +52,7 @@ class ProbeDefinitions(unittest.TestCase):
         self.assertTrue(arg.startswith("kprobe_event="))
         for ch in (" ", "#", '"', "\t", "\n"):
             self.assertNotIn(ch, arg)
-        self.assertLess(len(" ".join(T.extra_cmdline_args())), 900)
+        self.assertLess(len(" ".join(T.extra_cmdline_args())), 1500)  # kernel COMMAND_LINE_SIZE is 2048
 
     def test_commas_only_separate_fields_and_roundtrip(self):
         for _, d in T.PROBES:
@@ -61,6 +61,10 @@ class ProbeDefinitions(unittest.TestCase):
         rebuilt = [x.replace(",", " ") for x in T.boot_arg()[len("kprobe_event="):].split(";")]
         self.assertEqual(rebuilt, [d for _, d in T.PROBES])
 
+    def test_no_raw_kernel_pointer_is_recorded(self):
+        for _, d in T.PROBES:
+            self.assertNotIn("urb=", d)
+
     def test_only_our_group_is_defined(self):
         for _, d in T.PROBES:
             self.assertIn(T.GROUP + "/", d)
@@ -68,7 +72,9 @@ class ProbeDefinitions(unittest.TestCase):
     def test_ring_buffer_is_expanded_at_boot(self):
         args = T.extra_cmdline_args()
         self.assertIn("ftrace=nop", args)
-        self.assertIn("trace_buf_size=8M", args)
+        self.assertIn("trace_buf_size=32M", args)
+        self.assertEqual(sum(1 for a in args if a.startswith("trace_event=")), 1)
+        self.assertTrue(all(("xhci-hcd:" + e) in [x for x in args if x.startswith("trace_event=")][0] for e in T.XHCI_EVENTS))
 
     def test_no_stale_quirk_argument(self):
         self.assertNotIn("usbcore.quirks", " ".join(T.extra_cmdline_args()))
@@ -382,6 +388,23 @@ class Completeness(unittest.TestCase):
         self.assertEqual(fu2[5]["db"], 0.0)    # last attempted write: 0 dB, no restore
 
 
+class XhciCompleteness(unittest.TestCase):
+    def test_expect_xhci_without_events_is_partial(self):
+        v = T.analyze(full_trace(), report=GOOD_REPORT, expect_xhci=True)["completeness"]
+        self.assertEqual(v["verdict"], "PARTIAL")
+        self.assertTrue(any("no xHCI events" in r for r in v["reasons"]))
+
+    def test_expect_xhci_with_events_and_trusted_join_is_not_penalised(self):
+        w = "(udev-worker)"
+        base = full_trace()
+        extra = [x_enq(6.8473, w, 7)] + x_trbs(6.8474, w, 7) + [x_db(6.8475, w, 7), x_deq(11.3471, w, 7), x_gb(11.348)]
+        txt = base.rstrip("\n") + "\n" + "\n".join(extra) + "\n"
+        # make the timeout request start where the xHCI enqueue is
+        txt = txt.replace("6.347200", "6.847200").replace("11.347200", "11.347200")
+        v = T.analyze(txt, report=GOOD_REPORT, expect_xhci=True)["completeness"]
+        self.assertFalse(any("xHCI" in r for r in v["reasons"]), v)
+
+
 class BufferHelpers(unittest.TestCase):
     def test_buffer_expansion_detection(self):
         self.assertFalse(T.buffer_expanded("7 (expanded: 1408)"))
@@ -429,6 +452,33 @@ class BaselineRestore(unittest.TestCase):
             self.assertTrue(rep["buffer_expanded"])
             self.assertEqual(stat.S_IMODE(os.stat(os.path.join(out, "collect_report.json")).st_mode), 0o600)
 
+    def test_collect_disables_and_unregisters_only_our_xhci_events(self):
+        with tempfile.TemporaryDirectory() as tf:
+            fake, out = os.path.join(tf, "t"), os.path.join(tf, "out")
+            os.makedirs(fake)
+            self.make(fake)
+            for name in T.XHCI_EVENTS + ["xhci_foreign_event"]:
+                os.makedirs(os.path.join(fake, "events", "xhci-hcd", name))
+                with open(os.path.join(fake, "events", "xhci-hcd", name, "enable"), "w") as f:
+                    f.write("1")
+            T.collect(out, tracefs=fake, require_root=False)
+            for name in T.XHCI_EVENTS:
+                self.assertEqual(open(os.path.join(fake, "events", "xhci-hcd", name, "enable")).read(), "0")
+            self.assertEqual(open(os.path.join(fake, "events", "xhci-hcd", "xhci_foreign_event", "enable")).read(), "1")
+            lines = [l.strip() for l in open(os.path.join(fake, "set_event")).read().splitlines() if l.strip()]
+            self.assertEqual(lines, ["!xhci-hcd:" + n for n in T.XHCI_EVENTS])
+
+    def test_collect_can_be_rerun_after_an_interruption(self):
+        with tempfile.TemporaryDirectory() as tf:
+            fake, out = os.path.join(tf, "t"), os.path.join(tf, "out")
+            os.makedirs(fake)
+            self.make(fake)
+            T.collect(out, tracefs=fake, require_root=False)   # first run (stand-in for an interrupted one)
+            first = open(os.path.join(out, "raw_trace.txt")).read()
+            T.collect(out, tracefs=fake, require_root=False)   # re-run must succeed and not lose the saved trace
+            self.assertEqual(open(os.path.join(out, "raw_trace.txt")).read(), first)
+            self.assertEqual(stat.S_IMODE(os.stat(os.path.join(out, "raw_trace.txt")).st_mode), 0o600)
+
     def test_collect_without_baseline_uses_default_and_says_so(self):
         with tempfile.TemporaryDirectory() as tf:
             fake, out = os.path.join(tf, "t"), os.path.join(tf, "out")
@@ -448,6 +498,170 @@ class BaselineRestore(unittest.TestCase):
             with open(os.path.join(tf, "set_event"), "w") as f:
                 f.write("sched:sched_switch\n")
             self.assertTrue(any("set_event" in p for p in T.verify_clean(tf, base)))
+
+
+URB = 0x00000000BC2E0F8E
+
+
+def uw_urb(ts, comm, pid, setup, **kw):
+    return uw(ts, comm, pid, setup, **kw)
+
+
+def uwr_urb(ts, comm, pid, ret=0, **kw):
+    return uwr(ts, comm, pid, ret=ret, **kw)
+
+
+def xl(ts, comm, pid, ev, text, cpu=0):
+    return "%s-%d [%03d] ..... %.6f: %s: %s" % (comm, pid, cpu, ts, ev, text)
+
+
+def x_enq(ts, comm, pid, urb=URB, dev="3-2", slot=1, ln=0):
+    return xl(ts, comm, pid, "xhci_urb_enqueue", "%s ep0out-control: urb %016x pipe 2147484288 slot %d length 0/%d sgs 0/0 stream 0 flags 00110200" % (dev, urb, slot, ln))
+
+
+def x_gb(ts, urb=URB, dev="3-2", slot=1):
+    return xl(ts, "<idle>", 0, "xhci_urb_giveback", "%s ep0out-control: urb %016x pipe 2147484288 slot %d length 0/0 sgs 0/0 stream 0 flags 00110200" % (dev, urb, slot))
+
+
+def x_deq(ts, comm, pid, urb=URB, dev="3-2", slot=1):
+    return xl(ts, comm, pid, "xhci_urb_dequeue", "%s ep0out-control: urb %016x pipe 2147484288 slot %d length 0/0 sgs 0/0 stream 0 flags 00110200" % (dev, urb, slot))
+
+
+SET_TRBS = [0xFFFD8510, 0xFFFD8520]
+
+
+def x_trbs(ts, comm, pid, bm=0x01, b=0x0B, v=0, i=1, l=0, base=0xFFFD8510):
+    return [xl(ts, comm, pid, "xhci_queue_trb", "CTRL: @0x%016x bRequestType %02x bRequest %02x wValue %04x wIndex %04x wLength %d length 8 TD size 0 intr 0 type 'Setup Stage' flags I:i:c" % (base, bm, b, v, i, l)),
+            xl(ts, comm, pid, "xhci_queue_trb", "CTRL: @0x%016x Buffer 0000000000000000 length 0 TD size 0 intr 0 type 'Status Stage' flags I:c:e:C" % (base + 16))]
+
+
+def x_db(ts, comm, pid, slot=1):
+    return xl(ts, comm, pid, "xhci_ring_ep_doorbell", "Ring doorbell for Slot %d ep0in" % slot)
+
+
+def x_evt(ts, trb=0xFFFD8520, status="Success", slot=1):
+    return xl(ts, "<idle>", 0, "xhci_handle_event", "EVENT: @0x00000000ffffc610 TRB %016x status '%s' len 0 slot %d ep 1 type 'Transfer Event' flags e:c" % (trb, status, slot), cpu=3)
+
+
+def x_cmd(ts, ev):
+    return xl(ts, "<idle>", 0, ev, "slot 1 ep 1 state 3")
+
+
+def life_for(*lines, ret=-110, submit=6.884, complete=12.370, extra_uw=True):
+    w = "(udev-worker)"
+    base = [uw_urb(submit, w, 7, SET_IFACE_1_0), uwr_urb(complete, w, 7, ret=ret)]
+    res = T.analyze(trace(*(base + list(lines))))
+    return res["xhci_lifecycles"][0]["lifecycle"] if res["xhci_lifecycles"] else None
+
+
+class XhciLifecycle(unittest.TestCase):
+    w = "(udev-worker)"
+
+    def stalled(self, doorbell=True, enqueue=True, trbs=True, event=None, dequeue=True, recovery=False):
+        ls = []
+        if enqueue:
+            ls.append(x_enq(6.8841, self.w, 7))
+        if trbs:
+            ls += x_trbs(6.8842, self.w, 7)
+        if doorbell:
+            ls.append(x_db(6.8843, self.w, 7))
+        if event:
+            ls.append(x_evt(event[0], status=event[1]))
+        if dequeue:
+            ls.append(x_deq(12.3699, self.w, 7))
+        if recovery:
+            ls += [x_cmd(12.371, "xhci_handle_cmd_stop_ep"), x_cmd(12.372, "xhci_handle_cmd_set_deq")]
+        ls.append(x_gb(12.373))
+        return ls
+
+    def test_pending_transfer_cancelled_after_timeout_is_C_E(self):
+        lf = life_for(*self.stalled(recovery=True))
+        self.assertTrue(lf["classification"].startswith("C/E"), lf["classification"])
+        self.assertEqual((lf["slot"], lf["devname"]), (1, "3-2"))
+        self.assertTrue(lf["setup_trb_matches"])
+        self.assertIsNotNone(lf["doorbell"])
+        self.assertEqual(lf["transfer_events"], [])
+        self.assertIsNotNone(lf["urb_dequeue"])
+        self.assertEqual(len(lf["recovery_commands"]), 2)
+        self.assertIsNotNone(lf["giveback"])
+
+    def test_other_tasks_enqueue_is_not_joined(self):
+        ls = self.stalled()
+        ls[0] = x_enq(6.8841, "someone-else", 99)
+        self.assertTrue(life_for(*ls)["classification"].startswith("A"))
+
+    def test_other_bus_is_not_joined(self):
+        ls = self.stalled()
+        ls[0] = x_enq(6.8841, self.w, 7, dev="5-1")
+        self.assertTrue(life_for(*ls)["classification"].startswith("A"))
+
+    def test_hashed_pointer_differs_from_any_raw_value_so_it_is_never_compared(self):
+        lf = life_for(*self.stalled())
+        blob = json.dumps(lf)
+        self.assertNotIn('"urb"', blob)
+        self.assertNotIn('"dma"', blob)
+        self.assertNotIn("fffd85", blob.lower())
+
+    def test_root_hub_requests_are_not_classified_as_unqueued(self):
+        lf = T.xhci_lifecycle([], {"ts_submit": 1.0, "ts_complete": 1.1, "setup": T.split_setup(SET_IFACE_1_0),
+                                   "pid": 1, "bus": 3, "devnum": 1})
+        self.assertTrue(lf["classification"].startswith("ROOT-HUB"))
+
+    def test_late_unrelated_enqueue_beyond_join_gap_is_not_joined(self):
+        ls = self.stalled()
+        ls[0] = x_enq(6.884 + 0.011, self.w, 7)
+        self.assertTrue(life_for(*ls)["classification"].startswith("A"))
+
+    def test_not_queued_is_A(self):
+        lf = life_for(*self.stalled(enqueue=False, trbs=False, doorbell=False))
+        self.assertTrue(lf["classification"].startswith("A"), lf["classification"])
+
+    def test_queued_without_doorbell_is_B(self):
+        lf = life_for(*self.stalled(doorbell=False))
+        self.assertTrue(lf["classification"].startswith("B"), lf["classification"])
+
+    def test_error_completion_is_D(self):
+        lf = life_for(*self.stalled(event=(12.0, "USB Transaction Error")), ret=-71)
+        self.assertTrue(lf["classification"].startswith("D"), lf["classification"])
+        self.assertIn("USB Transaction Error", lf["classification"])
+
+    def test_success_event_for_a_timed_out_urb_is_not_called_a_stall(self):
+        lf = life_for(*self.stalled(event=(7.0, "Success")))
+        self.assertTrue(lf["classification"].startswith("NORMAL"), lf["classification"])
+
+    def test_event_for_another_slot_or_trb_does_not_count(self):
+        ls = self.stalled()
+        ls.insert(3, x_evt(7.0, slot=5))
+        ls.insert(3, x_evt(7.0, trb=0xDEAD0000))
+        self.assertTrue(life_for(*ls)["classification"].startswith("C/E"))
+
+    def test_reused_urb_pointer_is_joined_by_time_not_pointer_alone(self):
+        earlier = [x_enq(1.0, self.w, 7), *x_trbs(1.0001, self.w, 7), x_db(1.0002, self.w, 7), x_evt(1.001), x_gb(1.0011)]
+        lf = life_for(*(earlier + self.stalled()))
+        self.assertAlmostEqual(lf["urb_enqueue"], 6.8841, places=4)
+        self.assertTrue(lf["classification"].startswith("C/E"))
+
+    def test_setup_mismatch_between_core_and_controller_is_flagged(self):
+        ls = self.stalled()
+        ls[1] = x_trbs(6.8842, self.w, 7, i=2)[0]
+        lf = life_for(*ls)
+        self.assertFalse(lf["setup_trb_matches"])
+        self.assertTrue(lf["classification"].startswith("UNCERTAIN"))
+
+    def test_no_xhci_records_means_no_lifecycle_claim(self):
+        txt = trace(uw_urb(6.884, self.w, 7, SET_IFACE_1_0), uwr_urb(12.370, self.w, 7, ret=-110))
+        self.assertEqual(T.analyze(txt)["xhci_lifecycles"], [])
+
+    def test_real_format_lines_parse(self):
+        line = "           lsusb-7095    [000] d..1.   690.471853: xhci_queue_trb: CTRL: @0x00000000fffd8510 bRequestType 80 bRequest 06 wValue 0f00 wIndex 0000 wLength 5 length 8 TD size 0 intr 0 type 'Setup Stage' flags I:i:c"
+        r = T.parse_xhci(line)[0]
+        self.assertEqual(r["setup"], {"bmRequestType": 0x80, "bRequest": 6, "wValue": 0x0F00, "wIndex": 0, "wLength": 5})
+        ev = "          <idle>-0       [003] d.h2.   690.476670: xhci_handle_event: EVENT: @0x00000000ffffc610 TRB 00000000fffd8530 status 'Success' len 0 slot 1 ep 1 type 'Transfer Event' flags e:c"
+        e = T.parse_xhci(ev)[0]
+        self.assertEqual((e["slot"], e["ep"], e["status"], e["trb_ptr"]), (1, 1, "Success", 0xFFFD8530))
+        enq = "           lsusb-7095    [000] .....   690.471853: xhci_urb_enqueue: 6-4 ep0out-control: urb 00000000bc2e0f8e pipe 2147484288 slot 1 length 0/5 sgs 0/0 stream 0 flags 00110200"
+        u = T.parse_xhci(enq)[0]
+        self.assertEqual((u["dev"], u["slot"], u["urb"]), ("6-4", 1, 0xBC2E0F8E))
 
 
 CONF = """timeout: 5

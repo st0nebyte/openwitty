@@ -32,7 +32,18 @@ ENTRY_END = "# OPENWITTY-8A19-END"
 ENTRY_NAME = "OpenWitty USB trace (temporary)"
 # `ftrace=nop` makes the kernel expand the boot ring buffer to trace_buf_size at once
 # (trace.c set_cmdline_ftrace); without it the global buffer stays at its 7 KB/CPU minimum (Phase 8A.19 attempt 1).
-BUF_ARGS = ["ftrace=nop", "trace_buf_size=8M"]
+BUF_ARGS = ["ftrace=nop", "trace_buf_size=32M"]
+
+# xHCI trace events (built-in xhci-hcd; verified present in the running 7.2.10-1-cachyos tracefs). They follow a
+# control URB from enqueue through TRB queueing, doorbell, transfer event, cancellation and giveback.
+XHCI_EVENTS = ["xhci_urb_enqueue", "xhci_urb_giveback", "xhci_urb_dequeue", "xhci_queue_trb",
+               "xhci_ring_ep_doorbell", "xhci_handle_event", "xhci_handle_transfer", "xhci_handle_command",
+               "xhci_dbg_cancel_urb", "xhci_dbg_reset_ep", "xhci_handle_cmd_stop_ep", "xhci_handle_cmd_set_deq",
+               "xhci_handle_cmd_reset_ep", "xhci_handle_cmd_config_ep"]
+
+
+def trace_event_arg():
+    return "trace_event=" + ",".join("xhci-hcd:" + e for e in XHCI_EVENTS)
 DYNDBG_ARG = 'dyndbg="file drivers/usb/core/message.c line 88 +p"'
 
 # struct offsets of the installed 7.2.10-1-cachyos build (pahole on its BTF).
@@ -60,7 +71,7 @@ def boot_arg():
 
 
 def extra_cmdline_args():
-    return [boot_arg()] + BUF_ARGS + [DYNDBG_ARG]
+    return [boot_arg(), trace_event_arg()] + BUF_ARGS + [DYNDBG_ARG]
 
 
 # ---------------------------------------------------------------- USB setup decoding
@@ -229,7 +240,7 @@ def build_requests(recs, vid=TARGET_VID, pid=TARGET_PID):
             "comm": e["comm"], "bus": kv.get("bus"), "devnum": kv.get("devnum"),
             "setup": s, "desc": d, "length_field": s["wLength"], "timeout_ms": kv.get("tmo"),
             "ret": ret, "ret_name": ERRNO.get(ret, str(ret)),
-            "actual": rk.get("actual"), "fu2": is_fu2(s, d),
+            "actual": rk.get("actual"), "fu2": is_fu2(s, d), "pid": e["pid"],
             "data_out": entry_out if not (s["bmRequestType"] & 0x80) else None,
             "data_in": in_data if (s["bmRequestType"] & 0x80) else None})
     return reqs, other, unpaired, malformed
@@ -320,7 +331,7 @@ def first_timeout_detail(reqs, calls, orphans):
     return d
 
 
-def analyze(text, dmesg=None, report=None):
+def analyze(text, dmesg=None, report=None, expect_xhci=False):
     recs, info = parse_trace(text)
     reqs, other, unpaired, malformed = build_requests(recs)
     timeouts = [q for q in reqs if is_timeout(q)]
@@ -346,6 +357,10 @@ def analyze(text, dmesg=None, report=None):
                 "ts_submit": q["ts_submit"], "elapsed_s": round(q["elapsed"], 6), "task": q["comm"],
                 "interface": q["desc"].get("interface"), "alternate": q["desc"].get("alternate"),
                 "ret": q["ret"], "ret_name": q["ret_name"]})
+    xrecs = parse_xhci(text)
+    res["xhci_records"] = len(xrecs)
+    res["xhci_lifecycles"] = [{"task": q["comm"], "ts_submit": q["ts_submit"], "ts_complete": q["ts_complete"],
+                               "setup": q["setup"], "lifecycle": xhci_lifecycle(xrecs, q)} for q in timeouts] if xrecs else []
     calls, orphans = pair_set_interface(recs)
     res["usb_set_interface_calls"] = calls
     res["orphan_set_interface_returns"] = orphans
@@ -357,7 +372,7 @@ def analyze(text, dmesg=None, report=None):
             res["first_timeout_to_first_fu2_s"] = round(after[0]["t"] - first_to["ts_complete"], 6)
     if dmesg:
         res["debug_message_ties"] = tie_debug_messages(dmesg, timeouts)
-    res["completeness"] = completeness(res, report)
+    res["completeness"] = completeness(res, report, expect_xhci)
     return res
 
 
@@ -376,6 +391,141 @@ def tie_debug_messages(dmesg_text, timeouts, tol=0.005):
         ties.append({"dmesg_ts": ts, "task": m.group("task"), "matched_request": bool(match),
                      "delta_ms": round((ts - match[0]["ts_complete"]) * 1000, 3) if match else None})
     return ties
+
+
+
+# ---------------------------------------------------------------- xHCI lifecycle (Phase 8A.20)
+
+XLINE = re.compile(r"^\s*(?P<comm>.+)-(?P<pid>\d+)\s+\[(?P<cpu>\d+)\]\s+\S+\s+(?P<ts>\d+\.\d+): "
+                   r"(?P<ev>xhci_\w+): (?P<text>.*)$")
+X_URB = re.compile(r"^(?P<dev>\S+) ep(?P<ep>\d+)(?P<dir>in|out)-(?P<type>\w+): urb (?P<urb>[0-9a-f]+) "
+                   r"pipe (?P<pipe>\d+) slot (?P<slot>\d+) length (?P<actual>-?\d+)/(?P<len>-?\d+)")
+X_SETUP = re.compile(r"^(?P<ring>\w+): @(?P<dma>0x[0-9a-f]+) bRequestType (?P<bm>[0-9a-f]{2}) bRequest (?P<b>[0-9a-f]{2}) "
+                     r"wValue (?P<v>[0-9a-f]{4}) wIndex (?P<i>[0-9a-f]{4}) wLength (?P<l>\d+) .*type 'Setup Stage'")
+X_TRB = re.compile(r"^(?P<ring>\w+): @(?P<dma>0x[0-9a-f]+) .*type '(?P<type>[^']+)'")
+X_DB = re.compile(r"Ring doorbell for Slot (?P<slot>\d+) ep(?P<ep>\d+)(?P<dir>in|out)")
+X_EVT = re.compile(r"TRB (?P<trb>[0-9a-f]{16}) status '(?P<status>[^']*)' len (?P<len>-?\d+) slot (?P<slot>\d+) "
+                   r"ep (?P<ep>\d+) type '(?P<type>[^']*)'")
+X_PTR = re.compile(r"(?:urb |URB )(?P<urb>[0-9a-f]{8,16})")
+
+
+def parse_xhci(text):
+    out = []
+    for line in text.splitlines():
+        m = XLINE.match(line)
+        if not m:
+            continue
+        r = {"comm": m.group("comm"), "pid": int(m.group("pid")), "cpu": int(m.group("cpu")),
+             "ts": float(m.group("ts")), "ev": m.group("ev"), "text": m.group("text")}
+        t = r["text"]
+        if r["ev"] in ("xhci_urb_enqueue", "xhci_urb_giveback", "xhci_urb_dequeue"):
+            u = X_URB.match(t)
+            if u:
+                r["urb"] = int(u.group("urb"), 16)
+                r.update({"dev": u.group("dev"), "ep": int(u.group("ep")), "slot": int(u.group("slot")),
+                          "len": int(u.group("len")), "actual": int(u.group("actual")), "utype": u.group("type")})
+        elif r["ev"] == "xhci_queue_trb":
+            su = X_SETUP.match(t)
+            tb = X_TRB.match(t)
+            if su:
+                r["dma"] = int(su.group("dma"), 16)
+                r["trb"] = "Setup Stage"
+                r["setup"] = {"bmRequestType": int(su.group("bm"), 16), "bRequest": int(su.group("b"), 16),
+                              "wValue": int(su.group("v"), 16), "wIndex": int(su.group("i"), 16),
+                              "wLength": int(su.group("l"))}
+            elif tb:
+                r["dma"] = int(tb.group("dma"), 16)
+                r["trb"] = tb.group("type")
+        elif r["ev"] == "xhci_ring_ep_doorbell":
+            d = X_DB.search(t)
+            if d:
+                r.update({"slot": int(d.group("slot")), "ep": int(d.group("ep")), "dir": d.group("dir")})
+        elif r["ev"] in ("xhci_handle_event", "xhci_handle_transfer"):
+            e = X_EVT.search(t)
+            if e:
+                r.update({"trb_ptr": int(e.group("trb"), 16), "status": e.group("status"), "slot": int(e.group("slot")),
+                          "ep": int(e.group("ep")), "etype": e.group("type"), "resid": int(e.group("len"))})
+        elif r["ev"] == "xhci_dbg_cancel_urb":
+            c = X_PTR.search(t)
+            if c:
+                r["urb"] = int(c.group("urb"), 16)
+        out.append(r)
+    return out
+
+
+def xhci_lifecycle(xrecs, req, window=0.5, join_gap=0.005):
+    """Follow ONE USB-core request through the host controller.
+
+    tracefs prints the xHCI `urb` pointer HASHED (`%p`), so it cannot be compared with a raw kernel pointer. The
+    request is joined to its xhci_urb_enqueue by task (pid), bus prefix of the device name, a short time gap after
+    the USB-core entry, and the SETUP bytes of the queued Setup Stage TRB. The (hashed) pointer printed by the xHCI
+    events is then used only to follow that URB's dequeue/cancel/giveback events. Nothing here is exported."""
+    t0, t1 = req["ts_submit"], req["ts_complete"]
+    life = {"urb_enqueue": None, "trbs": [], "setup_trb_matches": None, "setup_trb": None, "doorbell": None,
+            "transfer_events": [], "urb_dequeue": None, "cancel_urb": None, "recovery_commands": [],
+            "giveback": None, "slot": None, "devname": None, "join": "task+bus+time+SETUP"}
+    bus = req.get("bus")
+    if req.get("devnum") == 1:
+        life["classification"] = ("ROOT-HUB: the virtual root hub is served in software; no controller transfer exists "
+                                  "(not applicable)")
+        return life
+    enq = [r for r in xrecs if r["ev"] == "xhci_urb_enqueue" and r["pid"] == req.get("pid")
+           and r.get("utype") == "control" and t0 <= r["ts"] <= t0 + join_gap
+           and (bus is None or str(r.get("dev", "")).startswith("%s-" % bus))]
+    if not enq:
+        life["classification"] = "A: no xhci_urb_enqueue by the requesting task after the USB-core submit (not queued to the controller)"
+        return life
+    e = min(enq, key=lambda r: r["ts"])
+    urb = e["urb"]
+    life.update({"urb_enqueue": e["ts"], "slot": e["slot"], "devname": e["dev"]})
+    nxt = [r["ts"] for r in xrecs if r["ev"] == "xhci_urb_enqueue" and r["pid"] == e["pid"] and r["ts"] > e["ts"]]
+    end = min(nxt) if nxt else t1 + window
+    trbs = [r for r in xrecs if r["ev"] == "xhci_queue_trb" and r["pid"] == e["pid"] and e["ts"] <= r["ts"] < end and "dma" in r]
+    life["trbs"] = [{"ts": r["ts"], "type": r.get("trb")} for r in trbs]  # DMA addresses stay internal
+    setup = next((r for r in trbs if r.get("trb") == "Setup Stage"), None)
+    life["setup_trb"] = setup["setup"] if setup else None
+    life["setup_trb_matches"] = (setup is not None and setup["setup"] == req["setup"])
+    dmas = {r["dma"] for r in trbs}
+    db = [r for r in xrecs if r["ev"] == "xhci_ring_ep_doorbell" and r.get("slot") == e["slot"] and r.get("ep") == 0
+          and e["ts"] <= r["ts"] <= e["ts"] + 0.01]
+    life["doorbell"] = db[0]["ts"] if db else None
+    lo, hi = e["ts"], t1 + window
+    ev = [r for r in xrecs if r["ev"] == "xhci_handle_event" and r.get("etype") == "Transfer Event" and r.get("slot") == e["slot"]
+          and r.get("trb_ptr") in dmas and lo <= r["ts"] <= hi]
+    life["transfer_events"] = [{"ts": r["ts"], "status": r["status"], "resid": r["resid"]} for r in ev]
+    deq = [r for r in xrecs if r["ev"] == "xhci_urb_dequeue" and r.get("urb") == urb and lo <= r["ts"] <= hi]
+    cancel = [r for r in xrecs if r["ev"] == "xhci_dbg_cancel_urb" and r.get("urb") == urb and lo <= r["ts"] <= hi]
+    life["urb_dequeue"] = deq[0]["ts"] if deq else None
+    life["cancel_urb"] = cancel[0]["ts"] if cancel else None
+    cmdw = (deq[0]["ts"] if deq else lo, t1 + window)
+    life["recovery_commands"] = [{"ts": r["ts"], "ev": r["ev"]} for r in xrecs
+                                 if r["ev"] in ("xhci_handle_cmd_stop_ep", "xhci_handle_cmd_set_deq", "xhci_handle_cmd_reset_ep",
+                                                "xhci_dbg_reset_ep") and cmdw[0] <= r["ts"] <= cmdw[1]]
+    gb = [r for r in xrecs if r["ev"] == "xhci_urb_giveback" and r.get("urb") == urb and lo <= r["ts"] <= hi]
+    life["giveback"] = gb[0]["ts"] if gb else None
+    life["classification"] = classify_xhci(life, req)
+    return life
+
+
+def classify_xhci(life, req):
+    if life["urb_enqueue"] is None:
+        return "A: no xhci_urb_enqueue by the requesting task (not queued to the controller)"
+    if life["setup_trb_matches"] is False:
+        return "UNCERTAIN: the queued Setup Stage TRB does not match the USB-core SETUP (join not trusted)"
+    if not life["trbs"]:
+        return "A/B: URB enqueued but no TRBs were queued"
+    if life["doorbell"] is None:
+        return "B: TRBs queued but no endpoint-0 doorbell was rung for the slot"
+    bad = [t for t in life["transfer_events"] if t["status"] not in ("Success", "Short Packet")]
+    if bad:
+        return "D: controller reported an error completion (%s) for this transfer" % bad[0]["status"]
+    if life["transfer_events"]:
+        return "NORMAL: transfer event %s received" % life["transfer_events"][0]["status"]
+    if life["urb_dequeue"] is not None or life["cancel_urb"] is not None:
+        extra = " (stop-endpoint/set-dequeue recovery commands observed)" if life["recovery_commands"] else ""
+        return ("C/E: TRBs queued and doorbell rung, but no Transfer Event arrived before the URB was dequeued "
+                "after the timeout" + extra + " — host cannot distinguish a non-answering device from a controller that did not complete it")
+    return "F/unresolved: doorbell rung, no transfer event and no dequeue observed"
 
 
 # ---------------------------------------------------------------- completeness
@@ -399,7 +549,7 @@ def buffer_expanded(buffer_text):
     return bool(m) and int(m.group(1)) >= 4096
 
 
-def completeness(res, report=None):
+def completeness(res, report=None, expect_xhci=False):
     """Strict verdict. COMPLETE only if nothing indicates loss and the key sequences are whole."""
     reasons = []
     if report is None:
@@ -423,6 +573,15 @@ def completeness(res, report=None):
         reasons.append("first timed-out request entry is missing (%s)" % ft.get("missing"))
     if res["timeouts"] == [] and ft is None:
         reasons.append("no timed-out request in the trace (nothing to attribute)")
+    if expect_xhci:
+        if not res.get("xhci_records"):
+            reasons.append("no xHCI events recorded")
+        elif not res.get("xhci_lifecycles"):
+            reasons.append("no timed-out request to follow through the controller")
+        else:
+            c = res["xhci_lifecycles"][0]["lifecycle"]["classification"]
+            if c.startswith(("UNCERTAIN", "UNKNOWN")):
+                reasons.append("xHCI join not trusted: " + c)
     fu2 = res["fu2"]
     if not fu2:
         reasons.append("no FU2 requests recorded")
@@ -535,6 +694,12 @@ def collect(out_dir, tracefs=TRACEFS, require_root=True, baseline=None):
     if not os.path.isdir(ev):
         sys.exit("no %s events present (was the trace entry booted?)" % GROUP)
     _write(os.path.join(ev, "enable"), "0")  # stop recording our events only
+    xdir = os.path.join(tracefs, "events", "xhci-hcd")
+    for name in XHCI_EVENTS:  # our xHCI events: stop them first, remove them from set_event after saving
+        try:
+            _write(os.path.join(xdir, name, "enable"), "0")
+        except OSError:
+            pass
     buf_text = (_read(os.path.join(tracefs, "buffer_size_kb")).splitlines() or [""])[0]
     expanded = buffer_expanded(buf_text)
     cpu_stats = read_cpu_stats(tracefs)
@@ -551,6 +716,11 @@ def collect(out_dir, tracefs=TRACEFS, require_root=True, baseline=None):
             removed.append(name)
         except OSError as e:
             print("warning: could not remove %s: %s" % (name, e), file=sys.stderr)
+    for name in XHCI_EVENTS:  # remove only our entries from set_event
+        try:
+            tracefs_command(os.path.join(tracefs, "set_event"), "!xhci-hcd:%s\n" % name)
+        except OSError:
+            pass
     want = baseline_buffer_kb(baseline)
     restored_kb = want if want is not None else 1408
     _write(os.path.join(tracefs, "buffer_size_kb"), str(restored_kb))  # undo trace_buf_size growth
@@ -693,6 +863,12 @@ def report(res):
     lines += ["records=%d target_requests=%d non_target=%d unpaired=%d malformed=%d loss=%s complete=%s"
              % (res["records"], res["target_requests"], res["non_target_requests"],
                 res["unpaired_events"], res["info"]["malformed_lines"], res["info"]["loss"], res["complete"])]
+    for xl_ in res.get("xhci_lifecycles", []):
+        lf = xl_["lifecycle"]
+        lines.append("XHCI task=%s submit=%.6f: %s | slot=%s dev=%s enqueue=%s doorbell=%s transfer_events=%s dequeue=%s "
+                     "recovery=%s giveback=%s" % (xl_["task"], xl_["ts_submit"], lf["classification"], lf["slot"],
+                                                   lf["devname"], lf["urb_enqueue"], lf["doorbell"], lf["transfer_events"],
+                                                   lf["urb_dequeue"], [c["ev"] for c in lf["recovery_commands"]], lf["giveback"]))
     for t in res["timeouts"]:
         lines.append("TIMEOUT %s task=%s submit=%.6f complete=%.6f elapsed=%.3fs ret=%s setup bm=0x%02x b=0x%02x "
                      "wValue=0x%04x wIndex=0x%04x wLength=%d (%s %s iface=%s alt=%s)"
@@ -715,6 +891,7 @@ def main(argv=None):
     a.add_argument("--dmesg")
     a.add_argument("--json")
     a.add_argument("--report", help="collect_report.json written by collect")
+    a.add_argument("--expect-xhci", action="store_true", help="require xHCI events and a joined lifecycle")
     c = sub.add_parser("collect")
     c.add_argument("--out-dir", required=True)
     c.add_argument("--baseline", default="/var/lib/openwitty-8a19/tracefs_baseline.json")
@@ -730,7 +907,7 @@ def main(argv=None):
         return 0
     if args.cmd == "analyze":
         rep_ = json.load(open(args.report)) if args.report else None
-        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None, rep_)
+        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None, rep_, args.expect_xhci)
         print(report(res))
         if args.json:
             with open(args.json, "w") as f:
