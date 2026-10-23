@@ -275,7 +275,8 @@ whether this stall is the *cause* of the sticky FU2 verdict or merely coincident
 sticky behavior was unchanged, so no measurement interference is visible.
 
 ## User observations
-Not yet collected for attempts 1 and 2 (clicks, level changes, USB instability).
+Reported by the user afterwards for both debug boots: no clicks or any other noticeable problem (subjective, not
+instrumented; not proof that a later boot is safe). No hardware snapshot was taken for these boots.
 
 ## Next (offline unless separately approved)
 Do not repeat this boot. The finding redirects the investigation to *why endpoint 0 stops answering for
