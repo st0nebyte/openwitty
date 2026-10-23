@@ -183,6 +183,8 @@ mixer probe happened between the snapshots; it either did not alter these values
    be assumed that the physical Speaker level followed it (or did not).
 
 ## Classification: NEGATIVE
+(Qualified by Phase 8A.14: the measured added enumeration delay was ~0.94 s — +729 ms before `found`, +210 ms after — not the ~2.2 s expected; see `PHASE8A14_DELAY_INIT_TIMING_POSTMORTEM.md`. The classification itself is unchanged.)
+
 The parameter was accepted by the kernel, CONNECT 2 enumerated normally, and the Feature Unit 2
 sticky rejection persisted exactly as in the five baseline boots, with no ALSA hardware volume and
 `route.hw-volume=false`. This is one boot with one parameter, shutdown→power-on method matched.
