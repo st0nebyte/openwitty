@@ -1,6 +1,6 @@
 # Phase 8A.13 — DELAY_INIT single cold-boot test
 
-**Status: PREPARED — NOT YET EXECUTED** (checkpoint written 2026-10-23 ~20:30 CEST, before shutdown)
+**Status: EXECUTED — classification: NEGATIVE** (checkpoint written 2026-10-23 ~20:30 CEST before shutdown; results appended below)
 
 This file is the recovery checkpoint. If the chat session is gone after the test boot, a new
 session should read this file, `PHASE8A12_USB_CORE_DELAY_INIT_QUIRK_ASSESSMENT.md`, and then
@@ -96,11 +96,11 @@ with an attempt at 0 dB and an unmute.
 ## Scoring table (fill after boot)
 | | Observation | Result |
 |---|---|---|
-| A | FU2 sticky warning | TBD |
-| B | ALSA PCM Playback Volume | TBD |
-| C | PipeWire `route.hw-volume` | TBD |
-| D | one stable stereo sink | TBD |
-| E | AudioStreaming timeout | TBD |
+| A | FU2 sticky warning | **Present** (11.433 s) |
+| B | ALSA PCM Playback Volume | **Missing** (Switch controls only) |
+| C | PipeWire `route.hw-volume` | **False** (softVolumes 0.614) |
+| D | one stable stereo sink | **Exactly one** ("Analoges Stereo") |
+| E | AudioStreaming timeout | **Present** (17.508 s) |
 
 Positive requires cmdline confirmed, normal enumeration, A absent, B available, C true, D ok
 (E may persist). One positive boot ≠ reliable fix. Absent warning alone ≠ working mixer.
@@ -112,3 +112,89 @@ procedure, editor availability, cmdline confirmation, timing, A–E, physical st
 report, classification, uncertainty, recommendation), run the USB call-site audit with an
 explicit exit status, `git diff --check`, privacy review (no serial, root UUID, raw logs), then
 commit and push to `origin/phase7-hardware-integration`.
+
+---
+
+# Results (recorded 2026-10-23 ~20:32 CEST, after the single test boot)
+
+## Procedure and authorization
+User confirmed all six safety conditions (playback/recording stopped, external audio equipment
+protected, headphones isolated, no reliance on software/hardware mute, instructions retained,
+one shutdown→power-on accepted) and then did one normal shutdown (20:28) and one manual power-on
+(20:30). Boot 0 is a genuine shutdown→power-on boot (`last -x`: shutdown 20:28, boot 20:30).
+The user did not report anything unusual during the boot at the time of writing; an explicit
+audible-behavior report was **not yet collected** (see "User-reported behavior").
+Whether the Limine editor was available and used as instructed is evidenced only indirectly: the
+kernel command line contains exactly the baseline arguments plus the one new token.
+
+## Parameter verification
+- `/proc/cmdline`: baseline arguments unchanged, plus `usbcore.quirks=29c2:0004:g` (root UUID
+  redacted here). Kernel log `Kernel command line:` agrees.
+- `/sys/module/usbcore/parameters/quirks` reads `29c2:0004:g` — the sysfs parameter *does* mirror
+  the boot argument (this corrects the Phase 8A.12 expectation that it would stay empty).
+- Visible argument proves it was accepted by `usbcore`; it is not itself proof that the delay ran.
+
+## Timing markers (monotonic kernel log, CONNECT 2 = `3-2`)
+| Marker | Baseline boot (Oct 23 12:58) | This boot |
+|---|---|---|
+| `new high-speed USB device number 2` | 2.069219 s | 2.041779 s |
+| `New USB device found` | 2.069273 s (+0.05 ms) | 2.771194 s (**+0.73 s**) |
+| `New USB device strings` | 2.069371 s (+0.1 ms) | 2.981 s (**+0.21 s** after `found`) |
+| FU2 sticky warning | 11.414 s | 11.433 s |
+| FU5 sticky warning | 11.418 s | 11.437 s |
+| AudioStreaming `usb_set_interface failed (-110)` | 17.491 s | 17.508 s |
+
+The `found`→`strings` gap of ~0.21 s matches the expected `msleep(200)` in `usb_get_configuration()`
+and was ~0.1 ms at baseline, so that site very likely executed. The `new`→`found` gap was
+~0.73 s, **not** the ~2.0 s predicted for `msleep(2000)`; this is unexplained (possible causes not
+investigated: timestamp ordering of the `new` line, different code path/kernel behaviour than the
+disassembly suggested). The 2000 ms site is therefore **not confirmed**; neither the 2.0 s nor the
+exact total can be asserted. Everything after enumeration (sticky warnings, timeout) landed at
+the same times as baseline (+~20 ms), so the added enumeration delay had no visible effect on the
+mixer-probe moment.
+
+## Scoring
+| | Observation | Result |
+|---|---|---|
+| A | FU2 sticky warning | **Present** — `2:0: sticky mixer values (-15360/0/128 => -1024), disabling` at 11.433 s; identical values to the earlier baseline boot |
+| B | ALSA `PCM Playback Volume` | **Missing** (`amixer -c C2 controls`, names only: Switch controls, Clock Source Validity, channel maps) |
+| C | PipeWire `route.hw-volume` | **False** (output route `analog-output`; softVolumes 0.614138) |
+| D | Stereo playback sink | **Exactly one** (`CONNECT 2 Analoges Stereo`, 0.85) |
+| E | AudioStreaming timeout | **Present** — `usb_set_interface failed (-110)` at 17.508 s |
+
+## Physical hardware state (GET-only, `openwitty-cli read settings`, interface 3)
+Post-boot snapshot 2026-10-23 20:31:40 CEST (a post-userspace snapshot, not a post-probe
+measurement), compared with the pre-shutdown snapshot at 20:25:58:
+| | Before | After |
+|---|---|---|
+| Speaker | -4.00 dB, unmuted | -4.00 dB, unmuted |
+| Headphone | -32.40 dB, muted | -32.40 dB, muted |
+| Mic / Instrument mute | on / on | on / on |
+No hardware writes by OpenWitty. No change in these values was observed. Note the kernel's own
+mixer probe happened between the snapshots; it either did not alter these values or restored them.
+
+## User-reported behavior
+Not yet collected. Question for the user: any clicks, speaker-on sounds, level changes, USB
+instability? (Subjective, not instrumented.)
+
+## Classification: NEGATIVE
+The parameter was accepted by the kernel, CONNECT 2 enumerated normally, and the Feature Unit 2
+sticky rejection persisted exactly as in the five baseline boots, with no ALSA hardware volume and
+`route.hw-volume=false`. This is one boot with one parameter, shutdown→power-on method matched.
+
+## Remaining uncertainty
+- Whether the 2000 ms site executed (observed 0.73 s, not ~2.0 s); the 200 ms site very likely did.
+- Whether USB standby power actually disappears at shutdown (unmeasured); a power state that
+  survives shutdown could mean the device never cold-starts in either condition.
+- A single negative boot cannot exclude a probabilistic effect, but 5 baseline boots all failed
+  identically, and the failure moment/values were unchanged.
+- The delay was applied *before* the audio driver; if the firmware needs time relative to a later
+  event (e.g. first audio-class traffic) the quirk would not help.
+
+## Recommendation for the next phase
+Do not repeat this boot. Treat `DELAY_INIT` as negative evidence (not a fix). Candidates, each
+needing separate authorization: investigate why the 2000 ms gap was ~0.73 s (offline source/binary
+analysis only), then resume the passive observation line (Phase 8A.11 USB-core boot observer
+remains offline, still NO-GO, and is still the only path to seeing the actual boot-time FU2
+traffic), or evaluate a power-state hypothesis (YKUSH-style VBUS control or BIOS USB standby
+power) as a distinct, non-software experiment.

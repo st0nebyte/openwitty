@@ -309,9 +309,8 @@ its own. Neither marker is a measurement of the quirk bit itself.
 
 1. `cat /proc/cmdline` after boot — confirms the edited line was passed to the kernel (not that
    the delay ran).
-2. `cat /sys/module/usbcore/parameters/quirks` — likely still empty (command-line quirks are
-   not mirrored into this sysfs file; this file only reflects values written to it at runtime).
-   Do not treat an empty value here as evidence the quirk didn't apply — see next criterion.
+2. `cat /sys/module/usbcore/parameters/quirks` — (Phase 8A.13 correction: this DOES mirror the
+   boot argument; it read `29c2:0004:g` on the test boot. Earlier expectation of "empty" was wrong.)
 3. `journalctl -k -b 0 | grep -i 29c2` — confirms CONNECT 2 enumerated normally.
 4. `journalctl -k -b 0 | grep -iE 'sticky mixer|usb_set_interface failed'` — presence/absence is
    the primary result signal.
