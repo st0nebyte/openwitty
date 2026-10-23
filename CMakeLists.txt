@@ -160,6 +160,11 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                                 PROPERTIES LANGUAGE CXX)
     add_executable(fu2_usb_core_offline tools/diagnostics/test_fu2_usb_core_offline.c)
     add_test(NAME fu2_usb_core_offline COMMAND fu2_usb_core_offline)
+    # Lifecycle/cleanup state machine with fake links and local processes; no BPF load.
+    set_source_files_properties(tools/diagnostics/test_fu2_boot_lifecycle.c
+                                PROPERTIES LANGUAGE CXX)
+    add_executable(fu2_boot_lifecycle_offline tools/diagnostics/test_fu2_boot_lifecycle.c)
+    add_test(NAME fu2_boot_lifecycle_offline COMMAND fu2_boot_lifecycle_offline)
 endif()
 
 # Packaging check: install into an isolated DESTDIR and verify layout, RPATH, dev-path
