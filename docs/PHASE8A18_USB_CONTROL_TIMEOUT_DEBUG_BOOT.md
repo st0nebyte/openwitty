@@ -1,6 +1,6 @@
 # Phase 8A.18 — USB control-timeout debug boot (one boot)
 
-**Status: EXECUTED ONCE — INCONCLUSIVE (the intended parameter was not applied; see Results).**
+**Status: attempt 1 INCONCLUSIVE (parameter mistyped); attempt 2 EXECUTED — POSITIVE (see "Attempt 2 results" at the end).**
 Original checkpoint text (prepared 2026-10-23 ~22:00 CEST, authorization given and the six safety
 confirmations recorded in chat right before the shutdown) follows; results are appended at the end.
 
@@ -216,3 +216,69 @@ Changes to the procedure (everything else in §2–§8 is unchanged):
   The shorter variant `dyndbg="file message.c line 88 +p"` is equally acceptable.
 - Success check after boot: `/proc/cmdline` has `dyndbg="file …"` **with** `=`, and `/proc/dynamic_debug/control` shows
   `message.c:88 … =p`.
+
+---
+
+# Attempt 2 results (recorded 2026-10-23 ~22:15 CEST)
+
+## Procedure record
+User re-confirmed safety points 1–6 and re-ran the Limine one-time edit: normal shutdown 22:04, manual
+power-on 22:05, CONNECT 2 unchanged in port `3-2`. No retry follows automatically.
+
+## Parameter verification: PASSED
+`/proc/cmdline` ends with `dyndbg="file drivers/usb/core/message.c line 88 +p"` (the `=` present), no
+`usbcore.quirks`. `/proc/dynamic_debug/control`: `message.c:88 [usbcore]usb_start_wait_urb =p` (enabled);
+enabled callsites 24 → 25 (exactly the one added).
+
+## Debug output (kernel log, monotonic; CONNECT 2 = `usb 3-2`)
+| time (s) | line |
+|---|---|
+| 11.347446 | `usb 3-2: (udev-worker) timed out or killed on ep0out len=0/0` |
+| 17.491004 | `usb 3-2: wireplumber timed out or killed on ep0out len=0/0` |
+No other timeout lines, from any USB device, in the whole boot.
+Correlated events: enumeration 2.130; FU2 sticky 11.416; `snd-usb-audio` registered 11.429; `-110`
+`usb_set_interface failed` 17.492; udev stamp of `3-2:1.0` 5.416 (rules evaluated).
+
+## Interpretation
+- **Positive control passed:** the 17.491 s line (task `wireplumber`, ep0out, 0/0) occurs 1 ms before the
+  known `-110` line (17.492) — the site works and attributes the known later failure to a 5 s SET-type
+  timeout from userspace.
+- **New, relevant evidence:** a control-endpoint (`ep0out`) wait on **CONNECT 2** timed out at
+  **11.347 s, 69 ms before the FU2 sticky line (11.416 s) and 82 ms before the driver registration**, in
+  the task **`(udev-worker)`** — the context that runs the module load/probe. With the 5000 ms control
+  timeout, the stalled request began at about **6.35 s** (estimate: stamp − 5.0), i.e. ~0.93 s after
+  udev evaluated the rules for the interface (5.416 s). One 5 s timeout plus ~0.9 s of load/parse accounts
+  for the ~5.9 s hold.
+- `ep0out len=0/0` means a control request with **no data stage** — consistent with `SET_INTERFACE`
+  (the ignored calls of Phase 8A.17 candidate A), but it does **not** identify which call or even that it is
+  `SET_INTERFACE`; the site does not log `bRequest/wValue/wIndex` or the start time.
+- The mixer decision followed 69 ms after the timeout: the device answered again immediately afterwards.
+
+## Scoring (per the Phase 8A.18 criteria)
+**POSITIVE** for "the pre-FU2 hold contains a timed-out USB control transfer": CONNECT 2 timeout, before
+the FU2 sticky line, in the probing task, with duration consistent with the hold, site verified active.
+| | Observation | Result |
+|---|---|---|
+| A | FU2 sticky warning | Present (11.416 s, `=> -1024`) |
+| B | ALSA `PCM Playback Volume` | Missing |
+| C | PipeWire `route.hw-volume` | False (software gain 0.064, KDE 0.40) |
+| D | One CONNECT 2 sink | Yes |
+| E | AudioStreaming `-110` | Present (17.492 s; timeout line 17.491 s) |
+
+## What this does and does not establish
+Established: at boot the device does not complete one (data-less) control request to endpoint 0 for the full
+5 s timeout during the probe, then works; the same kind of stall occurs again later from userspace. Not
+established: which request; why the device does not answer (readiness, power state, host/xHCI behavior);
+whether this stall is the *cause* of the sticky FU2 verdict or merely coincident (the stall precedes it by
+69 ms; the reconnect path runs the same code with no stall and accepts FU2); why the end lands at ≈10.92 s or
+≈11.43 s; whether a good boot would show the stall. This run was not instrumented beyond one log line;
+sticky behavior was unchanged, so no measurement interference is visible.
+
+## User observations
+Not yet collected for attempts 1 and 2 (clicks, level changes, USB instability).
+
+## Next (offline unless separately approved)
+Do not repeat this boot. The finding redirects the investigation to *why endpoint 0 stops answering for
+5 s at boot*: candidates are host-side (xHCI port/endpoint state after the earlier kernel reset), device-side
+readiness/power state, or the interaction of the first `SET_INTERFACE` with the audio interface. Identifying
+the exact request needs wire-level or xHCI visibility, i.e. tracing or `usbmon`, which is not authorized.

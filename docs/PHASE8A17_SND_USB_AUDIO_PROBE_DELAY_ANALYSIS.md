@@ -107,6 +107,9 @@ Whether the stalled request is an independent problem or the boot bug itself is 
 "sticky FU2 at boot", the stall is *before* it, and both disappear after a physical replug (the
 reconnect path ran the same code in ~0.18 s).
 
+> **Update (Phase 8A.18 attempt 2):** a `(udev-worker)` `ep0out len=0/0` timeout on CONNECT 2 was logged at
+> 11.347 s, 69 ms before the FU2 sticky line — direct support for candidate A (not for the exact call).
+
 ## 5. Module-dependency and synchronization alternatives
 - Zstd-compressed module (`CONFIG_MODULE_COMPRESS_ZSTD`, all modules) and signature checking add
   ms-scale cost; they cannot by themselves explain 5 s unless storage/CPU is saturated, and `btusb`
