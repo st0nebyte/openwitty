@@ -156,6 +156,10 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                                 PROPERTIES LANGUAGE CXX)
     add_executable(fu2_observer_offline tools/diagnostics/test_fu2_observer_logic.c)
     add_test(NAME fu2_observer_offline COMMAND fu2_observer_offline)
+    set_source_files_properties(tools/diagnostics/test_fu2_usb_core_offline.c
+                                PROPERTIES LANGUAGE CXX)
+    add_executable(fu2_usb_core_offline tools/diagnostics/test_fu2_usb_core_offline.c)
+    add_test(NAME fu2_usb_core_offline COMMAND fu2_usb_core_offline)
 endif()
 
 # Packaging check: install into an isolated DESTDIR and verify layout, RPATH, dev-path
