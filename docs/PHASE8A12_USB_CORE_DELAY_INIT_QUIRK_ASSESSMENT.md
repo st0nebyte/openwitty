@@ -56,8 +56,28 @@ cross-checked against the real binary at `/usr/src/linux-cachyos/vmlinux`
   before the full-length read, so it runs **once per configuration descriptor** (up to
   `bNumConfigurations` × 200 ms), even when the second read is skipped. It is not per retry.
   This device reports `bNumConfigurations = 1` (read from sysfs, no USB traffic), so the expected
-  extra cost is **one** 200 ms sleep. This runs earlier than the 2000 ms site, inside
-  `hub_port_init()`/descriptor fetching, and thus before the 2000 ms sleep.
+  extra cost is **one** 200 ms sleep. **Order (corrected):** the 200 ms site runs *after* the
+  2000 ms site, not before it (see "Verified call sequence" below).
+- **Verified call sequence** (upstream `hub.c`; confirmed in the installed `vmlinux`):
+  1. `hub_port_connect()` → `hub_port_init()` (reset, address, device descriptor read). The
+     kernel prints `usb X-Y: new … USB device number N using …` here, before any DELAY_INIT sleep.
+  2. On success: `msleep(2000)` if `DELAY_INIT` (hub.c site).
+  3. `hub_port_connect()` → `usb_new_device()`.
+  4. `usb_new_device()` → `announce_device_ids()`, which prints
+     `New USB device found, idVendor=…` — **before** configuration descriptors are read.
+  5. `usb_new_device()` → `usb_enumerate_device()` → `usb_get_configuration()`, where the
+     per-configuration `msleep(200)` runs (config.c site).
+  6. `usb_new_device()` → `announce_device_strings()`, which prints
+     `New USB device strings: Mfr=…` — **after** configuration processing.
+  7. `device_add()`; driver binding (including `snd-usb-audio`) follows.
+  Installed-binary evidence for 2–7: `hub_event` has `testb $0x40` / `msleep(2000)` ahead of the
+  inlined `usb_new_device` hand-off; disassembled `usb_new_device` calls `announce_device_ids`,
+  then `usb_get_configuration`, then `announce_device_strings`, then `device_add`, in that
+  order. The baseline journal agrees: `found` and `strings` are ~0.1 ms apart (2.069273 s vs
+  2.069371 s) because no delay is present between them today. (An earlier version of this
+  document wrongly put the 200 ms site before the 2000 ms site; a reviewer's suggestion that
+  `New USB device found` is printed *after* configuration processing is likewise not supported —
+  only the `strings` line is.)
 - Other quirk-gated delay: `USB_QUIRK_HUB_SLOW_RESET` (`o`) adds 100 ms to port-reset recovery —
   unrelated bit, not part of this proposal. (A 2014 stable-3.8 backport once implemented
   DELAY_INIT as "100 ms between Get Configuration requests"; that is the ancestor of the
@@ -78,8 +98,8 @@ cross-checked against the real binary at `/usr/src/linux-cachyos/vmlinux`
      strong evidence about the installed kernel but not a read of the memory image of the running
      kernel itself.
   3. *Unverified:* actual runtime effect on the device; no test has been performed.
-- Total added enumeration delay when the flag is set on this device: ~200 ms (config.c) +
-  2000 ms (hub.c) ≈ 2.2 s, each only after the quirk is set for this VID:PID.
+- Total added enumeration delay when the flag is set on this device: 2000 ms (hub.c, first) +
+  ~200 ms (config.c, later) ≈ 2.2 s, only for the quirked VID:PID.
 
 ## 2. Toggle semantics vs. existing quirk state (the critical pre-check)
 
@@ -146,10 +166,12 @@ device enumerates and fails identically regardless of path.) This exactly reprod
 ~9-second enumeration-to-sticky-failure gap documented in Phase 8A.10, now confirmed across
 multiple additional boots, not just the one originally sampled.
 
-`DELAY_INIT`'s two sleeps (one 200 ms per configuration in `usb_get_configuration()`, then one
-2000 ms in `hub_port_connect()` after `hub_port_init()` and before
-`usb_new_device()`) add ~2.2 s in the first moments of the device's life, well before the ~11.4 s
-mixer probe. The device already receives roughly 9 additional seconds of "settling time" today
+`DELAY_INIT`'s two sleeps (first 2000 ms in `hub_port_connect()` after `hub_port_init()` and
+before `usb_new_device()`; then one 200 ms per configuration inside `usb_get_configuration()`
+during `usb_new_device()`) add ~2.2 s in total to the first moments of the device's life, well
+before the ~11.4 s mixer probe. The added time is split: ~2 s *before* `New USB device found`
+and ~0.2 s *between* `New USB device found` and `New USB device strings`; it is **not**
+necessarily added between `found` and audio-driver binding. The device already receives roughly 9 additional seconds of "settling time" today
 between enumeration and the point of failure, through ordinary driver-load and probe sequencing
 alone, and the failure still occurs.
 
@@ -278,10 +300,12 @@ A missing sticky warning (A) is **not sufficient** if B or C show the hardware m
 unavailable. A good A/B/C result is **not** a failure merely because E persists: E is a separate
 interface-level timeout. `/proc/cmdline` (criterion 1) proves only that the parameter string was
 passed to the kernel; it is **not** proof the USB delay executed. Direct evidence of execution is
-indirect at best: a shifted enumeration-to-bind timeline in `journalctl -k -o short-monotonic`
-(roughly +2.2 s between `New USB device found` and the first driver bind for `29c2:0004`,
-compared with the ~0 s baseline in earlier boots) — and even that is inferential, not a
-measurement of the quirk bit.
+indirect at best. Optional corroborating markers in `journalctl -k -o short-monotonic` for
+`29c2:0004`: (i) `new … USB device number` → `New USB device found` gap of ~2.0 s (the hub.c
+sleep; the earliest bracketing pair), and (ii) `New USB device found` → `New USB device
+strings` gap of ~0.2 s (the config.c sleep) versus ~0.1 ms in earlier boots. These are not
+prerequisites: other enumeration latency can blur them, and the outcome of A–E is interpreted on
+its own. Neither marker is a measurement of the quirk bit itself.
 
 1. `cat /proc/cmdline` after boot — confirms the edited line was passed to the kernel (not that
    the delay ran).
@@ -308,8 +332,8 @@ measurement of the quirk bit.
 
 **Interpretation:**
 - **Positive evidence**: criterion 1 shows the parameter, criterion 3 shows normal enumeration,
-  the enumeration→bind timeline shows the expected shift, A is absent **and** B and C show a
-  working hardware volume. E may persist without changing this classification.
+  A is absent **and** B and C show a working hardware volume. A timing shift (markers above) is
+  supporting evidence only, and its absence does not invalidate an otherwise clear A–C result. E may persist without changing this classification.
 - **Negative evidence**: same preconditions, but A (sticky rejection) still occurs, or A is
   absent while B/C show the hardware volume is still missing.
 - **Inconclusive**: criterion 1 false (edit didn't take), criterion 3 false (device didn't
