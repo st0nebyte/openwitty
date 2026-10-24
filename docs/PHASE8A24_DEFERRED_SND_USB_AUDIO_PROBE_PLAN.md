@@ -67,21 +67,46 @@ backup; `entry verify` repeats that check later. The current UEFI S5 setting sta
    failing boot sequence: SET −60 then 0 dB, final 0 dB without restore); exactly one boot, one load.
 2. The user performs a normal restart (or shutdown/power-on) and selects **"OpenWitty deferred snd-usb-audio
    (temporary)"** in the Limine menu.
-3. After login and a settled desktop (≥ 2 minutes idle): `python3 -I tools/diagnostics/deferred_probe.py check`
-   (root for the journal). The **gate** must pass: command line contains the blacklist and no `module_blacklist`;
-   `/sys/module/snd_usb_audio` absent; CONNECT 2 (29c2:0004) enumerated on port `3-2`; no interface of it bound to a
-   driver; no `registered new interface driver snd-usb-audio` in the journal; `modprobe -c` reports the blacklist.
-   If the module is already loaded or registered: **INVALID** — do not load; restore and report.
-4. Record: boot time, enumeration timestamp, checkpoint time (`checkpoint.json`, outside Git).
-5. Re-confirm the safety gate with the user, then run exactly once:
-   `sudo python3 -I tools/diagnostics/deferred_probe.py load --confirm-audio-safe`
-   (refuses without the flag, refuses if the gate fails, refuses a second run via `/var/lib/openwitty-8a24/load_done`,
-   records wall/uptime before and after and the `modprobe` return code).
-6. `python3 -I tools/diagnostics/deferred_probe.py classify --cli build-release/openwitty-cli`: collects, restricted to
-   events after the load time: sticky verdicts (unit 2 vs unit 5 reported separately), `usb_set_interface failed
-   (-110)`, `PCM Playback Volume`, PipeWire analog-output `route.hw-volume`, GET-only Speaker/Headphone state, and the
-   deliberate-load timestamps. No playback, no volume change, no reconnect, no reload.
-7. Cleanup: `entry remove`, `entry verify`; next boot uses the normal entry; delete `/var/lib/openwitty-8a24`.
+3. After login and a settled desktop (≥ 2 minutes idle), **as the normal user** (not root), inside the desktop session:
+   `RUN=$(python3 -I tools/diagnostics/deferred_probe.py prepare)` → creates the private run directory
+   `~/.local/state/openwitty/trace-8a24/run-<timestamp>/` (0700, owned by the user, with `experiment.json`).
+   Then `python3 -I tools/diagnostics/deferred_probe.py check --run-dir "$RUN"` (journal read falls back to
+   `sudo -n journalctl`). Writes `checkpoint.json`. The **gate** must pass; every item fails closed:
+   - kernel command line contains `modprobe.blacklist=snd_usb_audio` and no `module_blacklist`;
+   - `/sys/module/snd_usb_audio` absent; no interface of CONNECT 2 bound to any driver;
+   - **identity**: exactly one device `29c2:0004`, on port **`3-2`**, behind xHCI **`0000:0d:00.4`**. A different port,
+     a different controller, a missing controller identity or several matching devices ⇒ INVALID. Nothing is reset or
+     re-enumerated to "fix" a mismatch;
+   - **journal evidence verified**: `journalctl -k -b 0` must succeed, be non-empty, contain the `Linux version`
+     boot-start line and the CONNECT 2 enumeration line. Statuses `FAILED` (command error), `UNREADABLE`
+     (permission), `EMPTY`, `INCOMPLETE` (e.g. a non-member only sees user messages) all fail the gate — an
+     unreadable journal is never taken as proof that the driver has not registered. Only a verified journal without
+     `registered new interface driver snd-usb-audio` passes;
+   - `modprobe -c` reports `blacklist snd_usb_audio`.
+   If anything fails: **INVALID** — do not load; restore and report.
+4. Record: boot time, enumeration timestamp, checkpoint time and boot id (inside `checkpoint.json`, outside Git).
+5. Re-confirm the physical safety gate with the user, then run exactly once, with the **same** run directory:
+   `sudo python3 -I tools/diagnostics/deferred_probe.py load --run-dir "$RUN" --confirm-audio-safe`.
+   Root-side checks before anything is loaded: the flag is present; `/var/lib/openwitty-8a24/load_done` does not exist;
+   the run directory is an absolute, symlink-free 0700 directory owned by the user whose uid equals `SUDO_UID` and
+   to the `experiment.json` uid (all later file access is `dir_fd`-relative with `O_NOFOLLOW`, files are created
+   exclusively with mode 0600 and `fchown`ed to the user, so root never follows a planted link and the user can
+   read the result); `checkpoint.json` is an OK gate of **this boot** (boot id) not older than 30 minutes; the gate is
+   re-evaluated with root's journal access. Then the single-load marker is created atomically (`O_EXCL`, root-owned,
+   0600) **before** `modprobe snd-usb-audio` runs; a second invocation, even for another run directory, is refused.
+   `load.json` records wall/uptime before and after and the return code.
+6. **As the normal user, inside the desktop session** (PipeWire is per-user; the tool refuses to run as root):
+   `python3 -I tools/diagnostics/deferred_probe.py classify --run-dir "$RUN" --cli build-release/openwitty-cli`.
+   It reads `checkpoint.json` and `load.json` from the same directory and writes `classification.json` there.
+   It collects, restricted to events after the load time: sticky verdicts (unit 2 vs unit 5 separately),
+   `usb_set_interface failed (-110)`, `PCM Playback Volume`, PipeWire analog-output `route.hw-volume`, a journal
+   status for the after-load slice (a non-OK status makes the result INCONCLUSIVE), and the GET-only hardware
+   snapshot. The snapshot is parsed from the real CLI format (`src/cli/main.cpp`): Speaker and Headphone volume and
+   mute are on the `phantom=` line (`phantom=1  speaker=-23.50 dB  headphone=-32.40 dB (muted) …`); the parser
+   stores `speaker_db`, `speaker_muted`, `headphone_db`, `headphone_muted` plus the microphone/instrument/phantom
+   lines (never `raw=`) and a `complete` flag; a missing or garbled line yields `complete: false`. Only the existing
+   GET-only `read settings` is used. No playback, no volume change, no reconnect, no reload.
+7. Cleanup: `sudo … entry remove`, `entry verify`; next boot uses the normal entry; delete `/var/lib/openwitty-8a24`. The run directory stays outside Git.
 
 ## Evidence and what it can and cannot show
 - Distinguishes **USB enumeration** (journal `New USB device found`, kernel start + ≈21 ms), **probe start**
@@ -121,5 +146,13 @@ Tell Claude "8A.24 resume". Claude will run `check` first and stop on any gate f
 until the user re-confirms the physical safety gate in that session.
 
 ## Validation of the preparation
-`test_deferred_probe.py` (13 offline tests: entry text/round-trip/refusals, install–remove–verify on a temp file,
-gate invalidators, classification matrix, load guards) is registered as CTest `deferred_probe_offline`.
+`test_deferred_probe.py` (32 offline tests, CTest `deferred_probe_offline`): entry text/round-trip/refusals; temp-file
+install–remove–verify; gate invalidators incl. wrong port/controller/missing controller/ambiguity; journal status
+matrix and sudo fallback; classification matrix; hardware-snapshot parsing of the real CLI format; run-directory
+handoff (private user-owned directory, user and simulated-root resolve the same directory, symlink/relative/`..`/
+wrong-mode/`SUDO_UID` mismatch rejected, symlinked file not followed, root-written files chowned to the user, 0600);
+full check → load → classify flow on one directory with single-load protection, stale/other-boot checkpoint refusal,
+failed-gate and failed-`modprobe` paths. In addition a real `sudo` run (with a stubbed gate and a stubbed `modprobe`
+that loads nothing, a throw-away marker directory and run directory, all deleted afterwards) confirmed on this machine
+that root-created `load.json`/`checkpoint.json` come out `<user>:<user> 0600`, the marker is root-only, and the
+unprivileged `classify` reads them, while `classify` as root is refused.

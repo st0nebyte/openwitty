@@ -59,6 +59,26 @@ def classify(findings, pcm_volume, hw_volume_true):
     return "INCONCLUSIVE"
 
 
+HW_LINE = re.compile(r"^phantom=(?P<ph>\d)\s+speaker=(?P<sv>-?\d+(?:\.\d+)?) dB(?P<sm> \(muted\))?\s+"
+                     r"headphone=(?P<hv>-?\d+(?:\.\d+)?) dB(?P<hm> \(muted\))?\s")
+
+
+def parse_hw_snapshot(text):
+    """Parse the real `openwitty-cli read settings` output (src/cli/main.cpp printSettings): the speaker and
+    headphone volume/mute are on the `phantom=` line. Never uses the `raw=` line.
+    -> {complete, speaker_db, speaker_muted, headphone_db, headphone_muted, lines}"""
+    out = {"complete": False, "speaker_db": None, "speaker_muted": None, "headphone_db": None,
+           "headphone_muted": None, "lines": []}
+    for line in (text or "").splitlines():
+        if line.startswith(("microphone:", "instrument:", "phantom=")):
+            out["lines"].append(line)
+        m = HW_LINE.match(line + " ")
+        if m:
+            out.update(speaker_db=float(m.group("sv")), speaker_muted=bool(m.group("sm")),
+                       headphone_db=float(m.group("hv")), headphone_muted=bool(m.group("hm")), complete=True)
+    return out
+
+
 def run(cmd, timeout=15):
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
@@ -149,7 +169,7 @@ def main(argv=None):
     rep["default_sink_volume"] = sink.splitlines()[0] if sink else None
     if a.cli:
         s = run([a.cli, "read", "settings", "--method", "interface", "--interface", "3"], 30)
-        rep["hardware_snapshot"] = [l for l in (s or "").splitlines() if l.startswith(("phantom=", "microphone", "instrument"))]
+        rep["hardware_snapshot"] = parse_hw_snapshot(s)
     rep["classification"] = classify(f, pcm_volume, hw) if text else "INCONCLUSIVE"
     print(json.dumps(rep, indent=1, default=str))
     if a.json:
