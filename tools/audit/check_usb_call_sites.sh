@@ -46,13 +46,20 @@ if ! grep -q 'LEWITT_ALLOW_HARDWARE_WRITE' src/cli/main.cpp; then
 else
     echo "ok   write command gated by LEWITT_ALLOW_HARDWARE_WRITE"
 fi
-# Phase 6E: the CLI may carry exactly two single-field write specs (LED brightness, instrument
-# mute); each real-hardware execution is scoped by DeviceSession::hardwareWriteOffsets to its own
-# byte, and instrument-mute needs its own authorization variable.
+# Phase 6E / 8C: the CLI may carry exactly four single-field write specs (LED brightness, instrument
+# mute, speaker volume, speaker mute); each real-hardware execution is scoped by
+# DeviceSession::hardwareWriteOffsets to its own field bytes, and every field except LED brightness
+# needs its own authorization variable.
 nspec=$(grep -cE '^\s*\{"[a-z-]+", settings_off::' src/cli/main.cpp)
-if [ "$nspec" -ne 2 ]; then echo "FAIL expected exactly 2 CLI write field specs, found $nspec"; fail=1; else echo "ok   exactly 2 CLI write field specs"; fi
-grep -q 'LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE' src/cli/main.cpp && echo "ok   instrument-mute has its own authorization variable" || { echo "FAIL instrument-mute lacks its own authorization"; fail=1; }
-grep -q 'pol.hardwareWriteOffsets = {f.offset}' src/cli/main.cpp && echo "ok   CLI scopes hardware writes to the field offset" || { echo "FAIL CLI does not scope hardwareWriteOffsets"; fail=1; }
+if [ "$nspec" -ne 4 ]; then echo "FAIL expected exactly 4 CLI write field specs, found $nspec"; fail=1; else echo "ok   exactly 4 CLI write field specs"; fi
+for spec in '{"instrument-mute", settings_off::kMute\[1\], "LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE"}' \
+            '{"speaker-volume", settings_off::kSpeakerVolume, "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME", 2}' \
+            '{"speaker-mute", settings_off::kSpeakerMute, "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME"}'; do
+    grep -qF "$(printf '%s' "$spec" | sed 's/\\\[/[/; s/\\\]/]/')" src/cli/main.cpp && echo "ok   field spec present with own authorization: ${spec%%,*}}" \
+        || { echo "FAIL field spec missing or without its own authorization: $spec"; fail=1; }
+done
+grep -q 'pol.hardwareWriteOffsets.push_back(f.offset + i)' src/cli/main.cpp && grep -q 'for (std::size_t i = 0; i < f.length; ++i)' src/cli/main.cpp \
+    && echo "ok   CLI scopes hardware writes to the field bytes" || { echo "FAIL CLI does not scope hardwareWriteOffsets"; fail=1; }
 # the GUI must never enable hardware writes or authorize offsets
 if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src/gui/*.cpp src/gui/*.hpp >/dev/null; then echo "FAIL GUI references hardware write policy"; fail=1; else echo "ok   GUI never enables hardware writes"; fi
 # Phase 7A: the GUI may build a UsbTransport only from the fixed read-only option set, and the

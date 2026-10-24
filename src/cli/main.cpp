@@ -9,12 +9,16 @@
 //   list                    quick libusb enumeration (VID/PID only)
 //   write led-brightness <0-100> [--execute] [--interface N] [--mock]
 //   write instrument-mute <on|off> [--execute] [--interface N] [--mock]
-//                           EXPERIMENTAL, gated single-field writes (settings byte 37 / byte 12
+//   write speaker-volume <-60..0 dB> [--execute] [--interface N] [--mock]
+//   write speaker-mute <on|off> [--execute] [--interface N] [--mock]
+//                           EXPERIMENTAL, gated single-field writes (settings byte 37 / byte 12 /
+//                           bytes 20-21 / byte 22
 //                           only; see cmdWriteField below for the full safety rationale). Without
 //                           --execute this only computes and prints a dry-run proposal; no USB
 //                           write is ever sent. With --execute against real hardware it additionally
 //                           requires LEWITT_ALLOW_HARDWARE_WRITE=1, and instrument-mute also
-//                           LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE=1. There is no other write command,
+//                           LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE=1, speaker-volume
+//                           and speaker-mute LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1. There is no other write command,
 //                           no generic field/byte setter, and no trigger-message write here.
 //
 // Methods:  interface (default) | device-recipient | detach (DISRUPTIVE, needs
@@ -242,7 +246,9 @@ int cmdRead(const ReadArgs& a) {
 // Two fields exist, each approved separately (see docs/HARDWARE_TEST_RESULTS.md):
 //   led-brightness <0-100>   settings byte 37   (executed on hardware 2026-10-14, Phase 6C)
 //   instrument-mute <on|off> settings byte 12   (Phase 6E: PREPARED, never executed on hardware)
-// Both share one implementation so the safety rules cannot drift apart:
+//   speaker-volume <dB>      settings bytes 20-21, i16 Q8.8 in -60..0 dB (Phase 8C)
+//   speaker-mute <on|off>    settings byte 22 (Phase 8C)
+// All share one implementation so the safety rules cannot drift apart:
 //   * the session's hardwareWriteOffsets contains exactly that field's offset (core-level, not
 //     only here), so even a bug in this file cannot write any other byte on real hardware;
 //   * the byte diff proposed vs. the fresh device snapshot must be exactly {offset}, checked here
@@ -258,12 +264,14 @@ int cmdRead(const ReadArgs& a) {
 // long-press). The stability check narrows but cannot close that window; see HARDWARE_TEST_RESULTS.
 struct FieldSpec {
     const char* name;            // CLI sub-command
-    std::size_t offset;          // the one settings byte this command may change
+    std::size_t offset;          // the first settings byte this command may change
     const char* authEnv;         // extra per-field authorization for real hardware, or nullptr
+    std::size_t length{1};       // number of bytes of the field (2 for Q8.8 volumes)
 };
 
 struct WriteArgs {
-    int value{-1};               // percent for led-brightness, 0/1 for instrument-mute
+    int value{-1};               // percent for led-brightness, 0/1 for instrument-mute, 0 for volumes
+    double db{0.0};              // dB for speaker-volume
     bool execute{false};
     int interfaceNumber{3};      // the only hardware-confirmed working interface for this device
     bool mock{false};
@@ -274,10 +282,15 @@ WriteArgs parseWrite(int argc, char** argv, int first, const std::string& field)
     WriteArgs a;
     if (first < argc) {
         std::string v = argv[first];
-        if (field == "instrument-mute") {
+        if (field == "instrument-mute" || field == "speaker-mute") {
             if (v == "on" || v == "1") a.value = 1;
             else if (v == "off" || v == "0") a.value = 0;
-            else { std::fprintf(stderr, "instrument-mute takes on|off\n"); a.bad = true; }
+            else { std::fprintf(stderr, "%s takes on|off\n", field.c_str()); a.bad = true; }
+        } else if (field == "speaker-volume") {
+            char* end = nullptr;
+            a.db = std::strtod(v.c_str(), &end);
+            if (end == v.c_str() || *end != '\0') { std::fprintf(stderr, "speaker-volume takes a dB value\n"); a.bad = true; }
+            else a.value = 0;
         } else {
             a.value = std::atoi(argv[first]);
         }
@@ -300,8 +313,11 @@ const char* modeName(DeviceMode m) {
 }
 
 int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
-    const bool isMute = f.offset == settings_off::kMute[1];
-    if (isMute ? (a.value < 0 || a.value > 1) : (a.value < 0 || a.value > 100)) {
+    const bool isSpeakerMute = f.offset == settings_off::kSpeakerMute;
+    const bool isMute = f.offset == settings_off::kMute[1] || isSpeakerMute;
+    const bool isSpeakerVolume = f.offset == settings_off::kSpeakerVolume;
+    if (isSpeakerVolume ? (a.db < -60.0 || a.db > 0.0)
+                        : isMute ? (a.value < 0 || a.value > 1) : (a.value < 0 || a.value > 100)) {
         std::fprintf(stderr, "%s: value out of range\n", f.name);
         return 64;
     }
@@ -337,7 +353,8 @@ int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
         t = std::make_unique<UsbTransport>(o);
     }
     pol.allowHardwareWrites = a.execute;           // session-level gate; irrelevant for mock
-    pol.hardwareWriteOffsets = {f.offset};         // core-level scope: exactly this one byte
+    for (std::size_t i = 0; i < f.length; ++i)    // core-level scope: exactly this field's bytes
+        pol.hardwareWriteOffsets.push_back(f.offset + i);
     DeviceSession session(std::move(t), pol);
     // connect(): opens, checks API major == 1 and a recognized CONNECT 2 APP-mode PID, reads settings.
     if (auto s = session.connect(); !s) { printError(s.error(), "connect"); return exitCodeFor(s.error().code); }
@@ -353,6 +370,8 @@ int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
     if (!session.settings()) { std::fprintf(stderr, "no settings available after connect\n"); return 1; }
     SettingsMessage before = *session.settings();
     auto editFn = [&](SettingsMessage& m) -> Status {
+        if (isSpeakerVolume) return m.setSpeakerVolumeDb(a.db);
+        if (isSpeakerMute) return m.setSpeakerMute(a.value != 0);
         return isMute ? m.setMute(1, a.value != 0) : m.setLedBrightness(a.value);
     };
     if (auto s = session.edit(editFn); !s) { printError(s.error(), "edit"); return exitCodeFor(s.error().code); }
@@ -371,8 +390,12 @@ int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
     std::puts(diffs.empty() ? "(none; already at this value)" : "");
     std::printf("original raw="); hex(bb);
     std::printf("proposed raw="); hex(pb);
-    if (!diffs.empty() && (diffs.size() != 1 || diffs[0] != f.offset)) {
-        std::fprintf(stderr, "abort: unexpected byte diff shape (expected only offset %zu); refusing to write\n", f.offset);
+    bool shapeOk = true;
+    for (auto i : diffs)
+        if (i < f.offset || i >= f.offset + f.length) shapeOk = false;
+    if (!shapeOk) {
+        std::fprintf(stderr, "abort: unexpected byte diff shape (expected only offsets %zu..%zu); refusing to write\n",
+                     f.offset, f.offset + f.length - 1);
         return 1;
     }
     if (!a.execute) {
@@ -532,13 +555,16 @@ int main(int argc, char** argv) {
         static const FieldSpec kFields[] = {
             {"led-brightness", settings_off::kLedBrightness, nullptr},
             {"instrument-mute", settings_off::kMute[1], "LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE"},
+            {"speaker-volume", settings_off::kSpeakerVolume, "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME", 2},
+            {"speaker-mute", settings_off::kSpeakerMute, "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME"},
         };
         const FieldSpec* spec = nullptr;
         if (argc >= 3)
             for (const auto& f : kFields)
                 if (std::string(argv[2]) == f.name) spec = &f;
         if (!spec) {
-            std::fprintf(stderr, "write what? only 'led-brightness <0-100>' and 'instrument-mute <on|off>' exist\n");
+            std::fprintf(stderr, "write what? only 'led-brightness <0-100>', 'instrument-mute <on|off>', "
+                                 "'speaker-volume <-60..0>', 'speaker-mute <on|off>' exist\n");
             return 64;
         }
         auto a = parseWrite(argc, argv, 3, spec->name);
