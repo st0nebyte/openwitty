@@ -170,7 +170,7 @@ mute GET. Unit 5: 34 requests, 20 channel-3/4 volume writes answered with STALL 
 
 ### Audio and system state
 Post-boot GET-only snapshot (10:17:39): Speaker −4.00 dB unmuted, Headphone −32.40 dB muted (unchanged; transients during initialization cannot be excluded). ALSA
-`PCM Playback Volume` absent, `route.hw-volume=false`, one sink, KDE 0.40. User audio observation for this boot: *(not yet reported at the time of writing)*.
+`PCM Playback Volume` absent, `route.hw-volume=false`, one sink, KDE 0.40. User audio observation for this boot: **no issues** (no crackle, clicking or other audible problem; subjective, not instrumented).
 
 ### ALSA quirk conclusion (from §7) updated by the data
 The stall sits in the alt-1 → alt-0 transition that `card.c:320` forces; no quirk gates that call. `SKIP_IFACE_SETUP` would avoid the **preceding slow alt-1 selection at probe time**
