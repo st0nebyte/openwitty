@@ -57,11 +57,21 @@ class Drivers(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
-    def test_audio_bound(self):
+    def test_audio_bound_requires_exactly_the_three_audio_interfaces(self):
         self.assertTrue(L.audio_bound(OK_DRV))
+        self.assertTrue(L.audio_bound({"1.0": "snd-usb-audio", "1.1": "snd-usb-audio", "1.2": "snd-usb-audio"}))
+        self.assertTrue(L.audio_bound(dict(OK_DRV, **{"1.3": "usbhid", "1.4": "snd-usb-audio"})))   # vendor interfaces irrelevant
         self.assertFalse(L.audio_bound(PART_DRV))
         self.assertFalse(L.audio_bound({}))
-        self.assertFalse(L.audio_bound({"1.0": "usbhid", "1.1": "usbhid", "1.2": "usbhid"}))
+        for missing in ("1.0", "1.1", "1.2"):                       # a missing interface is never "bound"
+            d = dict(OK_DRV)
+            del d[missing]
+            self.assertFalse(L.audio_bound(d), missing)
+        for unbound in ("1.0", "1.1", "1.2"):
+            self.assertFalse(L.audio_bound(dict(OK_DRV, **{unbound: None})), unbound)
+            self.assertFalse(L.audio_bound(dict(OK_DRV, **{unbound: "usbhid"})), unbound)
+        self.assertFalse(L.audio_bound({"1.0": "snd-usb-audio"}))
+        self.assertFalse(L.audio_bound({"2.0": "snd-usb-audio", "2.1": "snd-usb-audio", "2.2": "snd-usb-audio"}))
 
 
 class GatePre(unittest.TestCase):
@@ -79,7 +89,9 @@ class GatePre(unittest.TestCase):
         for kw in ({"kernel": "7.2.10-1-cachyos"}, {"boot": "ffffffff-x"}, {"module_loaded": False},
                    {"jstatus": "EMPTY"}, {"jtext": BOOT}, {"devices": []}, {"devices": DEV2 + DEV3},
                    {"devices": [dict(DEV2[0], port="3-3")]}, {"devices": [dict(DEV2[0], controller_pci="0000:00:00.0")]},
-                   {"drivers": PART_DRV}, {"findings": F_CLEAN}, {"pw": HEALTHY}, {"findings": F_UNIT5}):
+                   {"drivers": PART_DRV}, {"findings": F_CLEAN}, {"pw": HEALTHY}, {"findings": F_UNIT5},
+                   {"devices": DEV3},                              # sysfs number 3 but journal's last enumeration is 2
+                   {"drivers": {k: v for k, v in OK_DRV.items() if k != "1.2"}}):
             self.assertTrue(self.gate(**kw), kw)
 
     def test_boot_prefix_optional(self):
@@ -88,22 +100,30 @@ class GatePre(unittest.TestCase):
 
 class Delta(unittest.TestCase):
     before = L.journal_events(PRE_TEXT + RECON)  # 8A.25-like: boot journal already holds one earlier disconnect
-    base = {"disconnects": 1, "enumerations": 2, "found_lines": 2, "driver_registered": 1}
 
     def test_exactly_one_new_cycle(self):
         after = L.journal_events(PRE_TEXT + RECON + RECON2)
-        self.assertEqual(L.delta_problems(self.before, after, "3", "4"), [])
+        self.assertEqual(L.delta_problems(self.before, after, "3", "4", "4"), [])
 
     def test_no_new_cycle_two_cycles_unchanged_number_reload(self):
         none = L.journal_events(PRE_TEXT + RECON)
-        self.assertTrue(L.delta_problems(self.before, none, "3", "4"))
+        self.assertTrue(L.delta_problems(self.before, none, "3", "4", "4"))
         two = L.journal_events(PRE_TEXT + RECON + RECON2 + RECON2.replace("19:20", "19:25"))
-        self.assertTrue(L.delta_problems(self.before, two, "3", "5"))
+        self.assertTrue(L.delta_problems(self.before, two, "3", "5", "5"))
         one = L.journal_events(PRE_TEXT + RECON + RECON2)
-        self.assertTrue(L.delta_problems(self.before, one, "3", "3"))
-        self.assertTrue(L.delta_problems(self.before, one, "3", None))
+        self.assertTrue(L.delta_problems(self.before, one, "3", "3", "3"))
+        self.assertTrue(L.delta_problems(self.before, one, "3", None, "4"))
         reload_ = L.journal_events(PRE_TEXT + RECON + RECON2 + "kernel: usbcore: registered new interface driver snd-usb-audio\n")
-        self.assertTrue(any("registration" in p for p in L.delta_problems(self.before, reload_, "3", "4")))
+        self.assertTrue(any("registration" in p for p in L.delta_problems(self.before, reload_, "3", "4", "4")))
+
+    def test_inconsistent_device_numbers(self):
+        one = L.journal_events(PRE_TEXT + RECON + RECON2)
+        self.assertTrue(any("sysfs" in p for p in L.delta_problems(self.before, one, "3", "4", "5")))      # sysfs differs
+        self.assertTrue(any("sysfs" in p for p in L.delta_problems(self.before, one, "3", "4", None)))
+        self.assertTrue(any("observer" in p for p in L.delta_problems(self.before, one, "3", "5", "5")))  # journal says 4
+        # journal sequence that is not baseline + one number
+        odd = L.journal_events(PRE_TEXT + RECON2)
+        self.assertTrue(any("sequence" in p for p in L.delta_problems(self.before, odd, "3", "4", "4")))
 
 
 class Verdict(unittest.TestCase):
@@ -130,32 +150,78 @@ class Verdict(unittest.TestCase):
         self.assertEqual(self.v(F_CLEAN, True, HEALTHY, post_ok=False), "INVALID")
 
 
-class WatchBinding(unittest.TestCase):
-    def test_records_observed_bind_time_with_resolution(self):
-        t = {"now": 100.0}
-        calls = {"n": 0}
+class Timeline:
+    """Fake clock + sysfs for observe_reconnect: present until t_off, absent until t_on, device 3 from t_on, bound at t_bind."""
 
-        def drivers():
-            calls["n"] += 1
-            return OK_DRV if calls["n"] >= 3 else PART_DRV
+    def __init__(self, t_off=1.0, t_on=2.5, t_bind=2.9, multiple=False, start_present=True):
+        self.t = 0.0
+        self.t_off, self.t_on, self.t_bind, self.multiple, self.start_present = t_off, t_on, t_bind, multiple, start_present
 
-        def sleep(s):
-            t["now"] += s
+    def clock(self):
+        return self.t
 
-        rep = L.watch_with_binding(10, drivers_fn=drivers, clock=lambda: t["now"], sleep=sleep, wall=lambda: 1000.0 + t["now"],
-                                   watch_fn=lambda deadline: {"status": "reconnected", "t_reconnect_epoch": 1099.0})
-        self.assertEqual(rep["bind_poll_resolution_s"], L.BIND_POLL_S)
-        self.assertIsNotNone(rep["t_bound_epoch"])
-        self.assertAlmostEqual(rep["reconnect_to_bound_observed_s"], 1.5, places=1)
+    def wall(self):
+        return 1000.0 + self.t
 
-    def test_never_bound_and_failed_watch(self):
-        t = {"now": 0.0}
-        rep = L.watch_with_binding(10, drivers_fn=lambda: PART_DRV, clock=lambda: t["now"],
-                                   sleep=lambda s: t.update(now=t["now"] + s), wall=lambda: 1.0,
-                                   watch_fn=lambda deadline: {"status": "reconnected", "t_reconnect_epoch": 1.0})
+    def sleep(self, s):
+        self.t += s
+
+    def devices(self):
+        if not self.start_present:
+            return []
+        if self.t < self.t_off:
+            return [dict(DEV2[0])]
+        if self.t < self.t_on:
+            return []
+        return [dict(DEV3[0])] * (2 if self.multiple else 1)
+
+    def drivers(self):
+        return OK_DRV if self.t >= self.t_bind else PART_DRV
+
+    def run(self, deadline=60, **kw):
+        return L.observe_reconnect(deadline, devices_fn=self.devices, drivers_fn=self.drivers, clock=self.clock,
+                                   sleep=self.sleep, wall=self.wall, install_signals=False, **kw)
+
+
+class ObserveReconnect(unittest.TestCase):
+    def test_single_sequence_no_settle_delay_and_honest_bounds(self):
+        tl = Timeline()
+        rep = tl.run()
+        self.assertEqual(rep["status"], "reconnected")
+        self.assertEqual((rep["devnum_before"], rep["devnum_after"]), ("2", "3"))
+        self.assertLess(tl.t, 3.2)                                   # returned right after binding, no 3 s settle wait
+        lo, hi = rep["reappear_bounds_epoch"]
+        self.assertLessEqual(hi - lo, L.POLL_S + 1e-6)                # reappearance known to within one sampling interval
+        self.assertTrue(lo < 1002.5 <= hi + 1e-9)
+        blo, bhi = rep["bound_bounds_epoch"]
+        self.assertTrue(blo < 1002.9 <= bhi + 1e-9)
+        mn, mx = rep["reconnect_to_bound_bounds_s"]
+        self.assertLessEqual(mn, 0.4 + 1e-6)                          # true interval 0.4 s lies inside the bounds
+        self.assertGreaterEqual(mx, 0.4 - 1e-6)
+        self.assertLessEqual(mx - mn, 3 * L.POLL_S)
+        self.assertEqual(rep["sampling_interval_s"], L.POLL_S)
+        self.assertIn("not USB request latency", rep["timing_note"])
+        self.assertEqual(rep["interface_drivers_at_bound"], OK_DRV)
+
+    def test_bound_in_the_same_sample_as_reappearance(self):
+        rep = Timeline(t_on=2.5, t_bind=2.0).run()
+        mn, mx = rep["reconnect_to_bound_bounds_s"]
+        self.assertEqual(mn, 0.0)
+        self.assertLessEqual(mx, L.POLL_S + 1e-6)
+
+    def test_reappeared_but_never_bound(self):
+        rep = Timeline(t_bind=999).run(bind_wait=2.0)
+        self.assertEqual(rep["status"], "reconnected")
         self.assertIsNone(rep["t_bound_epoch"])
-        rep = L.watch_with_binding(10, drivers_fn=lambda: OK_DRV, watch_fn=lambda deadline: {"status": "deadline: no disconnect"})
-        self.assertIsNone(rep["t_bound_epoch"])
+        self.assertIsNone(rep["reconnect_to_bound_bounds_s"])        # no misleading measurement
+
+    def test_failure_modes(self):
+        self.assertEqual(Timeline(t_off=999).run(deadline=3)["status"], "deadline: no disconnect")
+        self.assertEqual(Timeline(t_on=999).run(deadline=5)["status"], "deadline: device never returned")
+        self.assertEqual(Timeline(start_present=False).run()["status"], "device not present exactly once at arm")
+        rep = Timeline(multiple=True).run(deadline=5)
+        self.assertTrue(rep["multiple_seen"])
+        self.assertNotEqual(rep["status"], "reconnected")            # two devices: never reported as a clean reconnect
 
 
 class Flow(unittest.TestCase):
@@ -170,9 +236,9 @@ class Flow(unittest.TestCase):
         self.run = b.getvalue().strip()
         self.assertIn("trace-8a26", self.run)
         self.saved = (L._collect, D.find_devices, L.interface_drivers, D.module_loaded)
-        self.state = {"text": PRE_TEXT, "after": "", "pcm": True, "pw": NOROUTE, "dev": DEV2, "drv": OK_DRV}
+        self.state = {"text": PRE_TEXT, "after": "", "pcm": True, "pw": NOROUTE, "dev": DEV2, "drv": OK_DRV, "st": "OK"}
         L._collect = lambda runner, cli=None, since=None: (
-            "OK", "n lines", self.state["text"] if since is None else self.state["after"], self.state["pcm"],
+            self.state["st"], "n lines", self.state["text"] if since is None else self.state["after"], self.state["pcm"],
             self.state["pw"], None)
         D.find_devices = lambda *a, **k: self.state["dev"]
         L.interface_drivers = lambda port, base=None: self.state["drv"]
@@ -246,8 +312,61 @@ class Flow(unittest.TestCase):
 
     def test_classify_before_post_check_refuses(self):
         self.pre()
-        with self.assertRaises(D.RunDirError):
+        with self.assertRaises(SystemExit):
             self.call(L.cmd_classify, self.run, None)
+
+
+class FlowHardening(Flow):
+    """Post-gate hardening: missing/unreadable evidence is a clean INVALID, never an exception or a false OK."""
+
+    def ready(self):
+        self.pre()
+        self.reconnect_json()
+
+    def test_partial_binding_after_reconnect_fails_the_gate(self):
+        self.ready()
+        for missing in ("1.0", "1.1", "1.2"):
+            self.state["drv"] = {k: v for k, v in OK_DRV.items() if k != missing}
+            self.assertEqual(self.post(PRE_TEXT + RECON), 1, missing)
+        self.state["drv"] = OK_DRV
+        self.assertEqual(self.post(PRE_TEXT + RECON), 0)
+
+    def test_journal_read_failure_in_post_stage_is_a_clean_refusal(self):
+        self.ready()
+        for st in ("EMPTY", "FAILED", "UNREADABLE", "INCOMPLETE"):
+            self.state["st"] = st
+            self.assertEqual(self.post(PRE_TEXT + RECON), 1, st)     # no UnboundLocalError, no OK
+            c = json.load(open(os.path.join(self.run, "checkpoint_post.json")))
+            self.assertTrue(any("journal" in p for p in c["problems"]))
+            self.assertEqual(self.cls()["classification"], "INVALID")
+
+    def test_missing_or_malformed_files_are_invalid_not_exceptions(self):
+        self.pre()
+        self.assertEqual(self.post(PRE_TEXT + RECON), 1)             # no reconnect.json at all
+        json.dump({"status": "reconnected"}, open(os.path.join(self.run, "reconnect.json"), "w"))
+        self.assertEqual(self.post(PRE_TEXT + RECON), 1)             # observer data missing
+        self.reconnect_json()
+        cp = json.load(open(os.path.join(self.run, "checkpoint.json")))
+        del cp["events_before"]
+        os.unlink(os.path.join(self.run, "checkpoint.json"))
+        json.dump(cp, open(os.path.join(self.run, "checkpoint.json"), "w"))
+        self.assertEqual(self.post(PRE_TEXT + RECON), 1)             # KeyError inside the gate -> clean problem
+        c = json.load(open(os.path.join(self.run, "checkpoint_post.json")))
+        self.assertTrue(any("malformed" in p for p in c["problems"]))
+
+    def test_inconsistent_device_numbers_fail_the_gate(self):
+        self.ready()
+        self.assertEqual(self.post(PRE_TEXT + RECON, dev=[dict(DEV3[0], devnum="7")]), 1)     # sysfs 7, observer 3, journal 3
+        self.reconnect_json(devnum_after="9")
+        self.assertEqual(self.post(PRE_TEXT + RECON), 1)                                      # observer 9 vs sysfs/journal 3
+        self.reconnect_json()
+        self.assertEqual(self.post(PRE_TEXT + RECON), 0)
+
+    def test_classify_with_incomplete_observer_data_is_invalid(self):
+        self.ready()
+        self.assertEqual(self.post(PRE_TEXT + RECON), 0)
+        self.reconnect_json(t_reconnect_epoch=None)
+        self.assertEqual(self.cls()["classification"], "INVALID")
 
 
 class Safety(unittest.TestCase):

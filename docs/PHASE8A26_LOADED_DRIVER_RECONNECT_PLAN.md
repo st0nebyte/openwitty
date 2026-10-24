@@ -36,17 +36,23 @@ experiment must not be run in that state.
 | Command | Purpose |
 |---|---|
 | `prepare` | create `~/.local/state/openwitty/trace-8a26/run-<time>` (0700) |
-| `check --stage pre [--cli P] [--expect-boot-prefix X]` | baseline gate + state before: kernel pin, boot prefix, module loaded, registration in journal, exactly one device on `3-2`/`0000:0d:00.4`, audio interfaces bound, **CONNECT 2 is in the failing state** (otherwise the comparison is meaningless), event counts, ALSA, CONNECT 2 PipeWire state, optional GET-only snapshot |
-| `watch [--deadline 240]` | sysfs-only observer of exactly one disconnect + reappearance, then polls (0.25 s resolution) until the audio interfaces are bound, records `reconnect_to_bound_observed_s` |
-| `check --stage post` | exactly **one new** disconnect, enumeration and identity line since the baseline; device number changed; same port/controller; one device; module still loaded and **registration count unchanged**; watch status `reconnected`, no duplicates; journal verified |
+| `check --stage pre [--cli P] [--expect-boot-prefix X]` | baseline gate + state before: kernel pin, boot prefix, module loaded, registration in journal, exactly one device on `3-2`/`0000:0d:00.4`, **`1.0`, `1.1` and `1.2` each bound to `snd-usb-audio`**, journal's last enumeration number = sysfs device number, **CONNECT 2 is in the failing state** (otherwise the comparison is meaningless), event counts, ALSA, CONNECT 2 PipeWire state, optional GET-only snapshot |
+| `watch [--deadline 240]` | ONE continuous passive sysfs sampling sequence (every 0.1 s): present → absent → present again → audio interfaces bound. It returns as soon as the three interfaces are bound (no settle wait); gives up on binding 30 s after reappearance |
+| `check --stage post` | exactly **one new** disconnect, enumeration and identity line since the baseline; **consistent device numbers** (journal sequence = baseline + one new number = the number the observer saw = the number sysfs shows now; changed from before); same port/controller; one device; module still loaded and **registration count unchanged**; **`1.0`, `1.1`, `1.2` all bound**; watch status `reconnected`, no duplicates; journal verified. Missing, unreadable or malformed evidence (journal failure, absent/partial `reconnect.json`, missing checkpoint fields) yields a clean problem list and gate `INVALID/NOT READY`, never an exception or a false OK |
 | `classify [--cli P]` | passive verdict from the journal *since the reconnect*, ALSA controls, CONNECT 2-scoped PipeWire state, bound interfaces, GET-only snapshot; repeatable, every pass kept as `classification_<time>.json` |
 
 The tool never calls `modprobe`/`rmmod`, never touches `/boot`, never resets, unbinds or authorizes anything, sends no SET and plays
 nothing (a source-scan test enforces this). The only device-adjacent read is the optional GET-only
-`openwitty-cli read settings --method interface --interface 3`. Timing: only the journal timestamp of the new enumeration and the
-sysfs-observed bind time (0.25 s polling) are recorded; **no USB request latency is inferred** (no tracing is enabled).
+`openwitty-cli read settings --method interface --interface 3`. Timing (corrected in Phase 8A.26A): the first version waited ≈3 s of settling before it started to poll for the bind, which would have
+inflated the reported bind time. The observer is now a single sampling loop. Each event (disconnect, reappearance, full audio bind) is
+recorded as a pair of wall-clock epochs – the last sample before it and the first sample showing it – so it is known only to within one
+sampling interval (0.1 s plus sysfs read time). The derived reconnect→bound interval is reported as **bounds `[min, max]` in
+`reconnect_to_bound_bounds_s`**, never as a point value, and if the interfaces do not bind within the wait it is reported as absent
+(no misleading number). It is the interval between the device node appearing in sysfs and the three audio interfaces having a driver
+link; it is **not USB request latency** (no tracing is enabled) and says nothing about the time until the first mixer request. Journal
+timestamps of the new enumeration are recorded separately.
 
-A dry run of `prepare` + `check --stage pre` on the live system returned gate OK (this validated the tool; that run directory is
+A dry run of `prepare` + `check --stage pre` on the live system (before the 8A.26A hardening) returned gate OK (this validated the tool; that run directory is
 not reused – the real experiment creates a fresh one).
 
 ## Exact single-reconnect procedure (for separate approval; every physical step by the user)
@@ -84,12 +90,16 @@ Unit-5-only messages are never counted as an FU2 failure. A present ALSA volume 
 
 ## Comparison caveats (state in the result document)
 8A.21 was kernel 7.2.10, used a private tracefs capture, and the new driver bind followed the enumeration within ≈0.15 s; here only
-journal timestamps and 0.25 s sysfs polling are available. The pre-state in 8A.21 was a failing boot state, as here. One observation
+journal timestamps and 0.1 s sysfs sampling (bounds, not point values) are available. The pre-state in 8A.21 was a failing boot state, as here. One observation
 cannot establish causation.
 
 ## Validation of the preparation
-`test_loaded_reconnect.py` (21 offline tests, CTest `loaded_reconnect_offline`): fake-sysfs interface binding, pre-gate failure matrix
-(wrong kernel/boot, unloaded module, journal gaps, missing registration, duplicate/wrong-port/wrong-controller device, unbound
-interfaces, non-failing pre-state), exactly-one-new-cycle delta analysis (none/two cycles, unchanged number, module reload), verdict
-matrix (POSITIVE/NEGATIVE/INCONCLUSIVE/INVALID incl. unit 5 alone, unsettled, partial binding), bind-time polling, full
-prepare→pre→post→classify flows, and a source scan forbidding module/bootloader/reset/SET/playback operations.
+`test_loaded_reconnect.py` (35 offline tests, CTest `loaded_reconnect_offline`): fake-sysfs interface binding; `audio_bound` with every
+partial/complete combination (missing or foreign-driver `1.0`/`1.1`/`1.2`, vendor interfaces irrelevant); pre-gate failure matrix
+(wrong kernel/boot, unloaded module, journal gaps, missing registration, duplicate/wrong-port/wrong-controller device, unbound or
+missing interfaces, journal-vs-sysfs device-number mismatch, non-failing pre-state); exactly-one-new-cycle delta analysis (none/two
+cycles, unchanged number, module reload, inconsistent journal/observer/sysfs numbers); a fake-clock timeline for the continuous
+observer (no settle delay, bounds contain the true interval and are at most a few sampling intervals wide, bound-in-first-sample,
+never bound, no disconnect, never returned, bad start, duplicate devices); verdict matrix; full prepare→pre→post→classify flows incl.
+partial binding, journal read failures, missing/malformed files, inconsistent device numbers and incomplete observer data; and a source
+scan forbidding module/bootloader/reset/SET/playback operations.
