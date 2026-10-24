@@ -15,31 +15,54 @@ KDE/PipeWire volume in charge and make the permanent bridge unnecessary.
 |---|---|
 | FU2 is simply healthy in this boot | P0 follows → stop (nothing manufactured) |
 | FU2 recovers with time (or the ALSA probe SET itself heals it) | P1 follows after the time-control wait with no vendor write |
-| **any** vendor settings SET heals it | P1 fails, intervention A (audio-neutral LED SET), P2 seconds later follows |
+| **any** vendor settings SET heals it | P1 fails, intervention A (settings SET intended to change only the LED), P2 seconds later follows |
 | only a speaker-field vendor write heals it | P2 fails, intervention B (speaker 1 dB down), P3 follows |
 | recovery is temporary | P4 (after `--persist`) fails |
 | something else / not reproducible | NOT_RECOVERED, or a different result on the next boot |
 
 A no-op ("same level") vendor write is **not** used: `DeviceSession::commit()` and every caller drop unchanged
-settings, so nothing would be transmitted. The guards are not weakened. Intervention A is a real settings SET that
-cannot change audio: the settings message always carries the whole 128-byte struct, so changing LED brightness by one
-step retransmits every speaker/headphone byte unchanged. Intervention B is a small **decrease**.
+settings, so nothing would be transmitted. The guards are not weakened. Intervention A is a real settings SET whose
+*intended* edit is LED brightness only (one step). The settings message always carries the whole 128-byte struct, so
+every speaker/headphone byte is retransmitted with its current value. That the device does nothing audible when it
+re-applies those unchanged bytes is **not established**; what can be checked – and is checked – is the full settings
+read-back afterwards (only byte 37 may change). Intervention B is a small **decrease**.
 
 Measurement: there is no read-only way to see whether FU2 is honoured (the kernel serves ALSA reads from its cache).
-A probe therefore sets the ALSA control **1 dB below the lower of the ALSA and device levels**, waits 1.5 s and reads the
-device with the vendor GET; "followed" = the device reached the target and had to move to get there.
+A probe therefore sets the ALSA control **1 dB below the device level**, waits 1.5 s and reads the complete device
+settings with the vendor GET: *followed* = the speaker reached the target; *not followed* = nothing changed; anything else
+aborts. The target is relative to the device, not to ALSA: after unfollowed probes ALSA has drifted down, and a later
+recovery must not make the device jump several steps. The kernel sends no USB request when an ALSA write repeats the
+cached value, so when ALSA already sits 1 dB down the target is half a step lower (1.5 dB) – every probe really transmits.
+
+## Safety behaviour (revised after the preflight review)
+* **Start conditions:** ALSA and device agree within 0.5 dB, speaker and ALSA control unmuted, level ≥ −56 dB; otherwise the
+  tool refuses before any write.
+* **Bounds (offline-verified for every branch):** from a start level L the device can only go down, by at most 1.5 dB per
+  change, never below L − 3 dB; the lowest ALSA target is L − 3 dB. Nothing ever gets louder than at start.
+* **Identity:** before every ALSA or vendor write the single CONNECT 2 (USB bus/device number) and its ALSA card (re-found
+  by USB id) must be unchanged; otherwise abort before writing.
+* **Read-back after every write and between steps:** the full 128-byte settings may differ only in the bytes the step may
+  change, and only to the expected value (probe: speaker level to the target or not at all; A: byte 37 to the requested
+  value; B: speaker level to the requested value). Louder levels, mute changes, partial moves, side effects on other bytes,
+  and changes made outside the experiment (knob, other tools) all abort.
+* **Inconclusive probes** (no measurable decrease possible, e.g. at the floor) abort before writing; they are never counted
+  as "FU2 not following".
+* **After an abort nothing more is written.** No LED restore: the log records `pending_led_restore` (original, last
+  confirmed, last sent value) to be handled later under an explicitly verified state. Only a normal completion restores
+  the LED, through the same guarded vendor-write path and read-back check.
 
 ## Tool
 `tools/diagnostics/fu2_recovery_probe.py` (offline tests: `test_fu2_recovery_probe.py`, CTest `fu2_recovery_probe_offline`):
-* `plan --cli build-release/openwitty-cli`: read-only (vendor GET + ALSA read): current levels, first probe target.
+* `plan --cli build-release/openwitty-cli`: read-only (vendor GET + ALSA read): identity, levels, start problems, bounds.
 * `run --cli … --confirm-audio-safe [--wait 600] [--persist 120]`: the fixed sequence P0 → wait → P1 → A → P2 → (B → P3) →
-  (wait → P4), stopping as soon as the question is answered; LED brightness restored at the end (also after an abort);
+  (wait → P4), stopping as soon as the question is answered; LED brightness restored only on normal completion;
   JSON-lines log with wall-clock timestamps in `~/.local/state/openwitty/fu2-recovery/` (0600, outside Git).
-* Never raises a level: every ALSA probe is a 1 dB decrease on the 0.5 dB grid (rounded down), B is a 1 dB decrease;
-  worst case −5 dB on the speaker. Only `LEWITT_ALLOW_HARDWARE_WRITE=1` (+ `LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1` for B)
-  per write; no retries; aborts on any failed read or unverified write.
-* Offline-tested against a simulated device for every explanation above, plus authorization exactness, never-louder
-  and LED restore after an abort.
+* Safety behaviour as above; only `LEWITT_ALLOW_HARDWARE_WRITE=1` (+ `LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1` for B) per
+  write; no retries.
+* Offline-tested (23 cases) against a simulated device: every explanation above; bounds for every branch incl. temporary
+  and late recovery; refusal on disagreement/mute/floor; abort without any further write (and with the pending LED
+  report) after a failed read-back, a knob change during the wait, an unexpected increase, a vendor write with side
+  effects, a card or USB identity change, and an inconclusive probe at the floor; exact authorization per field.
 
 ## Procedure
 1. **Safety checkpoint 1 (reboot):** owner confirms the audio safety; owner performs one ordinary reboot (default entry).
@@ -60,6 +83,6 @@ device with the vendor GET; "followed" = the device reached the target and had t
 * If FU2 is healthy at boot (P0 follows) the run stops; no failure is manufactured with resets, reloads or replugs.
 
 ## Product consequence
-* Supported → evaluate a minimal guarded device-initialization step (one audio-neutral vendor settings SET when the
+* Supported → evaluate a minimal guarded device-initialization step (one vendor settings SET with an LED-only intended edit, read-back checked, when the
   CONNECT 2 appears) that leaves KDE/PipeWire in charge, keeping the native bridge as fallback until reproduced.
 * Not supported → keep the native bridge (`openwitty-volumed`) and validate its vendor write path in the FU2-broken state.
