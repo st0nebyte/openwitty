@@ -178,6 +178,8 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_post_boot_health.py)
         add_test(NAME deferred_probe_offline
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_deferred_probe.py)
+        add_test(NAME loaded_reconnect_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_loaded_reconnect.py)
     endif()
 endif()
 
