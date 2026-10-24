@@ -60,9 +60,9 @@ def fu2_rows(reqs):
         out["sets"].append({"set_db": s.get("db"), "set_ret": s["ret"],
                             "readback_db": nxt.get("db") if nxt else None})
     out["final_set_db"] = sets[-1].get("db") if sets else None
-    out["follows_writes"] = (None if not sets else
-                             all(x["readback_db"] is not None and x["set_db"] is not None
-                                 and abs(x["readback_db"] - x["set_db"]) < 0.5 for x in out["sets"]))
+    checked = [x for x in out["sets"] if x["readback_db"] is not None and x["set_db"] is not None]
+    out["checked_sets"] = len(checked)
+    out["follows_writes"] = (None if not checked else all(abs(x["readback_db"] - x["set_db"]) < 0.5 for x in checked))
     return out
 
 
