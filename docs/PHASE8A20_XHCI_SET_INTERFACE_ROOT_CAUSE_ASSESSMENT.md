@@ -1,6 +1,6 @@
 # Phase 8A.20 — xHCI view of the stalled SET_INTERFACE, and ALSA quirk assessment
 
-**Status: PREPARED — xHCI trace boot (attempt 3) not yet performed** (checkpoint 2026-10-23 ~23:55 CEST).
+**Status: xHCI trace boot (attempt 3) EXECUTED — COMPLETE (see §10).** (checkpoint 2026-10-23 ~23:55 CEST; boot 2026-10-24 10:13 CEST, after a ~10.8 h shutdown).
 All sources are the exact tag `cachyos-7.2.10-1` (cached outside the repo); runtime facts are from the running
 `7.2.10-1-cachyos`. Raw traces stay outside Git (`~/.local/state/openwitty/`). If this chat is gone after the shutdown, read this file,
 `PHASE8A19_BOOT_USB_CONTROL_TRACE.md`, then follow "Resume after boot". No boot is repeated automatically.
@@ -109,5 +109,76 @@ Phase 8A.19 (normal `linux-cachyos` entry if the entry is missing or the boot fa
 --out-dir ~/.local/state/openwitty/trace-8a20`; `analyze … --report …/collect_report.json --dmesg <timeout lines> --expect-xhci`; one GET-only snapshot; `entry remove` + `entry status` + `verify-clean`;
 write §10 (results) here; commit/push.
 
-## 10. Results
-*(to be filled after the boot)*
+## 10. Results (boot 2026-10-24 10:13 CEST; recorded ~10:40 CEST)
+
+### Procedure and verification
+User re-confirmed the safety points and did one normal shutdown (23:23) and one manual power-on (10:13, a genuine cold start after ≈10.8 h off),
+selected the temporary entry. `/proc/cmdline` had the four trace arguments (`kprobe_event=`, `trace_event=xhci-hcd:…`, `ftrace=nop`,
+`trace_buf_size=32M`) and `dyndbg`, no `usbcore.quirks`. **Buffer allocated:** `buffer_size_kb` = 32771 (≈32 MiB per CPU); header 67836/67836,
+**per-CPU overrun 0**, oldest event 0.425 s (before USB enumeration at 2.084 s). Tool verdict with `--expect-xhci`: **COMPLETE** (106 target USB-core
+requests, 1856 other-device requests discarded, 63 860 xHCI records, 0 unpaired, 0 malformed). The usual fault reproduced (below).
+Cleanup: `collect` saved the raw trace outside Git (0600), removed our 4 probes, removed our 14 xHCI events from `set_event`, restored the
+recorded buffer 1410 KB and `tracing_on=1`; `verify-clean` = clean; temporary Limine entry removed, `limine.conf` byte-identical to the pre-change backup.
+
+### USB-core evidence (first stall)
+`(udev-worker)`, bus 3 device 2: `SET_INTERFACE`, SETUP `01 0b 0000 0001 0000` (interface 1, alternate 0), submitted 5.898202 s, completed
+11.346060 s (5.448 s; 5.000 s + timer-wheel rounding), status −110. The enclosing `usb_set_interface` call: 5.875085 → 11.370684 s, caller
+`snd_usb_create_stream+0x189` (`card.c:320`). Dynamic-debug tie: 0.386 ms. Second stall (WirePlumber): `01 0b 0000 0002 0000` (interface 2, alt 0),
+12.394204 → 17.490681 s (5.096 s), −110, tie 0.369 ms.
+
+### xHCI evidence (host-controller view of the first stall; times in s)
+| t | event |
+|---|---|
+| 5.898186 | Configure Endpoint command completes, `Success` (16 µs before the request) |
+| 5.898203 | `xhci_urb_enqueue`: `3-2 ep0out-control`, slot 1, length 0/0 |
+| 5.898204 | Setup Stage TRB queued (SETUP bytes identical to the USB-core SETUP) and Status Stage TRB queued (**no data stage**) |
+| 5.898204 | doorbell: slot 1, endpoint 0 |
+| 5.898 → 11.346 | **no Transfer Event, no other xHCI/USB event on slot 1 for 5.448 s** (0 events on slot 1; in the same window the controller handled 5 commands for slot 3 and 8 port-status changes for port 3 — another device, not the target's slot 1 / port 2 — so it was running normally) |
+| 11.345985 | `xhci_urb_dequeue` (usb_kill_urb after the timeout), 11.345995 `Cancel URB`; 11.345997 Stop Endpoint queued |
+| 11.346018 | Transfer Event, completion code **`Stopped`**, TRB pointer = the **Status Stage TRB**; endpoint context after stop: dequeue pointer at that TRB, state "stopped", CErr 3 |
+| 11.346022–40 | Stop Endpoint completes; Set TR Dequeue Pointer completes (≈20 µs each) |
+| 11.346041 | `xhci_urb_giveback`; 11.346060 USB core returns −110; 11.346072 Configure Endpoint queued (usb_set_interface re-instating the old alternate) |
+The WirePlumber stall is identical in shape: enqueue 12.394206, doorbell same µs, Stop Endpoint at 17.490641 finds the **Status Stage TRB**, giveback 17.490674.
+Classification by hypothesis (§3): **not A, not B** (queued, TRBs built, doorbell rung); **not D** (no error completion before the cancellation — the `Stopped`
+event is the acknowledgement of our own Stop Endpoint and is what locates the TD); **C/E**: the controller was notified and the TD stayed pending; the
+Stop Endpoint context shows it was executing the **Status stage**, so **the Setup stage had completed** (a device that does not answer a SETUP token would
+produce a `USB Transaction Error` after CErr 3 retries instead). Host-side commands execute within ≈20 µs, so the controller itself was responsive.
+
+### Latency spectrum of the same request type on this device (doorbell → Transfer Event, controller view)
+| class | count | latency | examples |
+|---|---|---|---|
+| fast | 19 | median 0.122 ms (0.09–0.23) | all alt 0/1 requests in steady state |
+| slow but successful | 2 | **40.9 ms, 38.9 ms** | the first `SET_INTERFACE(1, alt 1)` (udev, 5.834 s) and WirePlumber's `SET_INTERFACE(2, alt 1)` (12.330 s) |
+| never completed | 2 | > 5 s, cancelled | the `alt 0` request **64 ms** after each slow `alt 1` (interfaces 1 and 2) |
+Across the three boots with a full or partial record, every stalled request was an **alternate-0 request issued 32–64 ms after the same interface's first slow
+(13–44 ms) alternate-1 selection** (attempt 1: 44.4 ms as `usb_set_interface` call duration, attempt 2: 26.1 ms and 13.1 ms, attempt 3: 40.9 ms and 38.9 ms as request durations; n = 5 observed pairs with known
+preceding latency). Alt-1 requests that were fast (0.1–0.24 ms) were followed by fast alt-0 requests, and all later cycling (32 ms apart) is fast. This is an
+observed correlation, not proof of cause.
+
+### Host versus device assessment
+Evidence consistent with a **device-side status-stage handshake that is not completed** (the controller-level equivalent of a device that keeps NAKing, which xHCI
+software cannot see): Setup stage completed; no error completion; controller and ring healthy (immediate Stop/Set-Dequeue, other slots working, the very next requests
+to the same device complete in 0.2–0.4 ms); the same request type elsewhere shows device-determined latencies from 0.1 ms to 41 ms; and the device does answer other
+requests with STALL immediately (37 Stall-Error events handled, e.g. the unit-5 channel 3/4 writes). Not established: that the device never answers at the bus level
+(NAKs and bus-level retries are invisible here), the device's internal reason, and whether a controller-internal retry state could be involved — an xHCI trace is not a
+bus analyzer. **No firmware defect is claimed.** The Feature Unit 2 write/read mismatch remains a separate observation: it follows the first stall by ≈89 ms and was
+identical in all three boots, but no causal link is shown (the reconnect path has no stall and accepts FU2).
+
+### FU2 and unit 5 (this boot, unchanged from attempt 2)
+11.434934 GET mute 0; GET_RANGE×3; GET −4.00 dB; SET −60 → GET −4.00; SET 0 → GET −4.00; final SET 0 dB (no restore); sticky verdict at 11.438 s; then ≈1 s later a
+mute GET. Unit 5: 34 requests, 20 channel-3/4 volume writes answered with STALL (−32). Stall end → first FU2 request: 88.9 ms.
+
+### Audio and system state
+Post-boot GET-only snapshot (10:17:39): Speaker −4.00 dB unmuted, Headphone −32.40 dB muted (unchanged; transients during initialization cannot be excluded). ALSA
+`PCM Playback Volume` absent, `route.hw-volume=false`, one sink, KDE 0.40. User audio observation for this boot: *(not yet reported at the time of writing)*.
+
+### ALSA quirk conclusion (from §7) updated by the data
+The stall sits in the alt-1 → alt-0 transition that `card.c:320` forces; no quirk gates that call. `SKIP_IFACE_SETUP` would avoid the **preceding slow alt-1 selection at probe time**
+(so the dangerous pair would not occur during probe), but WirePlumber's own stream-open sequence performs the same alt-1 → alt-0 cycle (it stalled in every boot), so the stall
+could simply move to the first stream open (a 5 s hang at first playback). `IFACE_DELAY`, `SET_IFACE_FIRST`, `FORCE_IFACE_RESET` do not touch the stalled pair. A kernel-side
+change (delaying or retrying the reset, or tolerating the error) would be needed and is out of scope.
+
+### Recommended next OpenWitty step (no boot required)
+1. **A/B reconnect trace with the same tool** (user unplugs and replugs once; the module is already loaded): does the first `SET_INTERFACE(1, alt 1)` take 13–44 ms and does the following
+   alt 0 stall? This tests the "cold device" part of the hypothesis. 2. If the correlation holds, an OpenWitty **diagnostic** that records this latency signature at boot (read-only tracing, no
+   hardware writes) and a guided recovery message; any automatic mitigation (warm-up, re-probe, quirk trial) needs separate design and approval. 3. Production volume/mute writing stays out of scope (Phase 8B not started).

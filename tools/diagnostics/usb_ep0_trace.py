@@ -486,23 +486,34 @@ def xhci_lifecycle(xrecs, req, window=0.5, join_gap=0.005):
     life["setup_trb"] = setup["setup"] if setup else None
     life["setup_trb_matches"] = (setup is not None and setup["setup"] == req["setup"])
     dmas = {r["dma"] for r in trbs}
+    trb_type = {r["dma"]: r.get("trb") for r in trbs}
     db = [r for r in xrecs if r["ev"] == "xhci_ring_ep_doorbell" and r.get("slot") == e["slot"] and r.get("ep") == 0
           and e["ts"] <= r["ts"] <= e["ts"] + 0.01]
     life["doorbell"] = db[0]["ts"] if db else None
     lo, hi = e["ts"], t1 + window
     ev = [r for r in xrecs if r["ev"] == "xhci_handle_event" and r.get("etype") == "Transfer Event" and r.get("slot") == e["slot"]
           and r.get("trb_ptr") in dmas and lo <= r["ts"] <= hi]
-    life["transfer_events"] = [{"ts": r["ts"], "status": r["status"], "resid": r["resid"]} for r in ev]
     deq = [r for r in xrecs if r["ev"] == "xhci_urb_dequeue" and r.get("urb") == urb and lo <= r["ts"] <= hi]
     cancel = [r for r in xrecs if r["ev"] == "xhci_dbg_cancel_urb" and r.get("urb") == urb and lo <= r["ts"] <= hi]
     life["urb_dequeue"] = deq[0]["ts"] if deq else None
     life["cancel_urb"] = cancel[0]["ts"] if cancel else None
-    cmdw = (deq[0]["ts"] if deq else lo, t1 + window)
-    life["recovery_commands"] = [{"ts": r["ts"], "ev": r["ev"]} for r in xrecs
-                                 if r["ev"] in ("xhci_handle_cmd_stop_ep", "xhci_handle_cmd_set_deq", "xhci_handle_cmd_reset_ep",
-                                                "xhci_dbg_reset_ep") and cmdw[0] <= r["ts"] <= cmdw[1]]
+    cut = life["urb_dequeue"]
+    # A 'Stopped' Transfer Event after our own dequeue is the controller acknowledging the Stop Endpoint command
+    # for the TD in progress; it is evidence of WHERE the transfer was, not an independent error.
+    before = [r for r in ev if cut is None or r["ts"] < cut]
+    after = [r for r in ev if cut is not None and r["ts"] >= cut]
+    life["transfer_events"] = [{"ts": r["ts"], "status": r["status"], "resid": r["resid"]} for r in before]
+    life["post_cancel_events"] = [{"ts": r["ts"], "status": r["status"], "resid": r["resid"],
+                                   "trb": trb_type.get(r["trb_ptr"])} for r in after]
+    stopped = next((r for r in after if r["status"].startswith("Stopped")), None)
+    life["stopped_at_trb"] = trb_type.get(stopped["trb_ptr"]) if stopped else None
     gb = [r for r in xrecs if r["ev"] == "xhci_urb_giveback" and r.get("urb") == urb and lo <= r["ts"] <= hi]
     life["giveback"] = gb[0]["ts"] if gb else None
+    wend = (life["giveback"] + 0.002) if life["giveback"] else (t1 + 0.01)
+    wstart = cut if cut is not None else lo
+    life["recovery_commands"] = [{"ts": r["ts"], "ev": r["ev"]} for r in xrecs
+                                 if r["ev"] in ("xhci_handle_cmd_stop_ep", "xhci_handle_cmd_set_deq", "xhci_handle_cmd_reset_ep",
+                                                "xhci_dbg_reset_ep") and wstart <= r["ts"] <= wend]
     life["classification"] = classify_xhci(life, req)
     return life
 
@@ -516,15 +527,19 @@ def classify_xhci(life, req):
         return "A/B: URB enqueued but no TRBs were queued"
     if life["doorbell"] is None:
         return "B: TRBs queued but no endpoint-0 doorbell was rung for the slot"
-    bad = [t for t in life["transfer_events"] if t["status"] not in ("Success", "Short Packet")]
+    bad = [t for t in life["transfer_events"] if not t["status"].startswith(("Success", "Short Packet"))]
     if bad:
-        return "D: controller reported an error completion (%s) for this transfer" % bad[0]["status"]
+        return "D: controller reported an error completion (%s) for this transfer before any cancellation" % bad[0]["status"]
     if life["transfer_events"]:
         return "NORMAL: transfer event %s received" % life["transfer_events"][0]["status"]
     if life["urb_dequeue"] is not None or life["cancel_urb"] is not None:
-        extra = " (stop-endpoint/set-dequeue recovery commands observed)" if life["recovery_commands"] else ""
-        return ("C/E: TRBs queued and doorbell rung, but no Transfer Event arrived before the URB was dequeued "
-                "after the timeout" + extra + " — host cannot distinguish a non-answering device from a controller that did not complete it")
+        where = ""
+        if life.get("stopped_at_trb"):
+            where = ("; Stop Endpoint found the endpoint executing the '%s' TRB" % life["stopped_at_trb"])
+            if life["stopped_at_trb"] == "Status Stage":
+                where += (" (the Setup stage had completed; the transfer never finished its Status stage, with no error event, "
+                          "which is what a device that keeps NAKing the status handshake looks like, but NAKs are not visible to xHCI software)")
+        return ("C/E: TRBs queued and doorbell rung, but no Transfer Event arrived until the URB was dequeued after the timeout" + where)
     return "F/unresolved: doorbell rung, no transfer event and no dequeue observed"
 
 

@@ -574,6 +574,31 @@ class XhciLifecycle(unittest.TestCase):
         ls.append(x_gb(12.373))
         return ls
 
+    def test_stopped_event_after_own_dequeue_is_not_an_error_and_locates_the_stall(self):
+        ls = self.stalled(recovery=True)
+        ls.insert(-1, x_evt(12.3700, trb=0xFFFD8520, status="Stopped"))      # status-stage TRB
+        lf = life_for(*ls)
+        self.assertTrue(lf["classification"].startswith("C/E"), lf["classification"])
+        self.assertEqual(lf["stopped_at_trb"], "Status Stage")
+        self.assertEqual(lf["transfer_events"], [])
+        self.assertEqual(lf["post_cancel_events"][0]["status"], "Stopped")
+        self.assertIn("Setup stage had completed", lf["classification"])
+
+    def test_stopped_at_setup_stage_is_reported_as_such(self):
+        ls = self.stalled()
+        ls.insert(-1, x_evt(12.3700, trb=0xFFFD8510, status="Stopped"))      # setup-stage TRB
+        lf = life_for(*ls)
+        self.assertEqual(lf["stopped_at_trb"], "Setup Stage")
+        self.assertNotIn("Setup stage had completed", lf["classification"])
+
+    def test_error_before_cancel_is_still_D_but_stopped_after_is_not(self):
+        lf = life_for(*self.stalled(event=(9.0, "USB Transaction Error")), ret=-71)
+        self.assertTrue(lf["classification"].startswith("D"))
+
+    def test_later_unrelated_reset_ep_commands_are_not_attributed(self):
+        ls = self.stalled(recovery=True) + [x_cmd(12.45, "xhci_handle_cmd_reset_ep"), x_cmd(12.46, "xhci_handle_cmd_set_deq")]
+        self.assertEqual(len(life_for(*ls)["recovery_commands"]), 2)
+
     def test_pending_transfer_cancelled_after_timeout_is_C_E(self):
         lf = life_for(*self.stalled(recovery=True))
         self.assertTrue(lf["classification"].startswith("C/E"), lf["classification"])
