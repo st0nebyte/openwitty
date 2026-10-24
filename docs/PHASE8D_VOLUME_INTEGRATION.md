@@ -185,3 +185,28 @@ One session, no reboot, no replug, no playback:
    device following, increases ≤ 10 dB.
 5. Turn the hardware knob once: the KDE slider must follow without a device write in the log.
 6. Ctrl+C. Only then decide whether to enable the user service.
+
+## Live validation 1 (2026-10-24, kernel 7.3.0-5, same boot, foreground daemon, no reboot/replug)
+Fresh audio-safety confirmation by the owner before the test. `openwitty-volumed --allow-hardware-writes` in the
+foreground (log outside Git); desktop moves via `wpctl` on the CONNECT 2 sink (the PipeWire path KDE uses); the knob was
+turned by the owner. Device level = vendor-protocol GET (the daemon's fresh reads; independent CLI GET at the end).
+
+| Step | Desktop / physical action | Device read-back | Daemon device writes | Result |
+|---|---|---|---|---|
+| start | – | −23.50 dB unmuted, desktop agreed | 0 | read-only start, no ALSA write needed |
+| 1 | sink 0.40 → 0.35 | −27.0 dB | 0 | device had already followed (kernel FU2 path); no double write |
+| 2 | mute, unmute | muted / unmuted | 0 | same |
+| 3 | sink 0.35 → 0.40 | −23.5 dB | 0 | same |
+| 4 | knob turned down (owner) | −33.0 dB; ALSA −33.0 dB; sink 0.28 | 0 | knob → KDE mirrored |
+| end | daemon stopped (SIGINT), independent GET | −33.00 dB unmuted, headphone −32.40 dB muted (unchanged) | total 0 | consistent; no log activity for 5 s after the last change (no loop); no kernel events |
+
+**Not exercised:** the vendor write path itself (device ignoring FU2). In this device instance FU2 accepted the kernel's
+requests, although directly after the 21:16 port reset the same instance had ignored them (sink 0.30 → device stayed
+−23.5 dB). In between, several vendor settings writes were made (Phase 8C CLI/bridge tests).
+
+**Hypothesis (unproven, next experiment):** a vendor settings SET puts the device into a state in which it also honours
+Feature Unit 2 again. If true, one vendor write of the *current* level (physically a no-op) after the device appears would
+restore the normal kernel/PipeWire volume path. Test after the next ordinary boot, before any vendor write:
+(1) GET the speaker level; (2) one ALSA/PipeWire volume step down → does the device follow? (expected: no);
+(3) one vendor write of the level read in (1); (4) the same desktop step → does the device follow now?
+Needs a fresh safety confirmation; only decreases and a same-level write are involved.
