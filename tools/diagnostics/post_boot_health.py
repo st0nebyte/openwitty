@@ -133,6 +133,8 @@ def classify_evidence(findings, pcm_volume, pw, age_s=None, settle_s=SETTLE_S):
         return "INCONCLUSIVE", "FU2 failure, but CONNECT 2 is not a PipeWire device (initialisation incomplete?)"
     if state == PW_HW_TRUE:
         return "INCONCLUSIVE", "FU2 failure contradicted by route.hw-volume=true"
+    if state not in (PW_NO_ROUTES, PW_HW_FALSE):
+        return "INCONCLUSIVE", "FU2 failure, but CONNECT 2 route state does not show an unusable mixer (%s)" % state
     if age_s is None or age_s < settle_s:
         return "INCONCLUSIVE", "audio stack not settled (%s s since driver load, need %d): classify again later" % (
             "unknown" if age_s is None else "%.0f" % age_s, settle_s)

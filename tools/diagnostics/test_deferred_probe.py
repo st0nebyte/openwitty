@@ -857,6 +857,30 @@ class EvidenceClassification(unittest.TestCase):
         self.assertEqual(self.v(F_73_FAIL, True, self.NOROUTE, age=None), "INCONCLUSIVE")
         self.assertEqual(self.v(F_73_FAIL, True, self.NOROUTE, age=H.SETTLE_S), "NEGATIVE")
 
+    def test_every_pipewire_state_with_fu2_failure(self):
+        unknown_route = {"name": "analog-output", "direction": "Output", "info": []}
+        states = {H.PW_NO_ROUTES: self.NOROUTE, H.PW_HW_FALSE: self.HWFALSE, H.PW_HW_TRUE: self.HEALTHY,
+                  H.PW_HW_UNKNOWN: H.pipewire_connect2(pw_dump([unknown_route], [unknown_route])), H.PW_NO_DEVICE: self.NODEV}
+        self.assertEqual(sorted(states), sorted([H.PW_NO_ROUTES, H.PW_HW_FALSE, H.PW_HW_TRUE, H.PW_HW_UNKNOWN, H.PW_NO_DEVICE]))
+        for name, pw in states.items():
+            self.assertEqual(pw["state"], name)
+        expect = {H.PW_NO_ROUTES: "NEGATIVE", H.PW_HW_FALSE: "NEGATIVE", H.PW_HW_UNKNOWN: "INCONCLUSIVE",
+                  H.PW_NO_DEVICE: "INCONCLUSIVE", H.PW_HW_TRUE: "INCONCLUSIVE"}
+        for name, want in expect.items():
+            for pcm in (True, False):
+                self.assertEqual(self.v(F_73_FAIL, pcm, states[name], age=300), want, (name, pcm))
+                self.assertEqual(self.v(F_72_FAIL, pcm, states[name], age=300), want, (name, pcm))
+                self.assertEqual(self.v(F_73_FAIL, pcm, states[name], age=10), "INCONCLUSIVE", (name, pcm, "unsettled"))
+
+    def test_every_pipewire_state_without_fu2_failure(self):
+        unknown_route = {"name": "analog-output", "direction": "Output", "info": []}
+        for pw, pcm, want in ((self.HEALTHY, True, "POSITIVE"), (self.HEALTHY, False, "INCONCLUSIVE"),
+                              (self.NOROUTE, True, "INCONCLUSIVE"), (self.HWFALSE, True, "INCONCLUSIVE"),
+                              (H.pipewire_connect2(pw_dump([unknown_route], [unknown_route])), True, "INCONCLUSIVE"),
+                              (self.NODEV, True, "INCONCLUSIVE")):
+            self.assertEqual(self.v(F_CLEAN, pcm, pw), want, (pw["state"], pcm))
+            self.assertEqual(self.v(F_UNIT5, pcm, pw), want, (pw["state"], pcm))   # unit 5 alone behaves like no failure
+
     def test_incomplete_pipewire_is_inconclusive(self):
         self.assertEqual(self.v(F_73_FAIL, True, self.NODEV), "INCONCLUSIVE")
 

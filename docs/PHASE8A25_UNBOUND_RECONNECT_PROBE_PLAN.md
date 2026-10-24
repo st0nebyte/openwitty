@@ -136,6 +136,7 @@ regression-tested). Both FU2 wordings are recognised; unit 5 is never an FU2 fai
 | yes | no routes / hw-volume false | any | < 60 s or unknown | INCONCLUSIVE (not settled; classify again later) |
 | yes | CONNECT 2 not a PipeWire device | any | any | INCONCLUSIVE (initialisation incomplete) |
 | yes | `route.hw-volume=true` | any | any | INCONCLUSIVE (contradiction) |
+| yes | routes without a `route.hw-volume` field | any | any | INCONCLUSIVE (not shown to be unusable) |
 | unit 5 only | any | any | any | never NEGATIVE on its own |
 | ALSA or PipeWire evidence missing | | | | INCONCLUSIVE |
 
@@ -154,7 +155,7 @@ load and the physical reconnect are never repeated; the per-boot marker enforces
 - No USB reset, port power cycling, authorization change, driver rebind, firmware or volume/mute SET is part of this plan.
 
 ## Validation of the 7.3 adaptation (Phase 8A.25C)
-`test_deferred_probe.py` now has 80 offline tests (new: kernel pin in gate/install, module-set verification via `modules.dep`, wrong-kernel
+`test_deferred_probe.py` now has 82 offline tests (new: kernel pin in gate/install, module-set verification via `modules.dep`, wrong-kernel
 and snapshot-source refusals, CONNECT 2-scoped PipeWire states with an unrelated card advertising hw-volume, the classification matrix
 above incl. unsettled/incomplete/contradictory evidence and legacy 7.2 regression, repeated passive classify without a second load, Limine
 regeneration with the historical backup mismatch, new-backup install and exact install/remove/verify round trip with the snapshot entry
