@@ -36,12 +36,16 @@ CHECKPOINT_MAX_AGE_S = 1800
 PROFILES = {
     "8a24": {"begin": "# OPENWITTY-8A24-BEGIN (temporary deferred snd-usb-audio entry; remove after use)",
              "end": "# OPENWITTY-8A24-END", "name": "OpenWitty deferred snd-usb-audio (temporary)",
-             "state": "/var/lib/openwitty-8a24", "base": ".local/state/openwitty/trace-8a24", "per_boot_marker": False},
+             "state": "/var/lib/openwitty-8a24", "base": ".local/state/openwitty/trace-8a24", "per_boot_marker": False,
+             "kernel": None},
     "8a25": {"begin": "# OPENWITTY-8A25-BEGIN (temporary unbound-reconnect snd-usb-audio entry; remove after use)",
              "end": "# OPENWITTY-8A25-END", "name": "OpenWitty unbound-reconnect snd-usb-audio (temporary)",
-             "state": "/var/lib/openwitty-8a25", "base": ".local/state/openwitty/trace-8a25", "per_boot_marker": True},
+             "state": "/var/lib/openwitty-8a25", "base": ".local/state/openwitty/trace-8a25", "per_boot_marker": True,
+             # pinned: the comparison data of 8A.21-8A.24 is kernel 7.2.10; a different kernel must never be accepted silently
+             "kernel": "7.3.0-5-cachyos"},
 }
 PROFILE = "8a24"
+MODULES_BASE = "/usr/lib/modules"
 ARCHIVE_DIR = "/var/lib/openwitty-archive"
 ENTRY_BEGIN = PROFILES["8a24"]["begin"]
 ENTRY_END = PROFILES["8a24"]["end"]
@@ -66,6 +70,47 @@ def any_entry_present(text):
 
 # ------------------------------------------------------------------ Limine entry (pure text functions)
 
+def parse_normal_leaf(text, kernel_id="linux-cachyos"):
+    """The ordinary (non-snapshot) `//linux-cachyos` block: {protocol, path, module_path, cmdline, kernel_version}.
+    Snapshot entries (`////linux-cachyos`) never match."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip() == "//" + kernel_id:
+            block = {}
+            for nxt in lines[i + 1:]:
+                s_ = nxt.strip()
+                if s_.startswith("/"):
+                    break
+                m = re.match(r"(protocol|path|module_path|cmdline):\s*(.*)$", s_)
+                if m:
+                    block[m.group(1)] = m.group(2)
+                m = re.match(r"comment:\s*Kernel version:\s*(\S+)", s_)
+                if m:
+                    block["kernel_version"] = m.group(1)
+            if all(k in block for k in ("protocol", "path", "module_path", "cmdline")):
+                return block
+    raise ValueError("kernel entry //%s not found or incomplete" % kernel_id)
+
+
+def module_deps_ok(kernel, base=None):
+    """Offline check that snd-usb-audio and every module modules.dep lists for it exist under the kernel's tree."""
+    base = base or MODULES_BASE
+    root = os.path.join(base, kernel)
+    try:
+        dep = open(os.path.join(root, "modules.dep")).read().splitlines()
+    except OSError:
+        return ["no modules.dep for kernel %s under %s" % (kernel, base)]
+    entry = None
+    for ln in dep:
+        path, _, rest = ln.partition(":")
+        if os.path.basename(path).split(".ko")[0] in ("snd-usb-audio", "snd_usb_audio"):
+            entry = (path, rest.split())
+            break
+    if entry is None:
+        return ["snd-usb-audio is not listed in modules.dep of kernel %s" % kernel]
+    return ["missing module file %s" % p for p in [entry[0]] + entry[1] if not os.path.isfile(os.path.join(root, p))]
+
+
 def build_entry(leaf):
     for bad in FORBIDDEN_IN_SOURCE:
         if bad in leaf["cmdline"]:
@@ -85,8 +130,13 @@ def has_entry(text):
 def add_entry(text):
     if any_entry_present(text):
         raise ValueError("an OpenWitty experimental entry is already present")
+    leaf = parse_normal_leaf(text)
+    want = PROFILES[PROFILE].get("kernel")
+    if want and leaf.get("kernel_version") != want:
+        raise ValueError("the normal kernel entry is %s, this experiment is pinned to %s: refusing (update the plan "
+                         "deliberately for a new kernel)" % (leaf.get("kernel_version"), want))
     term = "" if text.endswith("\n") else "\n"
-    return text + term + "\n" + build_entry(T.parse_leaf(text))
+    return text + term + "\n" + build_entry(leaf)
 
 
 def remove_entry(text):
@@ -107,7 +157,7 @@ def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def entry_cmd(action, conf=LIMINE_CONF, state_dir=None, require_root=True, prior_state_dir=None):
+def entry_cmd(action, conf=LIMINE_CONF, state_dir=None, require_root=True, prior_state_dir=None, modules_base=None):
     T._need_root(require_root)
     state_dir = state_dir or STATE_DIR
     data = open(conf, "rb").read()
@@ -122,7 +172,15 @@ def entry_cmd(action, conf=LIMINE_CONF, state_dir=None, require_root=True, prior
         return 0 if ok else 1
     st = os.stat(conf)
     if action == "install":
-        new = add_entry(text)
+        try:
+            new = add_entry(text)
+        except ValueError as e:
+            sys.exit("refusing: %s" % e)
+        want = PROFILES[PROFILE].get("kernel")
+        if want:  # the kernel the entry boots must have a complete snd-usb-audio module set installed
+            bad = module_deps_ok(want, modules_base)
+            if bad:
+                sys.exit("refusing: " + "; ".join(bad))
         if os.path.lexists(backup):
             sys.exit("refusing: %s already exists (stale experiment state); archive it with `rollover` first" % backup)
         prior = prior_state_dir if prior_state_dir is not None else (
@@ -235,9 +293,15 @@ def module_loaded():
 
 # ------------------------------------------------------------------ gate + classification
 
-def gate(cmdline, module_loaded, devices, bound_interfaces, journal_status, journal_text, blacklist_in_config):
+def gate(cmdline, module_loaded, devices, bound_interfaces, journal_status, journal_text, blacklist_in_config,
+         kernel_release=None, module_problems=None):
     """-> list of problems; empty means the deliberate load may proceed. Fails closed on missing evidence."""
     problems = []
+    want = PROFILES[PROFILE].get("kernel")
+    if want:
+        if kernel_release != want:
+            problems.append("running kernel is %s, this experiment is pinned to %s -> INVALID" % (kernel_release, want))
+        problems += module_problems if module_problems is not None else ["module set of the kernel not verified"]
     if BLACKLIST_ARG not in cmdline.split():
         problems.append("kernel command line lacks %s (not the experimental entry)" % BLACKLIST_ARG)
     if "module_blacklist" in cmdline:
@@ -267,11 +331,14 @@ def gate(cmdline, module_loaded, devices, bound_interfaces, journal_status, jour
     return problems
 
 
-def classify(gate_ok, load_rc, findings, pcm_volume, hw_volume, journal_status="OK"):
+def classify(gate_ok, load_rc, findings, pcm_volume, hw_volume, journal_status="OK", pw=None, age_s=None):
+    """8a24: legacy 7.2 rule. With `pw` (CONNECT 2 PipeWire assessment, 8a25) the version-independent evidence rule."""
     if not gate_ok:
         return "INVALID"
     if load_rc != 0 or journal_status != "OK":
         return "INCONCLUSIVE"
+    if pw is not None:
+        return H.classify_evidence(findings, pcm_volume, pw, age_s)[0]
     return H.classify(findings, pcm_volume, hw_volume)
 
 
@@ -280,8 +347,10 @@ def run_gate(runner=default_runner):
     st, detail, text = read_kernel_journal(runner=runner)
     rc, cfg, _ = runner(["modprobe", "-c"])
     devices = find_devices()
+    rel = os.uname().release
     problems = gate(cmdline, module_loaded(), devices, bound_interfaces(devices), st, text,
-                    re.search(r"^blacklist\s+snd[_-]usb[_-]audio", cfg or "", re.M) is not None)
+                    re.search(r"^blacklist\s+snd[_-]usb[_-]audio", cfg or "", re.M) is not None,
+                    kernel_release=rel, module_problems=module_deps_ok(rel))
     return problems, {"journal_status": st, "journal_detail": detail, "devices": devices, "text": text}
 
 
@@ -678,15 +747,23 @@ def cmd_classify(run_dir, cli, runner=default_runner, euid=None):
         routes = H.route_hw_volume()
         outs = None if routes is None else [v for _, d, v in routes if d == "Output"]
         hw = None if not outs else any(outs)
-        res = classify(not cp["problems"], load["rc"], findings, pcm, hw, st)
+        pw = H.pipewire_connect2_now() if PROFILE == "8a25" else None
+        age = max(0.0, time.time() - load["after"]["wall_epoch"])
+        res = classify(not cp["problems"], load["rc"], findings, pcm, hw, st, pw=pw, age_s=age)
         rep = {"classification": res, "journal_after_load": {"status": st, "detail": detail},
                "findings_after_load": findings, "pcm_playback_volume": pcm, "route_hw_volume": routes, "load": load}
+        if pw is not None:
+            rep["pipewire_connect2"] = pw
+            rep["age_since_load_s"] = round(age, 1)
+            rep["kernel"] = os.uname().release
+            rep["reason"] = H.classify_evidence(findings, pcm, pw, age)[1]
         if PROFILE == "8a25":
             rep["reenumeration"] = {k: cp.get(k) for k in ("reenumeration", "devnum_before", "devnum_after", "t_reconnect_epoch")}
         if cli:
             rc, s, _ = runner([cli, "read", "settings", "--method", "interface", "--interface", "3"], 30)
             rep["hardware_snapshot"] = H.parse_hw_snapshot(s if rc == 0 else "")
-        write_json(fd, "classification.json", rep, uid)
+        write_json(fd, "classification_%s.json" % time.strftime("%H%M%S"), rep, uid)  # every pass kept
+        write_json(fd, "classification.json", rep, uid)  # latest; classify may be repeated, `load` never
     finally:
         os.close(fd)
     print(json.dumps(rep, indent=1, default=str))

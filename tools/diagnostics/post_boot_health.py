@@ -60,6 +60,86 @@ def classify(findings, pcm_volume, hw_volume_true):
     return "INCONCLUSIVE"
 
 
+SETTLE_S = 60  # PipeWire/WirePlumber need this long after the driver registered before an absent route is a verdict
+
+# PipeWire states for CONNECT 2 only (other sound cards are ignored)
+PW_NO_DEVICE = "NO_DEVICE"              # CONNECT 2 not (yet) a PipeWire device: initialisation incomplete or card absent
+PW_NO_ROUTES = "DEVICE_NO_ROUTES"       # device exists, Route and EnumRoute are empty (WirePlumber could not load the mixer)
+PW_HW_FALSE = "ROUTES_HW_VOLUME_FALSE"  # output route(s) present, route.hw-volume=false
+PW_HW_TRUE = "ROUTES_HW_VOLUME_TRUE"
+PW_HW_UNKNOWN = "ROUTES_NO_HW_VOLUME_FIELD"
+
+
+def _is_connect2_device(o):
+    p = o.get("info", {}).get("props", {}) or {}
+    if not str(o.get("type", "")).endswith("Interface:Device"):
+        return False
+    return (str(p.get("device.vendor.id", "")).lower() == "0x" + VID
+            and str(p.get("device.product.id", "")).lower() == "0x" + PID)
+
+
+def pipewire_connect2(objs):
+    """Assess PipeWire's view of CONNECT 2 only. -> {state, device_id, route_count, enum_route_count, outputs,
+    sink_nodes}. An absent route is its own state, never the same as route.hw-volume=false."""
+    dev = None
+    for o in objs:
+        if _is_connect2_device(o):
+            dev = o
+            break
+    if dev is None:
+        return {"state": PW_NO_DEVICE, "device_id": None, "route_count": 0, "enum_route_count": 0,
+                "outputs": [], "sink_nodes": 0}
+    params = dev.get("info", {}).get("params", {})
+    routes = params.get("Route", []) or []
+    enum = params.get("EnumRoute", []) or []
+    outs = []
+    for r in routes:
+        info = r.get("info") or []
+        flat = {info[i]: info[i + 1] for i in range(1, len(info) - 1, 2)}
+        if r.get("direction") == "Output":
+            outs.append({"name": r.get("name"),
+                         "hw_volume": (str(flat["route.hw-volume"]).lower() == "true") if "route.hw-volume" in flat else None})
+    sinks = sum(1 for o in objs if str(o.get("type", "")).endswith("Interface:Node")
+                and o.get("info", {}).get("props", {}).get("device.id") == dev.get("id")
+                and o.get("info", {}).get("props", {}).get("media.class") == "Audio/Sink")
+    if not routes and not enum:
+        state = PW_NO_ROUTES
+    elif any(o["hw_volume"] for o in outs):
+        state = PW_HW_TRUE
+    elif outs and all(o["hw_volume"] is False for o in outs):
+        state = PW_HW_FALSE
+    else:
+        state = PW_HW_UNKNOWN
+    return {"state": state, "device_id": dev.get("id"), "route_count": len(routes), "enum_route_count": len(enum),
+            "outputs": outs, "sink_nodes": sinks}
+
+
+def classify_evidence(findings, pcm_volume, pw, age_s=None, settle_s=SETTLE_S):
+    """Version-independent, evidence-based verdict that needs no hardware write. -> (verdict, reason).
+
+    * A merely present ALSA volume control is never success.
+    * FU2 failure (either kernel wording, unit 2 only) + CONNECT 2 PipeWire device without a usable hardware-volume
+      route, once the audio stack has settled (age_s >= settle_s) -> NEGATIVE, whatever ALSA shows.
+    * POSITIVE: no FU2 failure and consistent CONNECT 2 health (ALSA control + route.hw-volume=true).
+    * Missing / contradictory / not-yet-settled evidence -> INCONCLUSIVE."""
+    if pw is None or pcm_volume is None:
+        return "INCONCLUSIVE", "ALSA or PipeWire evidence missing"
+    state = pw["state"]
+    if not findings["fu2_sticky"]:
+        if pcm_volume and state == PW_HW_TRUE:
+            return "POSITIVE", "no FU2 failure; ALSA control present; CONNECT 2 route.hw-volume=true"
+        return "INCONCLUSIVE", "no FU2 failure but CONNECT 2 ALSA/PipeWire health not consistent (%s)" % state
+    if state == PW_NO_DEVICE:
+        return "INCONCLUSIVE", "FU2 failure, but CONNECT 2 is not a PipeWire device (initialisation incomplete?)"
+    if state == PW_HW_TRUE:
+        return "INCONCLUSIVE", "FU2 failure contradicted by route.hw-volume=true"
+    if age_s is None or age_s < settle_s:
+        return "INCONCLUSIVE", "audio stack not settled (%s s since driver load, need %d): classify again later" % (
+            "unknown" if age_s is None else "%.0f" % age_s, settle_s)
+    return "NEGATIVE", "FU2 failure and stable unusable CONNECT 2 PipeWire mixer/route (%s); ALSA control %s" % (
+        state, "present" if pcm_volume else "absent")
+
+
 HW_LINE = re.compile(r"^phantom=(?P<ph>\d)\s+speaker=(?P<sv>-?\d+(?:\.\d+)?) dB(?P<sm> \(muted\))?\s+"
                      r"headphone=(?P<hv>-?\d+(?:\.\d+)?) dB(?P<hm> \(muted\))?\s")
 
@@ -135,11 +215,22 @@ def route_hw_volume():
         return None
 
 
+def pipewire_connect2_now():
+    raw = run(["pw-dump"])
+    if not raw:
+        return None
+    try:
+        return pipewire_connect2(json.loads(raw))
+    except ValueError:
+        return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cli")
     ap.add_argument("--json")
     ap.add_argument("--journal-file")
+    ap.add_argument("--age-seconds", type=float, help="seconds since the driver registered; needed for a NEGATIVE verdict")
     a = ap.parse_args(argv)
     rep = {"kernel": os.uname().release}
     cmd = open("/proc/cmdline").read()
@@ -171,7 +262,13 @@ def main(argv=None):
     if a.cli:
         s = run([a.cli, "read", "settings", "--method", "interface", "--interface", "3"], 30)
         rep["hardware_snapshot"] = parse_hw_snapshot(s)
-    rep["classification"] = classify(f, pcm_volume, hw) if text else "INCONCLUSIVE"
+    pw = pipewire_connect2_now()
+    rep["pipewire_connect2"] = pw
+    rep["classification"] = classify(f, pcm_volume, hw) if text else "INCONCLUSIVE"  # legacy (7.2) rule, all cards
+    if text:
+        rep["classification_evidence"], rep["classification_reason"] = classify_evidence(f, pcm_volume, pw, a.age_seconds)
+    else:
+        rep["classification_evidence"], rep["classification_reason"] = "INCONCLUSIVE", "kernel log unreadable"
     print(json.dumps(rep, indent=1, default=str))
     if a.json:
         fd = os.open(a.json, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
