@@ -170,6 +170,10 @@ if(LEWITT_BUILD_TESTS AND UNIX)
     if(Python3_FOUND)
         add_test(NAME usb_ep0_trace_offline
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_trace.py)
+        add_test(NAME usb_ep0_live_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_live.py)
+        add_test(NAME usb_ep0_ab_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_ab.py)
     endif()
 endif()
 
