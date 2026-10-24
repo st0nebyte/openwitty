@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -401,6 +402,301 @@ class LoadAndClassifyFlow(unittest.TestCase):
     def test_classify_refuses_root(self):
         with self.assertRaises(SystemExit):
             D.cmd_classify(self.run, None, euid=0)
+
+
+# ---------------------------------------------------------------- Phase 8A.25 (unbound reconnect)
+
+BOOT_ONLY = ("Okt 24 12:58:08 kernel: Linux version 7.2.10\n"
+             "Okt 24 12:58:08 kernel: usb 3-2: new high-speed USB device number 2 using xhci_hcd\n"
+             "Okt 24 12:58:08 kernel: usb 3-2: New USB device found, idVendor=29c2, idProduct=0004, bcdDevice= 1.21\n")
+ONE_REPLUG = (BOOT_ONLY + "Okt 24 13:10:00 kernel: usb 3-2: USB disconnect, device number 2\n"
+              "Okt 24 13:10:05 kernel: usb 3-2: new high-speed USB device number 3 using xhci_hcd\n"
+              "Okt 24 13:10:05 kernel: usb 3-2: New USB device found, idVendor=29c2, idProduct=0004, bcdDevice= 1.21\n")
+TWO_REPLUGS = (ONE_REPLUG + "Okt 24 13:11:00 kernel: usb 3-2: USB disconnect, device number 3\n"
+               "Okt 24 13:11:05 kernel: usb 3-2: new high-speed USB device number 4 using xhci_hcd\n"
+               "Okt 24 13:11:05 kernel: usb 3-2: New USB device found, idVendor=29c2, idProduct=0004, bcdDevice= 1.21\n")
+
+
+class Profile25(unittest.TestCase):
+    def setUp(self):
+        D.set_profile("8a25")
+
+    def tearDown(self):
+        D.set_profile("8a24")
+
+    def test_distinct_markers_name_and_same_single_argument(self):
+        new = D.add_entry(CONF)
+        self.assertIn("OPENWITTY-8A25-BEGIN", new)
+        self.assertNotIn("OPENWITTY-8A24", new)
+        self.assertIn("/OpenWitty unbound-reconnect snd-usb-audio (temporary)", new)
+        self.assertEqual(new.count(D.BLACKLIST_ARG), 1)
+        self.assertEqual(D.remove_entry(new), CONF)
+        self.assertIn("default_entry: 2", new)
+
+    def test_no_second_entry_of_either_profile(self):
+        new = D.add_entry(CONF)
+        D.set_profile("8a24")
+        with self.assertRaises(ValueError):
+            D.add_entry(new)
+        D.set_profile("8a25")
+        with self.assertRaises(ValueError):
+            D.add_entry(new)
+
+    def test_install_refuses_unarchived_previous_state_and_stale_backup(self):
+        d = tempfile.mkdtemp()
+        try:
+            conf = os.path.join(d, "limine.conf")
+            open(conf, "w").write(CONF)
+            prior = os.path.join(d, "prior")
+            os.makedirs(prior)
+            with self.assertRaises(SystemExit):
+                D.entry_cmd("install", conf, os.path.join(d, "st25"), False, prior_state_dir=prior)
+            self.assertEqual(open(conf).read(), CONF)
+            os.rmdir(prior)
+            self.assertEqual(D.entry_cmd("install", conf, os.path.join(d, "st25"), False, prior_state_dir=prior), 0)
+            self.assertEqual(D.entry_cmd("remove", conf, os.path.join(d, "st25"), False), 0)
+            with self.assertRaises(SystemExit):  # backup of the finished run still there -> must be archived first
+                D.entry_cmd("install", conf, os.path.join(d, "st25"), False, prior_state_dir=prior)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class Rollover(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.conf = os.path.join(self.d, "limine.conf")
+        open(self.conf, "w").write(CONF)
+        self.state = os.path.join(self.d, "state")
+        os.makedirs(self.state)
+        open(os.path.join(self.state, "limine.conf.before"), "w").write(CONF)
+        self.run = os.path.join(self.d, "run")
+        os.makedirs(self.run)
+        self.arch = os.path.join(self.d, "archive")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def marker(self, name="load_done", classified=True):
+        open(os.path.join(self.state, name), "w").write("2026-10-24 13:03:25 %s\n" % self.run)
+        if classified:
+            import json
+            json.dump({"classification": "NEGATIVE"}, open(os.path.join(self.run, "classification.json"), "w"))
+
+    def roll(self, **kw):
+        return D.rollover("8a24", self.state, self.arch, self.conf, **kw)
+
+    def test_archives_without_deleting_anything(self):
+        self.marker()
+        dest = self.roll()
+        self.assertFalse(os.path.exists(self.state))
+        self.assertTrue(os.path.exists(os.path.join(dest, "state", "load_done")))
+        self.assertTrue(os.path.exists(os.path.join(dest, "state", "limine.conf.before")))
+        note = open(os.path.join(dest, "ROLLOVER.txt")).read()
+        self.assertIn("NEGATIVE", note)
+        self.assertIn("identical to backup: True", note)
+        self.assertEqual(oct(os.stat(dest).st_mode & 0o777), "0o700")
+
+    def test_refuses_incomplete_previous_experiment(self):
+        self.marker(classified=False)
+        with self.assertRaises(ValueError):
+            self.roll()
+        self.assertTrue(os.path.isdir(self.state))
+
+    def test_refuses_while_entry_installed(self):
+        self.marker()
+        open(self.conf, "w").write(D.add_entry(CONF))
+        with self.assertRaises(ValueError):
+            self.roll()
+        self.assertTrue(os.path.isdir(self.state))
+
+    def test_aborted_run_needs_explicit_flag(self):
+        with self.assertRaises(ValueError):
+            self.roll()
+        self.roll(allow_unloaded=True)
+
+    def test_second_rollover_has_nothing_to_do_and_conf_drift_is_recorded(self):
+        self.marker()
+        open(self.conf, "a").write("# regenerated by a kernel update\n")
+        dest = self.roll()
+        self.assertIn("identical to backup: False", open(os.path.join(dest, "ROLLOVER.txt")).read())
+        with self.assertRaises(ValueError):
+            self.roll()
+
+    def test_per_boot_marker_names_are_found(self):
+        self.marker("load_done.abc-123")
+        self.assertTrue(os.path.exists(os.path.join(self.roll(), "state", "load_done.abc-123")))
+
+
+class ReenumerationAnalysis(unittest.TestCase):
+    def test_exactly_one_replug(self):
+        i = D.analyze_reenumeration(ONE_REPLUG)
+        self.assertEqual((i["disconnects"], i["enumerations"], i["found_lines"], i["device_numbers"]), (1, 2, 2, [2, 3]))
+        self.assertEqual(D.reenumeration_problems(i, "2"), [])
+
+    def test_failures(self):
+        self.assertTrue(D.reenumeration_problems(D.analyze_reenumeration(BOOT_ONLY), "2"))      # nothing happened
+        self.assertTrue(D.reenumeration_problems(D.analyze_reenumeration(TWO_REPLUGS), "2"))    # more than one
+        same = ONE_REPLUG.replace("device number 3 using", "device number 2 using")
+        self.assertTrue(any("unchanged" in x for x in D.reenumeration_problems(D.analyze_reenumeration(same), "2")))
+
+    def test_other_ports_are_ignored(self):
+        other = ONE_REPLUG + "kernel: usb 3-4: USB disconnect, device number 9\n"
+        self.assertEqual(D.analyze_reenumeration(other)["disconnects"], 1)
+
+
+class WatchReconnect(unittest.TestCase):
+    def run_seq(self, seq, deadline=100.0, settle=3.0):
+        it = iter(seq)
+        last = {"v": seq[-1]}
+        t = {"now": 0.0}
+
+        def devices():
+            try:
+                last["v"] = next(it)
+            except StopIteration:
+                pass
+            return last["v"]
+
+        def sleep(d):
+            t["now"] += 1.0
+        return D.watch_reconnect(deadline=deadline, settle=settle, devices_fn=devices, clock=lambda: t["now"],
+                                 sleep=sleep, wall=lambda: 1000.0 + t["now"], installed_signals=False)
+
+    def dev(self, n):
+        return [{"port": "3-2", "devnum": str(n), "busnum": "3", "controller_pci": "0000:0d:00.4"}]
+
+    def test_normal_replug(self):
+        r = self.run_seq([self.dev(2), self.dev(2), [], [], self.dev(3)])
+        self.assertEqual((r["status"], r["devnum_before"], r["devnum_after"]), ("reconnected", "2", "3"))
+        self.assertLess(r["t_disconnect_epoch"], r["t_reconnect_epoch"])
+
+    def test_no_disconnect_times_out(self):
+        self.assertIn("no disconnect", self.run_seq([self.dev(2)], deadline=10)["status"])
+
+    def test_never_returns(self):
+        r = self.run_seq([self.dev(2), []], deadline=10)
+        self.assertIn("never returned", r["status"])
+        self.assertIsNone(r["t_reconnect_epoch"])
+
+    def test_replug_faster_than_poll_detected_by_device_number(self):
+        r = self.run_seq([self.dev(2), self.dev(3)])
+        self.assertEqual((r["status"], r["devnum_after"]), ("reconnected", "3"))
+
+    def test_bad_start_and_duplicates_flagged(self):
+        self.assertIn("not present exactly once", self.run_seq([[]])["status"])
+        r = self.run_seq([self.dev(2), self.dev(2) + self.dev(3), [], self.dev(4)])
+        self.assertTrue(r["multiple_seen"])
+
+
+class Flow25(unittest.TestCase):
+    """prepare -> check(pre) -> watch result -> check(post) -> load -> classify on one run directory."""
+
+    def setUp(self):
+        D.set_profile("8a25")
+        self.d = tempfile.mkdtemp()
+        self.home = os.path.join(self.d, "home")
+        os.makedirs(self.home, mode=0o700)
+        self.uid = os.getuid()
+        import io
+        import contextlib
+        with contextlib.redirect_stdout(io.StringIO()) as b:
+            D.cmd_prepare(home=self.home)
+        self.run = b.getvalue().strip()
+        self.assertIn("trace-8a25", self.run)
+        self.marker_dir = os.path.join(self.d, "state")
+        self._gate = D.run_gate
+        self.text = BOOT_ONLY
+        self.problems = []
+        self.dev = [dict(GOOD_DEV[0])]
+        D.run_gate = lambda runner=D.default_runner: (list(self.problems), {
+            "journal_status": "OK", "journal_detail": "", "devices": self.dev, "text": self.text})
+
+    def tearDown(self):
+        D.run_gate = self._gate
+        D.set_profile("8a24")
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def call(self, fn, *a, **kw):
+        import io
+        import contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            return fn(*a, **kw)
+
+    def pre(self):
+        return self.call(D.cmd_check, self.run, stage="pre")
+
+    def reconnect_json(self, status="reconnected", **kw):
+        import json
+        d = {"status": status, "devnum_before": "2", "devnum_after": "3", "t_reconnect_epoch": time.time() - 40,
+             "t_disconnect_epoch": time.time() - 45, "multiple_seen": False}
+        d.update(kw)
+        json.dump(d, open(os.path.join(self.run, "reconnect.json"), "w"))
+
+    def post(self):
+        self.text = ONE_REPLUG
+        self.dev[0]["devnum"] = "3"
+        return self.call(D.cmd_check, self.run, stage="post")
+
+    def load(self, **kw):
+        return self.call(D.cmd_load, self.run, True, marker_dir=self.marker_dir, euid=0, sudo_uid=str(self.uid),
+                         modprobe=lambda: (0, ""), **kw)
+
+    def test_full_happy_path_records_delay_and_per_boot_marker(self):
+        self.assertEqual(self.pre(), 0)
+        self.reconnect_json()
+        self.assertEqual(self.post(), 0)
+        self.assertEqual(self.load(), 0)
+        import json
+        ld = json.load(open(os.path.join(self.run, "load.json")))
+        self.assertGreater(ld["reconnect_to_load_s"], 30)
+        self.assertEqual(os.listdir(self.marker_dir), ["load_done." + D.boot_id()])
+        with self.assertRaises(SystemExit):
+            self.load()
+
+    def test_load_needs_post_checkpoint_not_just_pre(self):
+        self.pre()
+        self.reconnect_json()
+        with self.assertRaises(SystemExit):
+            self.load()
+        self.assertFalse(os.path.exists(self.marker_dir))
+
+    def test_post_gate_failures_block_load(self):
+        for mutate in (lambda: self.reconnect_json("deadline: no disconnect", devnum_after=None),
+                       lambda: self.reconnect_json(multiple_seen=True),
+                       lambda: setattr(self, "problems", ["snd_usb_audio is already loaded"])):
+            for n in ("checkpoint.json", "checkpoint_post.json", "reconnect.json"):
+                try:
+                    os.unlink(os.path.join(self.run, n))
+                except FileNotFoundError:
+                    pass
+            self.problems = []
+            self.assertEqual(self.pre(), 0)
+            self.reconnect_json()
+            mutate()
+            self.assertEqual(self.post(), 1)
+            with self.assertRaises(SystemExit):
+                self.load()
+
+    def test_two_replugs_or_missing_replug_in_journal_is_invalid(self):
+        self.pre()
+        self.reconnect_json()
+        self.text = TWO_REPLUGS
+        self.assertEqual(self.call(D.cmd_check, self.run, stage="post"), 1)
+        self.text = BOOT_ONLY
+        self.assertEqual(self.call(D.cmd_check, self.run, stage="post"), 1)
+
+    def test_post_without_watch_is_invalid(self):
+        self.pre()
+        self.assertEqual(self.call(D.cmd_check, self.run, stage="post"), 1)
+
+    def test_watch_refuses_without_baseline_and_as_root(self):
+        with self.assertRaises(SystemExit):
+            self.call(D.cmd_watch, self.run, 5)
+
+    def test_8a24_profile_unchanged_marker_name(self):
+        D.set_profile("8a24")
+        self.assertFalse(D.PROFILES[D.PROFILE]["per_boot_marker"])
+        self.assertEqual(D.STATE_DIR, "/var/lib/openwitty-8a24")
 
 
 if __name__ == "__main__":

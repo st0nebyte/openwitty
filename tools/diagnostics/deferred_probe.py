@@ -33,13 +33,35 @@ BASE_REL = ".local/state/openwitty/trace-8a24"
 # The experiment is pinned to this exact device position; anything else is INVALID (never "fixed" by re-enumerating).
 EXPECTED = {"vid": "29c2", "pid": "0004", "port": "3-2", "controller": "0000:0d:00.4"}
 CHECKPOINT_MAX_AGE_S = 1800
-ENTRY_BEGIN = "# OPENWITTY-8A24-BEGIN (temporary deferred snd-usb-audio entry; remove after use)"
-ENTRY_END = "# OPENWITTY-8A24-END"
-ENTRY_NAME = "OpenWitty deferred snd-usb-audio (temporary)"
+PROFILES = {
+    "8a24": {"begin": "# OPENWITTY-8A24-BEGIN (temporary deferred snd-usb-audio entry; remove after use)",
+             "end": "# OPENWITTY-8A24-END", "name": "OpenWitty deferred snd-usb-audio (temporary)",
+             "state": "/var/lib/openwitty-8a24", "base": ".local/state/openwitty/trace-8a24", "per_boot_marker": False},
+    "8a25": {"begin": "# OPENWITTY-8A25-BEGIN (temporary unbound-reconnect snd-usb-audio entry; remove after use)",
+             "end": "# OPENWITTY-8A25-END", "name": "OpenWitty unbound-reconnect snd-usb-audio (temporary)",
+             "state": "/var/lib/openwitty-8a25", "base": ".local/state/openwitty/trace-8a25", "per_boot_marker": True},
+}
+PROFILE = "8a24"
+ARCHIVE_DIR = "/var/lib/openwitty-archive"
+ENTRY_BEGIN = PROFILES["8a24"]["begin"]
+ENTRY_END = PROFILES["8a24"]["end"]
+ENTRY_NAME = PROFILES["8a24"]["name"]
 BLACKLIST_ARG = "modprobe.blacklist=snd_usb_audio"
 MODULE = "snd_usb_audio"
 FORBIDDEN_IN_SOURCE = ("modprobe.blacklist", "module_blacklist", "usbcore.quirks", "kprobe_event", "dyndbg",
                        "trace_event", "quirk_flags")
+
+
+def set_profile(name):
+    """Select the experiment profile (entry markers/name, state dir, run-dir base, marker style)."""
+    global PROFILE, ENTRY_BEGIN, ENTRY_END, ENTRY_NAME, STATE_DIR, BASE_REL
+    p = PROFILES[name]
+    PROFILE, ENTRY_BEGIN, ENTRY_END, ENTRY_NAME = name, p["begin"], p["end"], p["name"]
+    STATE_DIR, BASE_REL = p["state"], p["base"]
+
+
+def any_entry_present(text):
+    return any(pr["begin"] in text for pr in PROFILES.values())
 
 
 # ------------------------------------------------------------------ Limine entry (pure text functions)
@@ -61,8 +83,8 @@ def has_entry(text):
 
 
 def add_entry(text):
-    if has_entry(text):
-        raise ValueError("entry already present")
+    if any_entry_present(text):
+        raise ValueError("an OpenWitty experimental entry is already present")
     term = "" if text.endswith("\n") else "\n"
     return text + term + "\n" + build_entry(T.parse_leaf(text))
 
@@ -85,8 +107,9 @@ def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def entry_cmd(action, conf=LIMINE_CONF, state_dir=STATE_DIR, require_root=True):
+def entry_cmd(action, conf=LIMINE_CONF, state_dir=None, require_root=True, prior_state_dir=None):
     T._need_root(require_root)
+    state_dir = state_dir or STATE_DIR
     data = open(conf, "rb").read()
     text = data.decode()
     backup = os.path.join(state_dir, "limine.conf.before")
@@ -100,6 +123,12 @@ def entry_cmd(action, conf=LIMINE_CONF, state_dir=STATE_DIR, require_root=True):
     st = os.stat(conf)
     if action == "install":
         new = add_entry(text)
+        if os.path.lexists(backup):
+            sys.exit("refusing: %s already exists (stale experiment state); archive it with `rollover` first" % backup)
+        prior = prior_state_dir if prior_state_dir is not None else (
+            PROFILES["8a24"]["state"] if PROFILE == "8a25" else None)
+        if prior and os.path.lexists(prior):
+            sys.exit("refusing: previous experiment state %s not archived; run `rollover --profile 8a24` first" % prior)
         os.makedirs(state_dir, mode=0o700, exist_ok=True)
         with open(backup, "wb") as f:
             f.write(data)
@@ -256,6 +285,138 @@ def run_gate(runner=default_runner):
     return problems, {"journal_status": st, "journal_detail": detail, "devices": devices, "text": text}
 
 
+# ------------------------------------------------------------------ 8A.25: reconnect observation (passive)
+
+DISC_RE = re.compile(r"usb (?P<port>[\d.-]+): USB disconnect, device number (?P<n>\d+)")
+NEWDEV_RE = re.compile(r"usb (?P<port>[\d.-]+): new (?P<speed>[\w-]+) USB device number (?P<n>\d+) using")
+FOUND_RE = re.compile(r"usb (?P<port>[\d.-]+): New USB device found, idVendor=%s, idProduct=%s" % (EXPECTED["vid"], EXPECTED["pid"]))
+
+
+def analyze_reenumeration(journal_text, port=None):
+    """Count the disconnect / enumeration events of the target port in the current-boot kernel journal."""
+    port = port or EXPECTED["port"]
+    disc = [int(m.group("n")) for m in DISC_RE.finditer(journal_text) if m.group("port") == port]
+    new = [int(m.group("n")) for m in NEWDEV_RE.finditer(journal_text) if m.group("port") == port]
+    found = [m for m in FOUND_RE.finditer(journal_text) if m.group("port") == port]
+    return {"disconnects": len(disc), "enumerations": len(new), "found_lines": len(found),
+            "device_numbers": new, "disconnect_numbers": disc}
+
+
+def reenumeration_problems(info, baseline_devnum=None):
+    """Exactly one genuine disconnect followed by exactly one re-enumeration since the boot-time enumeration."""
+    p = []
+    if info["disconnects"] != 1:
+        p.append("expected exactly 1 USB disconnect of %s in this boot, journal shows %d" % (EXPECTED["port"], info["disconnects"]))
+    if info["enumerations"] != 2 or info["found_lines"] != 2:
+        p.append("expected exactly 2 enumerations (boot + one reconnect), journal shows %d (%d identity lines)"
+                 % (info["enumerations"], info["found_lines"]))
+    nums = info["device_numbers"]
+    if len(nums) >= 2 and baseline_devnum is not None and str(nums[-1]) == str(baseline_devnum) and nums[0] == nums[-1]:
+        p.append("device number unchanged (%s): cannot confirm a new USB generation by number" % nums[-1])
+    return p
+
+
+def watch_reconnect(deadline=240.0, settle=3.0, poll=0.25, devices_fn=None, clock=time.monotonic, sleep=time.sleep,
+                    wall=time.time, installed_signals=True):
+    """Passively observe ONE disconnect + reappearance of the target via sysfs. Sends nothing, resets nothing."""
+    devices_fn = devices_fn or find_devices
+    flag = {"sig": None}
+    old = {}
+    if installed_signals:
+        import signal
+        for sg in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            old[sg] = signal.signal(sg, lambda n, f: flag.update(sig=n))
+    t0 = clock()
+    d0 = devices_fn()
+    rep = {"armed_epoch": wall(), "present_at_arm": len(d0) == 1, "devnum_before": d0[0]["devnum"] if d0 else None,
+           "t_disconnect_epoch": None, "t_reconnect_epoch": None, "devnum_after": None, "multiple_seen": False}
+    state = "present" if len(d0) == 1 else "bad_start"
+    t_back = None
+    try:
+        while True:
+            now = clock() - t0
+            if flag["sig"] is not None:
+                rep["status"] = "signal %d" % flag["sig"]
+                break
+            if state == "bad_start":
+                rep["status"] = "device not present exactly once at arm"
+                break
+            if now >= deadline:
+                rep["status"] = "deadline: no disconnect" if state == "present" else (
+                    "deadline: device never returned" if state == "absent" else "deadline")
+                break
+            devs = devices_fn()
+            if len(devs) > 1:
+                rep["multiple_seen"] = True
+            if state == "present" and len(devs) == 0:
+                state, rep["t_disconnect_epoch"] = "absent", wall()
+            elif state == "absent" and len(devs) == 1:
+                state, rep["t_reconnect_epoch"], t_back = "back", wall(), now
+                rep["devnum_after"] = devs[0]["devnum"]
+                rep["port_after"], rep["controller_after"] = devs[0]["port"], devs[0]["controller_pci"]
+            elif state == "back" and now - t_back >= settle:
+                rep["status"] = "reconnected"
+                break
+            elif state == "present" and len(devs) == 1 and devs[0]["devnum"] != rep["devnum_before"]:
+                # replug faster than one poll interval: new device number without an observed absence
+                state, rep["t_disconnect_epoch"], rep["t_reconnect_epoch"], t_back = "back", wall(), wall(), now
+                rep["devnum_after"] = devs[0]["devnum"]
+                rep["port_after"], rep["controller_after"] = devs[0]["port"], devs[0]["controller_pci"]
+            sleep(poll)
+    finally:
+        if installed_signals:
+            import signal
+            for sg, h in old.items():
+                signal.signal(sg, h)
+    return rep
+
+
+def rollover(profile, state_dir=None, archive_dir=ARCHIVE_DIR, conf=LIMINE_CONF, allow_unloaded=False, now=None):
+    """Archive (never delete) a finished experiment's root state: backup, sha, single-load marker(s).
+
+    Refuses unless the experiment demonstrably completed (marker's run directory holds classification.json), no
+    experimental Limine entry is present, and the archive target does not exist. Returns the archive path."""
+    state_dir = state_dir or PROFILES[profile]["state"]
+    if not os.path.isdir(state_dir):
+        raise ValueError("no state directory %s: nothing to roll over" % state_dir)
+    conf_text = open(conf).read()
+    if any_entry_present(conf_text):
+        raise ValueError("an experimental Limine entry is still installed: remove it first")
+    markers = sorted(n for n in os.listdir(state_dir) if n.startswith("load_done"))
+    classification = None
+    marker_text = []
+    for n in markers:
+        txt = open(os.path.join(state_dir, n)).read().strip()
+        marker_text.append("%s: %s" % (n, txt))
+        parts = txt.split(" ", 2)
+        run = parts[2] if len(parts) > 2 else ""
+        cj = os.path.join(run, "classification.json")
+        if run and os.path.isabs(run) and os.path.isfile(cj):
+            classification = json.load(open(cj)).get("classification")
+    if not markers and not allow_unloaded:
+        raise ValueError("no load marker: the experiment never loaded; pass --allow-unloaded to archive an aborted run")
+    if markers and classification is None:
+        raise ValueError("previous experiment not demonstrably complete (no classification.json for its run)")
+    backup = os.path.join(state_dir, "limine.conf.before")
+    sha_backup = _sha(open(backup, "rb").read()) if os.path.exists(backup) else None
+    sha_conf = _sha(open(conf, "rb").read())
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now))
+    dest = os.path.join(archive_dir, "%s-%s" % (profile, stamp))
+    if os.path.lexists(dest):
+        raise ValueError("archive target exists: " + dest)
+    os.makedirs(archive_dir, mode=0o700, exist_ok=True)
+    os.makedirs(dest, mode=0o700)
+    os.rename(state_dir, os.path.join(dest, "state"))
+    note = ["profile: " + profile, "archived: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)),
+            "classification of that experiment: %s" % classification,
+            "markers: " + ("; ".join(marker_text) or "none"),
+            "backup sha256: %s" % sha_backup, "current limine.conf sha256: %s" % sha_conf,
+            "current conf identical to backup: %s" % (sha_backup == sha_conf)]
+    with open(os.path.join(dest, "ROLLOVER.txt"), "w") as f:
+        f.write("\n".join(note) + "\n")
+    return dest
+
+
 # ------------------------------------------------------------------ run directory handoff (user <-> root)
 
 class RunDirError(Exception):
@@ -370,20 +531,70 @@ def cmd_prepare(home=None, euid=None):
     return 0
 
 
-def cmd_check(run_dir, runner=default_runner):
+def _checkpoint_name(stage):
+    return "checkpoint_post.json" if stage == "post" else "checkpoint.json"
+
+
+def cmd_check(run_dir, runner=default_runner, stage="pre"):
+    """stage "pre": baseline gate (also the whole gate of the 8A.24 flow).
+    stage "post" (8A.25): after the user's ONE physical reconnect; additionally needs reconnect.json from `watch`,
+    the OK baseline checkpoint of this boot, and a journal showing exactly one disconnect + one re-enumeration."""
     fd, uid, _ = open_run_dir(run_dir)
     try:
         problems, ev = run_gate(runner)
-        rep = {"time": now_pair(), "boot_id": boot_id(), "kernel": os.uname().release, "devices": ev["devices"],
-               "module_loaded": module_loaded(), "journal_status": ev["journal_status"],
+        extra = {}
+        if stage == "post":
+            try:
+                base = read_json(fd, "checkpoint.json", uid)
+                rc_ = read_json(fd, "reconnect.json", uid)
+            except RunDirError as e:
+                base, rc_ = None, None
+                problems.append("post stage needs checkpoint.json and reconnect.json (%s)" % e)
+            if base is not None:
+                if base.get("gate") != "OK" or base.get("boot_id") != boot_id():
+                    problems.append("baseline checkpoint is not an OK gate of this boot")
+                if rc_.get("status") != "reconnected":
+                    problems.append("reconnect observation status: %s" % rc_.get("status"))
+                if rc_.get("multiple_seen"):
+                    problems.append("more than one matching device was seen during the reconnect")
+                if rc_.get("devnum_after") is None:
+                    problems.append("no re-enumeration observed")
+                info = analyze_reenumeration(ev["text"])
+                bdev = (base.get("devices") or [{}])[0].get("devnum")
+                problems += reenumeration_problems(info, bdev)
+                extra = {"reenumeration": info, "devnum_before": bdev, "devnum_after": rc_.get("devnum_after"),
+                         "t_reconnect_epoch": rc_.get("t_reconnect_epoch")}
+        rep = {"stage": stage, "time": now_pair(), "boot_id": boot_id(), "kernel": os.uname().release,
+               "devices": ev["devices"], "module_loaded": module_loaded(), "journal_status": ev["journal_status"],
                "journal_detail": ev["journal_detail"], "problems": problems,
                "enumeration_lines": [l[:60] for l in ev["text"].splitlines() if "idVendor=29c2" in l],
                "gate": "OK" if not problems else "INVALID/NOT READY"}
-        write_json(fd, "checkpoint.json", rep, uid)
+        rep.update(extra)
+        write_json(fd, _checkpoint_name(stage), rep, uid)
     finally:
         os.close(fd)
     print(json.dumps(rep, indent=1, default=str))
     return 0 if not problems else 1
+
+
+def cmd_watch(run_dir, deadline):
+    if os.geteuid() == 0:
+        sys.exit("run `watch` as the normal user")
+    fd, uid, _ = open_run_dir(run_dir)
+    try:
+        try:
+            base = read_json(fd, "checkpoint.json", uid)
+        except RunDirError:
+            sys.exit("run `check` (pre stage) first")
+        if base.get("gate") != "OK" or base.get("boot_id") != boot_id():
+            sys.exit("baseline checkpoint is not an OK gate of this boot")
+        print("ARMED: observing sysfs only. Unplug and replug CONNECT 2 ONCE now (same port). Deadline %d s." % deadline, flush=True)
+        rep = watch_reconnect(deadline=deadline)
+        write_json(fd, "reconnect.json", rep, uid)
+    finally:
+        os.close(fd)
+    print(json.dumps(rep, indent=1, default=str))
+    return 0 if rep.get("status") == "reconnected" else 1
 
 
 def cmd_load(run_dir, confirmed, runner=default_runner, marker_dir=None, euid=None, sudo_uid=None, modprobe=None):
@@ -393,24 +604,31 @@ def cmd_load(run_dir, confirmed, runner=default_runner, marker_dir=None, euid=No
     if not confirmed:
         sys.exit("refusing: pass --confirm-audio-safe only after the physical audio-safety gate was confirmed")
     marker_dir = marker_dir or STATE_DIR
-    marker = os.path.join(marker_dir, "load_done")
-    if os.path.lexists(marker):
+    per_boot = PROFILES[PROFILE]["per_boot_marker"]
+    marker = os.path.join(marker_dir, "load_done." + boot_id() if per_boot else "load_done")
+    if os.path.lexists(marker) or (per_boot and any(n.startswith("load_done.") and n.endswith(boot_id())
+                                                   for n in (os.listdir(marker_dir) if os.path.isdir(marker_dir) else []))):
         sys.exit("refusing: the deliberate load already ran once (%s); no repetition" % marker)
     sudo_uid = os.environ.get("SUDO_UID") if sudo_uid is None else sudo_uid
     try:
         fd, uid, info = open_run_dir(run_dir, euid, sudo_uid)
     except RunDirError as e:
         sys.exit("refusing: run directory rejected: %s" % e)
+    reconnect = None
     try:
         try:
-            cp = read_json(fd, "checkpoint.json", uid)
+            cp = read_json(fd, _checkpoint_name("post" if PROFILE == "8a25" else "pre"), uid)
+            if PROFILE == "8a25":
+                reconnect = read_json(fd, "reconnect.json", uid)
         except RunDirError as e:
-            sys.exit("refusing: no usable checkpoint (%s); run `check` first" % e)
+            sys.exit("refusing: no usable checkpoint (%s); run the gate stages first" % e)
         if cp.get("gate") != "OK" or cp.get("boot_id") != boot_id():
             sys.exit("refusing: checkpoint is not an OK gate of THIS boot")
         if time.time() - cp["time"]["wall_epoch"] > CHECKPOINT_MAX_AGE_S:
-            sys.exit("refusing: checkpoint older than %d s; run `check` again" % CHECKPOINT_MAX_AGE_S)
+            sys.exit("refusing: checkpoint older than %d s; run the check again" % CHECKPOINT_MAX_AGE_S)
         problems, ev = run_gate(runner)
+        if PROFILE == "8a25":
+            problems += reenumeration_problems(analyze_reenumeration(ev["text"]), cp.get("devnum_before"))
         if problems:
             print("gate failed, NOT loading:\n  " + "\n  ".join(problems))
             return 1
@@ -427,6 +645,8 @@ def cmd_load(run_dir, confirmed, runner=default_runner, marker_dir=None, euid=No
         after = now_pair()
         rep = {"before": before, "after": after, "rc": rc, "stderr": (err or "").strip()[:300],
                "boot_id": boot_id()}
+        if reconnect:
+            rep["reconnect_to_load_s"] = round(before["wall_epoch"] - reconnect["t_reconnect_epoch"], 3)
         try:
             write_json(fd, "load.json", rep, uid, replace=False)
         except OSError as e:
@@ -444,7 +664,7 @@ def cmd_classify(run_dir, cli, runner=default_runner, euid=None):
     fd, uid, _ = open_run_dir(run_dir)
     try:
         load = read_json(fd, "load.json", uid)
-        cp = read_json(fd, "checkpoint.json", uid)
+        cp = read_json(fd, _checkpoint_name("post" if PROFILE == "8a25" else "pre"), uid)
         since = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(load["before"]["wall_epoch"] - 1))
         st, detail, log_after = read_kernel_journal(since=since, runner=runner, require_boot_start=False,
                                                     require_device_line=False)
@@ -461,6 +681,8 @@ def cmd_classify(run_dir, cli, runner=default_runner, euid=None):
         res = classify(not cp["problems"], load["rc"], findings, pcm, hw, st)
         rep = {"classification": res, "journal_after_load": {"status": st, "detail": detail},
                "findings_after_load": findings, "pcm_playback_volume": pcm, "route_hw_volume": routes, "load": load}
+        if PROFILE == "8a25":
+            rep["reenumeration"] = {k: cp.get(k) for k in ("reenumeration", "devnum_before", "devnum_after", "t_reconnect_epoch")}
         if cli:
             rc, s, _ = runner([cli, "read", "settings", "--method", "interface", "--interface", "3"], 30)
             rep["hardware_snapshot"] = H.parse_hw_snapshot(s if rc == 0 else "")
@@ -473,26 +695,43 @@ def cmd_classify(run_dir, cli, runner=default_runner, euid=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--profile", choices=sorted(PROFILES), default="8a24")
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("entry")
     e.add_argument("action", choices=["status", "install", "remove", "verify"])
     e.add_argument("--conf", default=LIMINE_CONF)
     sub.add_parser("prepare")
-    for n in ("check", "load", "classify"):
+    ro = sub.add_parser("rollover")
+    ro.add_argument("--allow-unloaded", action="store_true")
+    for n in ("check", "watch", "load", "classify"):
         p = sub.add_parser(n)
         p.add_argument("--run-dir", required=True)
+        if n == "check":
+            p.add_argument("--stage", choices=["pre", "post"], default="pre")
+        if n == "watch":
+            p.add_argument("--deadline", type=float, default=240.0)
         if n == "load":
             p.add_argument("--confirm-audio-safe", action="store_true")
         if n == "classify":
             p.add_argument("--cli")
     a = ap.parse_args(argv)
+    set_profile(a.profile)
     try:
         if a.cmd == "entry":
             return entry_cmd(a.action, a.conf)
         if a.cmd == "prepare":
             return cmd_prepare()
+        if a.cmd == "rollover":
+            T._need_root()
+            try:
+                print("archived to", rollover(a.profile, allow_unloaded=a.allow_unloaded))
+            except ValueError as e:
+                sys.exit("refusing: %s" % e)
+            return 0
         if a.cmd == "check":
-            return cmd_check(a.run_dir)
+            return cmd_check(a.run_dir, stage=a.stage)
+        if a.cmd == "watch":
+            return cmd_watch(a.run_dir, a.deadline)
         if a.cmd == "load":
             return cmd_load(a.run_dir, a.confirm_audio_safe)
         return cmd_classify(a.run_dir, a.cli)
