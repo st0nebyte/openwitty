@@ -10,7 +10,10 @@
 #include "core/Policy.hpp"
 #include <algorithm>
 
+#include "core/Authorization.hpp"
+#include "core/OutputControl.hpp"
 #include "core/RetryPolicy.hpp"
+#include "transport/ControlLease.hpp"
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 
@@ -102,7 +105,7 @@ void DeviceWorker::startRealTimer() {
     armPreciseStatusTimer();
 }
 
-void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t) {
+void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t, WritePolicy policy) {
     {
         std::lock_guard lk(activeM_);
         active_ = nullptr;               // old transport is about to be destroyed
@@ -111,7 +114,7 @@ void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t) {
     resetWorkflowState();
     auto ser = std::make_unique<SerializedTransport>(std::move(t));
     serialized_ = ser.get();
-    session_ = std::make_unique<DeviceSession>(std::move(ser));
+    session_ = std::make_unique<DeviceSession>(std::move(ser), std::move(policy));
     std::lock_guard lk(activeM_);
     active_ = serialized_;
 }
@@ -183,13 +186,20 @@ void DeviceWorker::connectUsb() {
     // Real hardware: read-only options (descriptor-driven interface selection, no explicit
     // claim/detach, writes refused at transport level; usbfs can claim implicitly for
     // interface-recipient GETs and the session policy keeps hardware writes off).
-    adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
+    // Phase 8D opt-in (OPENWITTY_OUTPUT_WRITES=1, exactly): the speaker/headphone volume and mute
+    // bytes, and nothing else, become writable through the scoped output policy.
+    if (envAuthorized("OPENWITTY_OUTPUT_WRITES"))
+        adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()),
+                     outputWritePolicy(/*speaker=*/true, /*headphone=*/true));
+    else
+        adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
     intentionalDisconnect_ = false;
     lostLink_ = false;
     lastOpenError_ = Errc::Ok;
     lastTransportError_.clear();
     auto s = session_->connect();
-    if (!s) { report(s); noteOpenFailure(s); }
+    if (!s) report(s);
+    noteOpenFailure(s);
     markInitialReads();
     if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
@@ -226,6 +236,7 @@ void DeviceWorker::rescan() {
     }
     freshness_.reset();
     auto s = session_->reconnect();
+    noteOpenFailure(s);
     if (s) {
         markInitialReads();
         backoffMs_ = 1000;
@@ -234,8 +245,7 @@ void DeviceWorker::rescan() {
         startRealTimer();
     } else {
         report(s);
-        noteOpenFailure(s);
-        backoffMs_ = std::min(backoffMs_ * 2, 8000);
+        backoffMs_ = s.error().code == Errc::ControlInUse ? 1000 : std::min(backoffMs_ * 2, 8000);
         armRescan();
     }
     publish();
@@ -284,9 +294,16 @@ QString DeviceWorker::deviceListSignature() {
 }
 
 void DeviceWorker::noteOpenFailure(const Status& s) {
-    if (s) return;
+    const std::string dir = ControlLease::currentSessionDirectory();
+    if (s) {
+        ControlLease::clearYieldRequestInDirectory(dir);   // we own the device now
+        return;
+    }
     lastOpenError_ = s.error().code;
     scanSignature_ = deviceListSignature();
+    // Held by another OpenWitty process (openwitty-volumed): ask it to hand the device over. The
+    // request is refreshed on every retry and goes stale by itself if the GUI goes away.
+    if (lastOpenError_ == Errc::ControlInUse) (void)ControlLease::requestYieldInDirectory(dir);
 }
 
 // Translates a commitAndVerify() outcome into the existing error-reporting / pending-retry UX.
@@ -664,6 +681,14 @@ void DeviceWorker::trigger(const QString& name) {
 
 void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     if (!session_) return;
+    // Real hardware: one volume change may raise an output by at most kMaxOutputIncreaseDb (same rule
+    // as openwitty-volumed); a far slider jump is applied in bounded steps. Non-finite values pass
+    // through unchanged so the setter rejects them. Simulation is unrestricted.
+    const bool simulated = session_->isSimulated();
+    auto boundedVolume = [simulated](double current, double requested) {
+        if (simulated || !std::isfinite(requested)) return requested;
+        return limitIncrease(current, requested, kMaxOutputIncreaseDb);
+    };
     auto parts = key.split('.');
     if (parts.size() < 2) return;
     int in = parts[0] == "in1" ? 0 : parts[0] == "in2" ? 1 : -1;
@@ -680,10 +705,10 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
             if (f == "phantom" && in == 0) return s.setPhantom1(v.toBool());
         } else if (g == "loop" && f == "mute") return s.setLoopbackMute(v.toBool());
         else if (g == "spk") {
-            if (f == "volume") return s.setSpeakerVolumeDb(v.toDouble());
+            if (f == "volume") return s.setSpeakerVolumeDb(boundedVolume(s.speakerVolumeDb(), v.toDouble()));
             if (f == "mute") return s.setSpeakerMute(v.toBool());
         } else if (g == "hp") {
-            if (f == "volume") return s.setHeadphoneVolumeDb(v.toDouble());
+            if (f == "volume") return s.setHeadphoneVolumeDb(boundedVolume(s.headphoneVolumeDb(), v.toDouble()));
             if (f == "mute") return s.setHeadphoneMute(v.toBool());
         } else if (g == "mon") {
             if (f == "mix") return s.setInputPlaybackMix(v.toDouble());

@@ -65,12 +65,37 @@ add_library(lewitt_core STATIC
     src/protocol/WriteGuard.cpp
     src/core/DeviceSession.cpp
     src/core/WriteVerification.cpp
-    src/core/DeviceManager.cpp)
+    src/core/DeviceManager.cpp
+    src/core/OutputControl.cpp
+    src/core/VolumeSync.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_compile_options(lewitt_core PRIVATE -Wall -Wextra -Wpedantic)
 if(LEWITT_ENABLE_USB)
     target_link_libraries(lewitt_core PUBLIC PkgConfig::LIBUSB)
     target_compile_definitions(lewitt_core PUBLIC LEWITT_HAVE_USB=1)
+endif()
+
+# Desktop (ALSA) volume integration: policy glue is always built and tested; the libasound backend
+# and the openwitty-volumed daemon need alsa-lib and the USB transport.
+add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp)
+target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
+target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
+option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
+if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
+    pkg_check_modules(ALSA REQUIRED IMPORTED_TARGET alsa)
+    target_sources(lewitt_desktop PRIVATE src/desktop/AlsaDesktopMixer.cpp)
+    target_link_libraries(lewitt_desktop PUBLIC PkgConfig::ALSA)
+    add_executable(openwitty-volumed src/daemon/main.cpp)
+    target_link_libraries(openwitty-volumed PRIVATE lewitt_desktop)
+    target_compile_options(openwitty-volumed PRIVATE -Wall -Wextra -Wpedantic)
+    install(TARGETS openwitty-volumed RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    # systemd user unit: installed, never enabled by the build or install step.
+    set(LEWITT_SYSTEMD_USER_UNIT_DIR "lib/systemd/user" CACHE STRING
+        "systemd user unit destination (relative to the install prefix, or absolute)")
+    configure_file(packaging/systemd/openwitty-volumed.service.in
+                   ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service @ONLY)
+    install(FILES ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service DESTINATION ${LEWITT_SYSTEMD_USER_UNIT_DIR})
+    install(FILES packaging/modprobe/openwitty-connect2.conf DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
 endif()
 
 add_executable(openwitty-cli src/cli/main.cpp)
@@ -114,7 +139,42 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_replay_transport.cpp)   # Phase 7B read-only fixtures
     target_sources(lewitt_tests PRIVATE tests/cpp/test_control_lease.cpp)       # Phase 7D process ownership
     target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
-    target_link_libraries(lewitt_tests PRIVATE lewitt_core GTest::gtest_main)
+    target_sources(lewitt_tests PRIVATE tests/cpp/test_output_control.cpp tests/cpp/test_volume_sync.cpp
+                                        tests/cpp/test_desktop_link.cpp)       # Phase 8D volume integration
+    target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
+    if(LEWITT_ENABLE_USB)
+        # Phase 8D CLI refusals. Every case is rejected before a transport exists (argument parsing or
+        # the authorization check), so none of them can reach a device. Never add a case here that
+        # sets every required variable to exactly 1 without --mock.
+        set(_ow_cli $<TARGET_FILE:openwitty-cli>)
+        set(_ow_unset --unset=LEWITT_ALLOW_HARDWARE_WRITE --unset=LEWITT_ALLOW_WRITE_SPEAKER_VOLUME)
+        add_test(NAME cli_rejects_nan_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume nan)
+        add_test(NAME cli_rejects_inf_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume -inf --execute)
+        add_test(NAME cli_rejects_out_of_range_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume 0.5 --execute)
+        add_test(NAME cli_write_env_must_be_exactly_one COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
+                 LEWITT_ALLOW_HARDWARE_WRITE=true ${_ow_cli} write speaker-volume -40 --execute)
+        add_test(NAME cli_write_env_trailing_space COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
+                 "LEWITT_ALLOW_HARDWARE_WRITE=1 " ${_ow_cli} write speaker-volume -40 --execute)
+        add_test(NAME cli_field_env_must_be_exactly_one COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
+                 LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=yes ${_ow_cli} write speaker-volume -40 --execute)
+        add_test(NAME cli_speaker_mute_needs_field_env COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
+                 LEWITT_ALLOW_HARDWARE_WRITE=1 ${_ow_cli} write speaker-mute on --execute)
+        set_tests_properties(cli_rejects_nan_volume cli_rejects_inf_volume PROPERTIES
+                             PASS_REGULAR_EXPRESSION "takes a finite dB value")
+        set_tests_properties(cli_rejects_out_of_range_volume PROPERTIES PASS_REGULAR_EXPRESSION "value out of range")
+        set_tests_properties(cli_write_env_must_be_exactly_one cli_write_env_trailing_space PROPERTIES
+                             PASS_REGULAR_EXPRESSION "refused: --execute against real hardware needs LEWITT_ALLOW_HARDWARE_WRITE=1")
+        set_tests_properties(cli_field_env_must_be_exactly_one cli_speaker_mute_needs_field_env PROPERTIES
+                             PASS_REGULAR_EXPRESSION "additionally needs LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1")
+        if(TARGET openwitty-volumed)
+            add_test(NAME volumed_writes_need_exact_env COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
+                     LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=true
+                     $<TARGET_FILE:openwitty-volumed> --allow-hardware-writes)
+            add_test(NAME volumed_rejects_bad_arguments COMMAND $<TARGET_FILE:openwitty-volumed> --max-increase-db nan)
+            set_tests_properties(volumed_writes_need_exact_env PROPERTIES PASS_REGULAR_EXPRESSION "refused: --allow-hardware-writes")
+            set_tests_properties(volumed_rejects_bad_arguments PROPERTIES PASS_REGULAR_EXPRESSION "usage: openwitty-volumed")
+        endif()
+    endif()
     include(GoogleTest)
     gtest_discover_tests(lewitt_tests)
 endif()

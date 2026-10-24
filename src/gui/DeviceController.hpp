@@ -55,7 +55,7 @@ private:
     void publish();
     void publishMeterSample();
     void armRescan();
-    void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t);
+    void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy policy = {});
     lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
     void report(const lewitt::Status& s);
     void reportWrite(const lewitt::WriteResult& r);

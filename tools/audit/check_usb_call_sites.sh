@@ -64,7 +64,30 @@ grep -q 'pol.hardwareWriteOffsets.push_back(f.offset + i)' src/cli/main.cpp && g
 if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src/gui/*.cpp src/gui/*.hpp >/dev/null; then echo "FAIL GUI references hardware write policy"; fail=1; else echo "ok   GUI never enables hardware writes"; fi
 # Phase 7A: the GUI may build a UsbTransport only from the fixed read-only option set, and the
 # control interface may never be a hard-coded number or a DFU (class 0xFE) interface.
-if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -v 'readOnlyHardwareOptions()' >/dev/null; then echo "FAIL GUI constructs a UsbTransport without readOnlyHardwareOptions()"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() only"; fi
+# Phase 8D: besides readOnlyHardwareOptions() the GUI may use outputControlHardwareOptions(), only behind
+# the exact OPENWITTY_OUTPUT_WRITES=1 opt-in and only paired with outputWritePolicy(speaker, headphone).
+if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -vE 'readOnlyHardwareOptions\(\)|outputControlHardwareOptions\(\)' >/dev/null; then echo "FAIL GUI constructs a UsbTransport with unreviewed options"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() or the gated output options only"; fi
+n_out=$(grep -c 'outputControlHardwareOptions()' src/gui/DeviceController.cpp)
+if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'envAuthorized("OPENWITTY_OUTPUT_WRITES")' \
+   || ! grep -A1 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/true)'; then
+    echo "FAIL GUI output writes must be one gated outputControlHardwareOptions()+outputWritePolicy() site"; fail=1
+else echo "ok   GUI output writes: one site, exact opt-in, output-scoped policy"; fi
+# the output policy itself may only name the speaker/headphone volume and mute bytes
+if grep -A4 'std::vector<std::size_t> outputWriteOffsets' src/core/OutputControl.cpp | grep -q 'kSpeakerVolume, kSpeakerVolume + 1, kSpeakerMute' \
+   && grep -A4 'std::vector<std::size_t> outputWriteOffsets' src/core/OutputControl.cpp | grep -q 'kHeadphoneVolume, kHeadphoneVolume + 1, kHeadphoneMute' \
+   && grep -A4 'WritePolicy outputWritePolicy' src/core/OutputControl.cpp | grep -q 'allowRoutingChanges = false' \
+   && grep -A4 'WritePolicy outputWritePolicy' src/core/OutputControl.cpp | grep -q 'allowPersistentChanges = false'; then
+    echo "ok   output write policy limited to speaker/headphone volume+mute bytes"
+else echo "FAIL output write policy scope changed"; fail=1; fi
+# openwitty-volumed: speaker bytes only, double opt-in, dry run by default
+if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/daemon/main.cpp \
+   && grep -q 'envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME")' src/daemon/main.cpp \
+   && grep -q 'bool writes{false};' src/daemon/main.cpp \
+   && ! grep -nE 'hardwareWriteOffsets|allowHardwareWrites|sendTrigger|commit\(' src/daemon/main.cpp src/desktop/*.cpp >/dev/null \
+   && [ "$(grep -c 'session_.commitAndVerify(' src/desktop/DesktopVolumeLink.cpp)" -eq 1 ] \
+   && grep -q 'stageOutput(m, Output::Speaker' src/desktop/DesktopVolumeLink.cpp; then
+    echo "ok   openwitty-volumed: speaker-only policy, exact double opt-in, dry run default, one verified write path"
+else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
 grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests

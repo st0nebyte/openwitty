@@ -7,14 +7,29 @@
 #include <string>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 namespace lewitt {
 namespace {
 constexpr const char* kLockName = "openwitty-connect2-control.lock";
+constexpr const char* kYieldName = "openwitty-connect2-yield.request";
 
 Error leaseError(Errc code, const char* action) {
     return makeError(code, std::string("control lease: ") + action + ": " + std::strerror(errno));
+}
+
+// Open the runtime directory only if it is a real directory private to this user.
+int openPrivateDirectory(const std::string& directory) {
+    const int dir = open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (dir < 0) return -1;
+    struct stat ds{};
+    if (fstat(dir, &ds) != 0 || !S_ISDIR(ds.st_mode) || ds.st_uid != geteuid() || (ds.st_mode & 0077)) {
+        close(dir);
+        errno = EACCES;
+        return -1;
+    }
+    return dir;
 }
 }  // namespace
 
@@ -62,11 +77,48 @@ Result<ControlLease> ControlLease::acquireInDirectory(const std::string& directo
     return ControlLease(fd);
 }
 
-Result<ControlLease> ControlLease::acquireForCurrentSession() {
+std::string ControlLease::currentSessionDirectory() {
     const char* runtime = std::getenv("XDG_RUNTIME_DIR");
-    const std::string directory = runtime && *runtime ? runtime
-                                  : "/run/user/" + std::to_string(geteuid());
-    return acquireInDirectory(directory);
+    return runtime && *runtime ? runtime : "/run/user/" + std::to_string(geteuid());
+}
+
+Result<ControlLease> ControlLease::acquireForCurrentSession() { return acquireInDirectory(currentSessionDirectory()); }
+
+Status ControlLease::requestYieldInDirectory(const std::string& directory) {
+    const int dir = openPrivateDirectory(directory);
+    if (dir < 0) return leaseError(Errc::AccessDenied, "open private runtime directory");
+    const int fd = openat(dir, kYieldName, O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        close(dir);
+        return leaseError(Errc::AccessDenied, "create yield request");
+    }
+    struct stat fs{};
+    const bool ok = fstat(fd, &fs) == 0 && S_ISREG(fs.st_mode) && fs.st_uid == geteuid() && !(fs.st_mode & 0077);
+    if (ok) futimens(fd, nullptr);                     // refresh: a repeated request stays fresh
+    close(fd);
+    close(dir);
+    if (!ok) return makeError(Errc::AccessDenied, "control lease: yield request must be a private regular file");
+    return okStatus();
+}
+
+bool ControlLease::yieldRequestedInDirectory(const std::string& directory, std::chrono::seconds maxAge) {
+    const int dir = openPrivateDirectory(directory);
+    if (dir < 0) return false;
+    struct stat fs{};
+    const bool exists = fstatat(dir, kYieldName, &fs, AT_SYMLINK_NOFOLLOW) == 0;
+    close(dir);
+    if (!exists || !S_ISREG(fs.st_mode) || fs.st_uid != geteuid()) return false;
+    struct timespec now{};
+    clock_gettime(CLOCK_REALTIME, &now);
+    const auto age = now.tv_sec - fs.st_mtim.tv_sec;
+    return age >= 0 && age <= maxAge.count();
+}
+
+void ControlLease::clearYieldRequestInDirectory(const std::string& directory) {
+    const int dir = openPrivateDirectory(directory);
+    if (dir < 0) return;
+    unlinkat(dir, kYieldName, 0);
+    close(dir);
 }
 
 }  // namespace lewitt

@@ -36,6 +36,7 @@
 #include <libusb.h>
 #endif
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,6 +48,7 @@
 #include "core/DeviceManager.hpp"
 #include "core/DeviceSession.hpp"
 #include "transport/MockTransport.hpp"
+#include "core/Authorization.hpp"
 #include "transport/ControlLease.hpp"
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
@@ -172,7 +174,7 @@ int cmdRead(const ReadArgs& a) {
                    : a.what == "status" ? MessageId::Status
                    : a.what == "settings" ? MessageId::Settings : static_cast<MessageId>(0xFF);
     if (static_cast<int>(id) == 0xFF) { std::fprintf(stderr, "read what? api|version|status|settings\n"); return 64; }
-    if (a.method == AccessMethod::DetachAndClaim && !std::getenv("LEWITT_ALLOW_DISRUPTIVE")) {
+    if (a.method == AccessMethod::DetachAndClaim && !envAuthorized("LEWITT_ALLOW_DISRUPTIVE")) {
         std::fprintf(stderr,
                      "refused: --method detach drops the sound card (detaches snd-usb-audio) and also needs "
                      "LEWITT_ALLOW_DISRUPTIVE=1\n");
@@ -191,7 +193,7 @@ int cmdRead(const ReadArgs& a) {
         o.method = a.method;
         o.interfaceNumber = a.interfaceNumber;
         if (a.autoInterface) o.interfaceStrategy = InterfaceStrategy::VendorControlAuto;
-        o.allowDisruptive = std::getenv("LEWITT_ALLOW_DISRUPTIVE") != nullptr;   // checked above too
+        o.allowDisruptive = envAuthorized("LEWITT_ALLOW_DISRUPTIVE");   // checked above too
         t = std::make_unique<UsbTransport>(o);
     }
     if (auto s = t->open(); !s) { printError(s.error(), "open"); return exitCodeFor(s.error().code); }
@@ -289,7 +291,10 @@ WriteArgs parseWrite(int argc, char** argv, int first, const std::string& field)
         } else if (field == "speaker-volume") {
             char* end = nullptr;
             a.db = std::strtod(v.c_str(), &end);
-            if (end == v.c_str() || *end != '\0') { std::fprintf(stderr, "speaker-volume takes a dB value\n"); a.bad = true; }
+            if (end == v.c_str() || *end != '\0' || !std::isfinite(a.db)) {
+                std::fprintf(stderr, "speaker-volume takes a finite dB value\n");
+                a.bad = true;
+            }
             else a.value = 0;
         } else {
             a.value = std::atoi(argv[first]);
@@ -316,19 +321,19 @@ int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
     const bool isSpeakerMute = f.offset == settings_off::kSpeakerMute;
     const bool isMute = f.offset == settings_off::kMute[1] || isSpeakerMute;
     const bool isSpeakerVolume = f.offset == settings_off::kSpeakerVolume;
-    if (isSpeakerVolume ? (a.db < -60.0 || a.db > 0.0)
+    if (isSpeakerVolume ? (!std::isfinite(a.db) || a.db < kVolumeMinDb || a.db > kVolumeMaxDb)
                         : isMute ? (a.value < 0 || a.value > 1) : (a.value < 0 || a.value > 100)) {
         std::fprintf(stderr, "%s: value out of range\n", f.name);
         return 64;
     }
     if (a.execute && !a.mock) {
-        if (!std::getenv("LEWITT_ALLOW_HARDWARE_WRITE")) {
+        if (!envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE")) {
             std::fprintf(stderr,
                          "refused: --execute against real hardware needs LEWITT_ALLOW_HARDWARE_WRITE=1 "
                          "(this sends a real MEM SET to the device; without it, nothing is written)\n");
             return 2;
         }
-        if (f.authEnv && !std::getenv(f.authEnv)) {
+        if (f.authEnv && !envAuthorized(f.authEnv)) {
             std::fprintf(stderr,
                          "refused: writing '%s' on real hardware additionally needs %s=1. That "
                          "authorization is specific to this field and must be given explicitly for "

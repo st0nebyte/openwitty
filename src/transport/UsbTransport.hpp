@@ -69,6 +69,16 @@ inline UsbOptions readOnlyHardwareOptions() {
     return o;
 }
 
+// Phase 8D: identical to readOnlyHardwareOptions() except that the transport accepts writes. It is
+// only ever paired with outputWritePolicy() (core/OutputControl.hpp), whose byte scope limits real
+// hardware writes to the speaker/headphone volume and mute bytes; every DeviceSession guard,
+// snapshot check and read-back verification still applies.
+inline UsbOptions outputControlHardwareOptions() {
+    UsbOptions o = readOnlyHardwareOptions();
+    o.allowWrites = true;
+    return o;
+}
+
 // libusb transport. No explicit claim or detachment in the default path; usbfs may implicitly
 // claim the selected interface for this handle. A cooperative per-user lease keeps two OpenWitty
 // processes from competing for it. It does not coordinate unrelated software.

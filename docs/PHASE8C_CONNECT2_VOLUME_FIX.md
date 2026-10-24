@@ -1,6 +1,8 @@
 # Phase 8C – Working speaker volume on Linux 7.3: root causes and fix
 
 Status: **fix implemented and verified live** on kernel 7.3.0-5-cachyos (2026-10-24), owner-authorized autonomous debugging.
+The Python bridge below is the reference implementation; the maintained integration is the native `openwitty-volumed`
+(Phase 8D, `PHASE8D_VOLUME_INTEGRATION.md`). Do not install the Python bridge as a service.
 
 ## Two independent problems
 
