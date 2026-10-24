@@ -241,6 +241,8 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_deferred_probe.py)
         add_test(NAME loaded_reconnect_offline
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_loaded_reconnect.py)
+        add_test(NAME fu2_recovery_probe_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_fu2_recovery_probe.py)
         add_test(NAME volume_bridge_offline
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/volume_bridge/test_openwitty_volume_bridge.py)
     endif()
