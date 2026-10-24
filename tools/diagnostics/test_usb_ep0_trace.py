@@ -388,6 +388,55 @@ class Completeness(unittest.TestCase):
         self.assertEqual(fu2[5]["db"], 0.0)    # last attempted write: 0 dB, no restore
 
 
+LIVE_REPORT = dict(GOOD_REPORT, disconnect_seen=True, reconnect_seen=True, oldest_event_ts_min=1607.6)
+
+
+def healthy_reconnect_trace(with_si=True):
+    w = "kworker/1:2"
+    ls = [] if not with_si else [si_line(1635.148, w, 7, 1, 0), uw(1635.1481, w, 7, SET_IFACE_1_0), uwr(1635.1483, w, 7, ret=0),
+          sir_line(1635.1485, w, 7, 0)]
+    t = 1635.27
+    for st, val, n in ((FU2_MUTE_GET, 0, 1), (FU2_VOL_GET, 0xFC00, 2), (FU2_VOL_SET, 0xC400, 2),
+                       (FU2_VOL_GET, 0xC400, 2), (FU2_VOL_SET, 0xFC00, 2)):
+        out = (st >> 0) & 0x80 == 0
+        ls += [uw(t, w, 7, st, outdata=val if out else 0), uwr(t + 0.0004, w, 7, ret=n, indata=0 if out else val, actual=n)]
+        t += 0.001
+    return trace(*ls)
+
+
+class ReconnectCompleteness(unittest.TestCase):
+    def test_healthy_reconnect_is_complete(self):
+        v = T.analyze(healthy_reconnect_trace(), report=LIVE_REPORT, mode="reconnect")["completeness"]
+        self.assertEqual(v["verdict"], "COMPLETE", v)
+
+    def test_same_trace_in_boot_mode_stays_partial(self):
+        v = T.analyze(healthy_reconnect_trace(), report=dict(LIVE_REPORT, oldest_event_ts_min=0.78))["completeness"]
+        self.assertEqual(v["verdict"], "PARTIAL")
+
+    def test_boot_mode_still_requires_boot_coverage(self):
+        v = T.analyze(full_trace(), report=LIVE_REPORT)["completeness"]
+        self.assertEqual(v["verdict"], "INVALID")
+
+    def test_reconnect_needs_both_observations(self):
+        for k in ("disconnect_seen", "reconnect_seen"):
+            v = T.analyze(healthy_reconnect_trace(), report=dict(LIVE_REPORT, **{k: False}), mode="reconnect")["completeness"]
+            self.assertEqual(v["verdict"], "PARTIAL", k)
+
+    def test_reconnect_without_live_report_not_complete(self):
+        v = T.analyze(healthy_reconnect_trace(), mode="reconnect")["completeness"]
+        self.assertNotEqual(v["verdict"], "COMPLETE")
+
+    def test_reconnect_loss_still_invalid(self):
+        self.assertEqual(T.analyze(healthy_reconnect_trace(), report=dict(LIVE_REPORT, cpu_overrun_total=2),
+                                   mode="reconnect")["completeness"]["verdict"], "INVALID")
+        txt = healthy_reconnect_trace().replace("entries-in-buffer/entries-written: 14/14", "entries-in-buffer/entries-written: 10/14")
+        self.assertEqual(T.analyze(txt, report=LIVE_REPORT, mode="reconnect")["completeness"]["verdict"], "INVALID")
+
+    def test_reconnect_missing_probe_partial(self):
+        v = T.analyze(healthy_reconnect_trace(with_si=False), report=LIVE_REPORT, mode="reconnect")["completeness"]
+        self.assertEqual(v["verdict"], "PARTIAL", v)
+
+
 class XhciCompleteness(unittest.TestCase):
     def test_expect_xhci_without_events_is_partial(self):
         v = T.analyze(full_trace(), report=GOOD_REPORT, expect_xhci=True)["completeness"]

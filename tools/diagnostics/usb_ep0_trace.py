@@ -331,7 +331,7 @@ def first_timeout_detail(reqs, calls, orphans):
     return d
 
 
-def analyze(text, dmesg=None, report=None, expect_xhci=False):
+def analyze(text, dmesg=None, report=None, expect_xhci=False, mode="boot"):
     recs, info = parse_trace(text)
     reqs, other, unpaired, malformed = build_requests(recs)
     timeouts = [q for q in reqs if is_timeout(q)]
@@ -372,7 +372,7 @@ def analyze(text, dmesg=None, report=None, expect_xhci=False):
             res["first_timeout_to_first_fu2_s"] = round(after[0]["t"] - first_to["ts_complete"], 6)
     if dmesg:
         res["debug_message_ties"] = tie_debug_messages(dmesg, timeouts)
-    res["completeness"] = completeness(res, report, expect_xhci)
+    res["completeness"] = completeness(res, report, expect_xhci, mode)
     return res
 
 
@@ -564,8 +564,14 @@ def buffer_expanded(buffer_text):
     return bool(m) and int(m.group(1)) >= 4096
 
 
-def completeness(res, report=None, expect_xhci=False):
-    """Strict verdict. COMPLETE only if nothing indicates loss and the key sequences are whole."""
+def completeness(res, report=None, expect_xhci=False, mode="boot"):
+    """Strict verdict. COMPLETE only if nothing indicates loss and the key sequences are whole.
+
+    mode "boot" (default) is for failure tracing and needs a timed-out request to attribute.
+    mode "reconnect" is for a live disconnect/replug capture (live_report.json): a healthy run has no
+    timeout, so it instead needs the disconnect and the reconnect to have been observed and the initial
+    probe (SET_INTERFACE and an FU2 sequence starting with a read) to be present."""
+    reconnect = mode == "reconnect"
     reasons = []
     if report is None:
         reasons.append("no collect report: buffer expansion and per-CPU overwrite unknown")
@@ -575,8 +581,13 @@ def completeness(res, report=None, expect_xhci=False):
         if report.get("cpu_overrun_total", 0) > 0:
             reasons.append("per-CPU overrun events: %d" % report["cpu_overrun_total"])
         oldest = report.get("oldest_event_ts_min")
-        if oldest is not None and oldest > 3.0:
+        if oldest is not None and oldest > 3.0 and not reconnect:
             reasons.append("oldest retained event is at %.3fs (boot coverage starts late)" % oldest)
+        if reconnect:
+            if not report.get("disconnect_seen"):
+                reasons.append("live session did not observe the disconnect")
+            if not report.get("reconnect_seen"):
+                reasons.append("live session did not observe the reconnect")
     if res["info"]["loss"]:
         reasons.append("trace header shows overwritten entries")
     if res["unpaired_events"]:
@@ -586,11 +597,17 @@ def completeness(res, report=None, expect_xhci=False):
     ft = res.get("first_timeout")
     if ft is not None and not ft["request_captured"]:
         reasons.append("first timed-out request entry is missing (%s)" % ft.get("missing"))
-    if res["timeouts"] == [] and ft is None:
+    if reconnect and report is None:
+        reasons.append("reconnect mode needs the live report (disconnect/reconnect observation)")
+    if reconnect and not res.get("set_interface_requests"):
+        reasons.append("no SET_INTERFACE request of the new device (initial probe missed)")
+    if res["timeouts"] == [] and ft is None and not reconnect:
         reasons.append("no timed-out request in the trace (nothing to attribute)")
     if expect_xhci:
         if not res.get("xhci_records"):
             reasons.append("no xHCI events recorded")
+        elif reconnect and not res.get("xhci_lifecycles"):
+            pass  # healthy reconnect: nothing timed out, so there is no stalled transfer to follow
         elif not res.get("xhci_lifecycles"):
             reasons.append("no timed-out request to follow through the controller")
         else:
@@ -604,7 +621,7 @@ def completeness(res, report=None, expect_xhci=False):
         first = fu2[0]
         if first["dir"] != "IN":
             reasons.append("FU2 sequence starts with a SET (prefix lost)")
-        if not any(f["dir"] == "OUT" and f["kind"] == "volume" for f in fu2):
+        if not reconnect and not any(f["dir"] == "OUT" and f["kind"] == "volume" for f in fu2):
             reasons.append("FU2 sequence has no volume SET")
     if not reasons:
         return {"verdict": "COMPLETE", "reasons": []}
@@ -907,6 +924,8 @@ def main(argv=None):
     a.add_argument("--json")
     a.add_argument("--report", help="collect_report.json written by collect")
     a.add_argument("--expect-xhci", action="store_true", help="require xHCI events and a joined lifecycle")
+    a.add_argument("--mode", choices=["boot", "reconnect"], default="boot",
+                   help="boot: failure trace (needs a timeout); reconnect: live replug capture (--report live_report.json)")
     c = sub.add_parser("collect")
     c.add_argument("--out-dir", required=True)
     c.add_argument("--baseline", default="/var/lib/openwitty-8a19/tracefs_baseline.json")
@@ -922,7 +941,7 @@ def main(argv=None):
         return 0
     if args.cmd == "analyze":
         rep_ = json.load(open(args.report)) if args.report else None
-        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None, rep_, args.expect_xhci)
+        res = analyze(open(args.trace).read(), open(args.dmesg).read() if args.dmesg else None, rep_, args.expect_xhci, args.mode)
         print(report(res))
         if args.json:
             with open(args.json, "w") as f:
