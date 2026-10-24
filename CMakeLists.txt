@@ -174,6 +174,8 @@ if(LEWITT_BUILD_TESTS AND UNIX)
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_live.py)
         add_test(NAME usb_ep0_ab_offline
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_usb_ep0_ab.py)
+        add_test(NAME post_boot_health_offline
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_SOURCE_DIR}/tools/diagnostics/test_post_boot_health.py)
     endif()
 endif()
 
