@@ -41,7 +41,7 @@ normal probe may write volume values). The user performed one manual restart int
 | Sink | analog stereo, software volume 30 % |
 | GET-only snapshot (`read settings --method interface --interface 3`) | Speaker −23.50 dB (unmuted), Headphone −32.40 dB (muted); identical to the pre-reboot values |
 | Journal | readable and complete for this boot |
-| Audio observations by user | not yet collected |
+| Audio observations by user | no pops or other audible anomalies noticed (silence does not exclude electrical transients) |
 
 Kernel wording change: kernels up to 7.2 log `sticky mixer values (...), disabling`; 7.3 logs
 `broken mixer GET_CUR (...)` for the same condition. `tools/diagnostics/post_boot_health.py` only knew the old
