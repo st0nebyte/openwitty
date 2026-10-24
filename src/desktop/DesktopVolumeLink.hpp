@@ -50,10 +50,17 @@ public:
     int desktopWrites() const { return desktopWrites_; }
     // False once the device session failed (the caller reconnects and calls start() again).
     bool healthy() const { return healthy_; }
+    // A user-facing explanation when the desktop and the device do not agree for a known reason
+    // (empty when they agree or nothing needs explaining).
+    const std::string& notice() const { return notice_; }
 
 private:
     std::optional<OutputLevel> readHardware();
     void apply(const SyncAction& a, Clock::time_point now);
+    void writeDevice(const OutputLevel& target, Clock::time_point now);
+    void alignDesktop(const DesktopLevel& target, Clock::time_point now);
+    void beginStep();
+    void endStep();
     void log(const std::string& s) const {
         if (log_) log_(s);
     }
@@ -66,6 +73,9 @@ private:
     int writes_{0};
     int desktopWrites_{0};
     bool healthy_{true};
+    bool rejectedForPending_{false};
+    int alignDepth_{0};
+    std::string notice_;
 };
 
 }  // namespace lewitt

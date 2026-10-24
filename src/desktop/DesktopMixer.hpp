@@ -19,6 +19,9 @@ public:
     virtual bool isOpen() const = 0;
     virtual int cardIndex() const = 0;               // -1 when closed
     virtual std::optional<DesktopLevel> read() = 0;  // nullopt: control missing / card gone
+    // NOTE: writing the ALSA control is not "software only": with a working Feature Unit 2 the
+    // kernel forwards it to the device as a UAC SET_CUR. Implementations round the level DOWN to the
+    // control's grid so a write is never louder than requested.
     virtual Status write(const DesktopLevel& d) = 0;
     // Wait up to timeoutMs for control events and drain them.
     //   1 = at least one event for a watched control, 0 = timeout / unrelated events, -1 = card gone.
@@ -29,6 +32,7 @@ public:
 // linear mapping between ALSA raw steps and dB for a control with a linear dB range.
 std::optional<int> findCardByUsbId(const std::string& procAsoundRoot, const std::string& usbId);
 double rawToDb(long raw, long rawMin, long rawMax, double dbMin, double dbMax);
-long dbToRaw(double db, long rawMin, long rawMax, double dbMin, double dbMax);
+// Nearest raw step, or (roundDown) the highest step that is not louder than `db`.
+long dbToRaw(double db, long rawMin, long rawMax, double dbMin, double dbMax, bool roundDown = false);
 
 }  // namespace lewitt

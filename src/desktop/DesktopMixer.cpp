@@ -33,11 +33,13 @@ double rawToDb(long raw, long rawMin, long rawMax, double dbMin, double dbMax) {
     return dbMin + (dbMax - dbMin) * static_cast<double>(raw - rawMin) / static_cast<double>(rawMax - rawMin);
 }
 
-long dbToRaw(double db, long rawMin, long rawMax, double dbMin, double dbMax) {
+long dbToRaw(double db, long rawMin, long rawMax, double dbMin, double dbMax, bool roundDown) {
     if (rawMax <= rawMin || !(dbMax > dbMin) || !std::isfinite(db)) return rawMin;
     db = std::clamp(db, dbMin, dbMax);
     const double steps = (db - dbMin) / (dbMax - dbMin) * static_cast<double>(rawMax - rawMin);
-    return std::clamp(rawMin + static_cast<long>(std::lround(steps)), rawMin, rawMax);
+    // 1e-9 absorbs floating-point noise so an exact grid value is not rounded one step down
+    const long n = roundDown ? static_cast<long>(std::floor(steps + 1e-9)) : static_cast<long>(std::lround(steps));
+    return std::clamp(rawMin + n, rawMin, rawMax);
 }
 
 }  // namespace lewitt

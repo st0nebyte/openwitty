@@ -176,6 +176,22 @@ void VolumeSync::abandonWrite() {
     inFlight_.reset();
 }
 
+SyncAction VolumeSync::realignDesktop(TimePoint now, const char* why) {
+    if (phase_ == SyncPhase::Unknown) return {};
+    return alignDesktop(now, why);
+}
+
+void VolumeSync::noteDesktopWritten(DesktopLevel actual, TimePoint now) {
+    desk_ = actual;
+    echo_ = actual;
+    echoUntil_ = now + cfg_.echoWindow;
+}
+
+void VolumeSync::noteDesktopUnchanged(std::optional<DesktopLevel> actual) {
+    desk_ = actual;
+    echo_.reset();
+}
+
 void VolumeSync::reset() {
     phase_ = SyncPhase::Unknown;
     hw_.reset();

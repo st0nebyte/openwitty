@@ -627,6 +627,7 @@ void DeviceWorker::publish() {
     }
     // Desktop (KDE/PipeWire) volume integration: off | waiting | active (see serviceDesktopLink()).
     v["desktop.volumeLink"] = desktopLinkState_;
+    v["desktop.volumeNotice"] = link_ ? QString::fromStdString(link_->notice()) : QString();
     v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
     v["write.verifying"] = verifying_;
     // `ui.state` is the sole connection-state source of truth and is what QML renders. Keep

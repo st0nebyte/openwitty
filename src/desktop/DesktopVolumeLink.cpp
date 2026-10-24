@@ -1,5 +1,6 @@
 #include "desktop/DesktopVolumeLink.hpp"
 
+#include <cmath>
 #include <cstdio>
 
 namespace lewitt {
@@ -33,10 +34,12 @@ bool DesktopVolumeLink::start(Clock::time_point now) {
     auto a = sync_.start(*hw, desk, now);
     log(fmt("start: hardware speaker %.2f dB %s", hw->db, hw->muted));
     apply(a, now);
+    endStep();
     return true;
 }
 
 void DesktopVolumeLink::onDesktopEvent(Clock::time_point now) {
+    beginStep();
     // Fresh device state first: the device may already have followed the desktop by itself, or
     // the knob may have moved since the last poll. Both are adopted before the desktop is judged.
     if (sync_.phase() != SyncPhase::Writing) {
@@ -50,41 +53,109 @@ void DesktopVolumeLink::onDesktopEvent(Clock::time_point now) {
     auto desk = mixer_.read();
     if (!desk) return;
     apply(sync_.onDesktop(*desk, now), now);
+    endStep();
 }
 
 void DesktopVolumeLink::onPollTick(Clock::time_point now) {
     if (sync_.phase() == SyncPhase::Unknown) return;
+    beginStep();
     if (auto hw = readHardware()) apply(sync_.onHardware(*hw, now), now);
     else return;
     apply(sync_.tick(now), now);
+    endStep();
 }
 
 void DesktopVolumeLink::onHardwareSample(const OutputLevel& hw, Clock::time_point now) {
     if (sync_.phase() == SyncPhase::Unknown) return;
+    beginStep();
     apply(sync_.onHardware(hw, now), now);
     apply(sync_.tick(now), now);
+    endStep();
+}
+
+void DesktopVolumeLink::beginStep() {
+    if (!session_.pendingSettings()) rejectedForPending_ = false;
+}
+
+void DesktopVolumeLink::endStep() {
+    const auto& d = sync_.desktop();
+    const auto& h = sync_.hardware();
+    if (rejectedForPending_)
+        notice_ = "A desktop volume change was not applied because another OpenWitty change is still "
+                  "unconfirmed (retry or discard it). The desktop shows the speaker level again.";
+    else if (d && h && d->muted && !h->muted)
+        notice_ = "The desktop shows the speaker as muted, but the CONNECT 2 speaker is not muted. "
+                  "Unmute in the desktop or in OpenWitty to bring them back in step.";
+    else
+        notice_.clear();
 }
 
 void DesktopVolumeLink::apply(const SyncAction& a, Clock::time_point now) {
     if (!a.note.empty() && !a.empty()) log(a.note);
-    if (a.setDesktop) {
-        if (opt_.desktopWrites) {
-            if (auto s = mixer_.write(*a.setDesktop); s) ++desktopWrites_;
-            else log("desktop update failed: " + s.error().message);
-        } else {
-            log(fmt("dry run: would set desktop to %.2f dB %s", a.setDesktop->db, a.setDesktop->muted));
-        }
+    // The device first: when a desktop correction accompanies a write (a limited increase), the
+    // correction is only written once the device really is at that level.
+    if (a.writeSpeaker) writeDevice(*a.writeSpeaker, now);
+    if (a.setDesktop) alignDesktop(*a.setDesktop, now);
+}
+
+// Re-align the desktop control to the device. An ALSA control write is NOT side-effect free: with a
+// working Feature Unit 2 the kernel forwards it to the device. So the alignment
+//   * re-reads the device right before writing and never writes a level the device no longer has
+//     (a knob that just moved down must not be "restored" upwards),
+//   * rounds down to the control's grid (never louder than the device),
+//   * never unmutes (whether the ALSA switch and the vendor mute are the same physical mute is not
+//     established), and
+//   * skips the write when the control already shows the level.
+void DesktopVolumeLink::alignDesktop(const DesktopLevel& target, Clock::time_point now) {
+    if (!opt_.desktopWrites) {
+        log(fmt("dry run: would set desktop to %.2f dB %s", target.db, target.muted));
+        sync_.noteDesktopUnchanged(mixer_.read());
+        return;
     }
-    if (!a.writeSpeaker) return;
-    const OutputLevel target = *a.writeSpeaker;
+    auto hw = readHardware();
+    if (!hw) return;
+    const double tol = sync_.config().toleranceDb;
+    if (hw->muted != target.muted || std::fabs(hw->db - target.db) > tol) {
+        log("desktop alignment skipped: the device changed meanwhile");
+        sync_.noteDesktopUnchanged(mixer_.read());
+        if (alignDepth_ < 1) {                // adopt the newer device state once (bounded)
+            ++alignDepth_;
+            apply(sync_.onHardware(*hw, now), now);
+            --alignDepth_;
+        }
+        return;
+    }
+    auto cur = mixer_.read();
+    DesktopLevel w = target;
+    if (cur && cur->muted && !w.muted) {
+        w.muted = true;
+        log("desktop left muted: an alignment never unmutes");
+    }
+    if (cur && cur->muted == w.muted && std::fabs(cur->db - w.db) <= 0.25) {
+        sync_.noteDesktopWritten(*cur, now);   // already shows it: nothing to write
+        return;
+    }
+    if (auto s = mixer_.write(w); !s) {
+        log("desktop update failed: " + s.error().message);
+        sync_.noteDesktopUnchanged(mixer_.read());
+        return;
+    }
+    ++desktopWrites_;
+    auto actual = mixer_.read();
+    sync_.noteDesktopWritten(actual ? *actual : w, now);
+}
+
+void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point now) {
     if (!opt_.hardwareWrites) {
         log(fmt("dry run: would write speaker %.2f dB %s", target.db, target.muted));
         sync_.abandonWrite();
         return;
     }
     if (session_.pendingSettings()) {        // another client's unconfirmed edit: never piggyback on it
-        log("speaker write deferred: another unconfirmed edit is pending in this session");
+        log("desktop change rejected: another unconfirmed edit is pending in this session");
         sync_.abandonWrite();
+        rejectedForPending_ = true;
+        apply(sync_.realignDesktop(now, "desktop re-aligned to the device after a rejected change"), now);
         return;
     }
     // Stage against the snapshot DeviceSession holds (commitAndVerify re-reads before the SET).

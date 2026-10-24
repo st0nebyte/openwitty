@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
     AlsaDesktopMixer mixer;
     std::unique_ptr<DesktopVolumeLink> link;
     OnceLog wait;
+    std::string lastNotice;
     auto nextPoll = DesktopVolumeLink::Clock::now();
     const std::string dir = ControlLease::currentSessionDirectory();
 
@@ -183,6 +184,10 @@ int main(int argc, char** argv) {
         if (now >= nextPoll) {
             link->onPollTick(now);
             nextPoll = now + std::chrono::milliseconds(a.pollMs);
+        }
+        if (link->notice() != lastNotice) {
+            lastNotice = link->notice();
+            if (!lastNotice.empty()) say("notice: " + lastNotice);
         }
         if (!link->healthy()) {
             say("device link lost: reconnecting (read-only start again)");

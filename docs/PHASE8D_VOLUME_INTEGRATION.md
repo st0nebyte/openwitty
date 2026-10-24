@@ -54,6 +54,29 @@ use the same `DeviceSession`/`OutputControl` code, so they cannot apply differen
   and it is never active in simulation. State is published as `desktop.volumeLink` (`off|waiting|active`).
 * CLI writes while the daemon or GUI runs fail cleanly with `ControlInUse` (no competing writer).
 
+## Review findings addressed (after f52b24c)
+
+**1. "Read-only start" means no *vendor* write – an ALSA control write is not side-effect free.**
+Aligning the desktop writes the card's `PCM Playback Volume/Switch`. With a working Feature Unit 2 the kernel
+forwards that to the device as a UAC `SET_CUR`; with the broken FU2 the device ignores it. The evidence says FU2
+and the vendor speaker level are the same physical parameter (the FU2 readback always equalled the vendor level),
+so writing exactly the device's level is physically a no-op – except for rounding and a stale value. Whether the
+ALSA switch and the vendor *mute* are the same physical mute is **not** established. Therefore every desktop
+alignment now:
+* re-reads the device immediately before writing and skips (then adopts the newer state, bounded) when the device
+  changed meanwhile – a knob that just went down is never "restored" upwards;
+* rounds **down** to the control's 0.5 dB grid (never louder than the device);
+* **never unmutes** the desktop (a muted desktop next to an unmuted device is left as is and explained);
+* is skipped when the control already shows the level (no needless control writes);
+* happens after, not before, a device write that it accompanies.
+In the dry run nothing is written at all (neither vendor nor ALSA).
+
+**2. Desktop change while a GUI edit is unconfirmed.** The link still never stages on top of a pending GUI edit, and
+it never commits it. Instead of silently leaving KDE at a value the speaker does not have, the rejected desktop change
+now re-aligns the desktop to the device (under the rules above) and publishes a notice
+(`desktop.volumeNotice` in the GUI, `notice:` in the daemon log): *"A desktop volume change was not applied because
+another OpenWitty change is still unconfirmed (retry or discard it)…"*. The notice disappears with the pending edit.
+
 ## Authority and synchronization rules (core/VolumeSync)
 
 | Transition | Rule |
@@ -144,7 +167,7 @@ by explicit volume/mute moves while the service or the opted-in GUI runs.
 ## Proven offline vs. still to be shown live
 | Proven offline (simulation / unit tests) | Needs a live test |
 |---|---|
-| startup/reconnect never write; login hold; bounded increases; mute; knob vs. desktop ordering; echo suppression; coalescing; no retry; byte scope; authorization exactness; card lookup; lease yield file | the daemon's writes on the real device and the KDE slider round trip in the FU2-broken state |
+| alignment re-reads before writing, rounds down, never unmutes, skips no-ops; pending-edit rejection with notice; startup/reconnect never write; login hold; bounded increases; mute; knob vs. desktop ordering; echo suppression; coalescing; no retry; byte scope; authorization exactness; card lookup; lease yield file | the daemon's writes on the real device and the KDE slider round trip in the FU2-broken state |
 | daemon dry run reads the real device and ALSA control correctly (live, read-only) | knob → KDE mirroring with the real PipeWire (does WirePlumber accept the ALSA re-align without its own counter-write?) |
 | GUI-hosted link: pending-edit guard, host-provided samples without extra reads, off in simulation | GUI ↔ daemon hand-over with the real lease, GUI-hosted link on the real device |
 | | behaviour across a real boot with the quirk (routes present, daemon start read-only) |

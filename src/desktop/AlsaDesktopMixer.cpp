@@ -103,7 +103,7 @@ Status AlsaDesktopMixer::write(const DesktopLevel& d) {
     snd_ctl_elem_value_alloca(&v);
     setId(id, kVolume);
     snd_ctl_elem_value_set_id(v, id);
-    const long raw = dbToRaw(d.db, rawMin_, rawMax_, dbMin_, dbMax_);
+    const long raw = dbToRaw(d.db, rawMin_, rawMax_, dbMin_, dbMax_, /*roundDown=*/true);
     for (unsigned c = 0; c < channels_; ++c) snd_ctl_elem_value_set_integer(v, c, raw);
     if (int e = snd_ctl_elem_write(ctl_, v); e < 0) return alsaError("write PCM Playback Volume", e);
     setId(id, kSwitch);

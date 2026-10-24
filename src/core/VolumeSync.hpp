@@ -71,6 +71,13 @@ public:
     SyncAction tick(TimePoint now);
     // Device or desktop control lost: forget everything; the next start() re-baselines.
     void reset();
+    // Ask for the desktop to be re-aligned to the hardware level (e.g. a desktop change that could
+    // not be applied). Empty when there is nothing to align.
+    SyncAction realignDesktop(TimePoint now, const char* why);
+    // The executor reports what the desktop control actually shows after (or instead of) a returned
+    // setDesktop: written possibly with safety adjustments (rounded down, left muted), or skipped.
+    void noteDesktopWritten(DesktopLevel actual, TimePoint now);
+    void noteDesktopUnchanged(std::optional<DesktopLevel> actual);
 
     SyncPhase phase() const { return phase_; }
     const std::optional<OutputLevel>& hardware() const { return hw_; }

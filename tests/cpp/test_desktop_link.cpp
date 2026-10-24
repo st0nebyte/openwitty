@@ -29,7 +29,7 @@ public:
     std::optional<DesktopLevel> read() override { return present ? std::optional(level) : std::nullopt; }
     Status write(const DesktopLevel& d) override {
         ++writes;
-        level = DesktopLevel{std::round(d.db * 2) / 2, d.muted};   // ALSA 0.5 dB grid
+        level = DesktopLevel{std::floor(d.db * 2 + 1e-9) / 2, d.muted};   // ALSA 0.5 dB grid, rounded down
         return okStatus();
     }
     int waitForEvent(int) override { return 0; }
@@ -228,6 +228,11 @@ TEST(DesktopMixerHelpers, RawDbMappingMatchesTheConnect2Control) {
     EXPECT_EQ(dbToRaw(-100, 0, 120, -60, 0), 0);
     EXPECT_EQ(dbToRaw(10, 0, 120, -60, 0), 120);
     EXPECT_EQ(dbToRaw(std::numeric_limits<double>::quiet_NaN(), 0, 120, -60, 0), 0);   // never louder on NaN
+    EXPECT_EQ(dbToRaw(-23.4, 0, 120, -60, 0, /*roundDown=*/true), 73);          // -23.5, not -23.0
+    EXPECT_EQ(dbToRaw(-23.5, 0, 120, -60, 0, true), 73);                        // exact grid value kept
+    EXPECT_EQ(dbToRaw(0.0, 0, 120, -60, 0, true), 120);
+    for (double db = -60; db <= 0; db += 0.137)
+        EXPECT_LE(rawToDb(dbToRaw(db, 0, 120, -60, 0, true), 0, 120, -60, 0), db + 1e-9);   // never louder
 }
 
 TEST(DesktopLink, NeverPiggybacksOnAnotherPendingEdit) {
@@ -248,12 +253,61 @@ TEST(DesktopLink, NeverPiggybacksOnAnotherPendingEdit) {
     EXPECT_DOUBLE_EQ(r.device().db, -37);
 }
 
-TEST(DesktopLink, HostProvidedSampleNeedsNoExtraRead) {
+TEST(DesktopLink, HostSampleCostsOnlyTheSafetyReReadBeforeAnAlignment) {
     Rig r;
     ASSERT_TRUE(r.link->start(r.t0));
-    const int readsBefore = r.hw->readCalls;
-    r.link->onHardwareSample(OutputLevel{-12.0, false}, r.t0 + 7s);     // GUI read this itself
-    EXPECT_EQ(r.hw->readCalls, readsBefore);
+    int reads = r.hw->readCalls;
+    r.link->onHardwareSample(OutputLevel{-30.0, false}, r.t0 + 7s);   // unchanged: no I/O at all
+    EXPECT_EQ(r.hw->readCalls, reads);
+    r.setDevice(-12.0, false);
+    r.link->onHardwareSample(OutputLevel{-12.0, false}, r.t0 + 8s);   // knob moved: one re-read, then align
+    EXPECT_EQ(r.hw->readCalls, reads + 1);
     EXPECT_DOUBLE_EQ(r.mixer.level.db, -12);
     EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLink, AlignmentNeverWritesALevelTheDeviceNoLongerHas) {
+    Rig r;
+    ASSERT_TRUE(r.link->start(r.t0));
+    // the host sampled -12 dB, but the knob went down to -40 dB before the alignment could happen
+    r.setDevice(-40.0, false);
+    r.link->onHardwareSample(OutputLevel{-12.0, false}, r.t0 + 7s);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -40);                     // never the stale, louder -12
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLink, AlignmentNeverUnmutesAndExplainsTheDifference) {
+    Rig r;                                                       // device unmuted at -30
+    r.mixer.level = {-30.0, true};                               // desktop shows muted
+    ASSERT_TRUE(r.link->start(r.t0));
+    EXPECT_TRUE(r.mixer.level.muted);                            // left muted
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_NE(r.link->notice().find("not muted"), std::string::npos);
+    r.mixer.level = {-30.0, false};                              // user unmutes in KDE
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_TRUE(r.link->notice().empty());
+    EXPECT_EQ(r.hw->writeCalls, 0);                              // device already unmuted
+}
+
+TEST(DesktopLink, AlignmentRoundsDownToTheControlGrid) {
+    Rig r(true, true, -23.4, false);                             // between two 0.5 dB steps
+    r.mixer.level = {0.0, false};
+    ASSERT_TRUE(r.link->start(r.t0));
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -23.5);                   // not -23.0
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLink, ChangeRejectedForAPendingEditIsVisibleAndRestoresConsistency) {
+    Rig r;
+    ASSERT_TRUE(r.link->start(r.t0));
+    ASSERT_TRUE(r.session->edit([](SettingsMessage& m) { return m.setLedBrightness(7); }).ok());
+    r.mixer.level = {-36.0, false};
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.hw->writeCalls, 0);                              // the pending edit is not committed
+    EXPECT_EQ(r.session->pendingSettings()->ledBrightness(), 7);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -30);                     // KDE shows the real level again
+    EXPECT_NE(r.link->notice().find("not applied"), std::string::npos);
+    r.session->discardPending();
+    r.link->onHardwareSample(OutputLevel{-30.0, false}, r.t0 + 7s);
+    EXPECT_TRUE(r.link->notice().empty());
 }
