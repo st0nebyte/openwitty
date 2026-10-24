@@ -13,8 +13,23 @@ Okt 24 10:13:44.527449 h kernel: usb 3-2: 2:0: usb_set_interface failed (-110)
 """
 HEALTHY_LOG = "Okt 24 10:40:42.513439 h kernel: usb 3-2: 5:0: sticky mixer values (0/18432/256 => 6912), disabling\n"
 
+K73_LOG = """Okt 24 14:39:11 h kernel: usb 3-2: 2:0: broken mixer GET_CUR (-15360/0/128 => -6016)
+Okt 24 14:39:11 h kernel: usb 3-2: 5:0: broken mixer GET_CUR (0/18432/256 => 6912)
+Okt 24 14:39:17 h kernel: usb 3-2: 2:0: usb_set_interface failed (-110)
+"""
+
 
 class Parse(unittest.TestCase):
+    def test_kernel_73_wording(self):
+        f = H.parse_kernel_log(K73_LOG)
+        self.assertTrue(f["fu2_sticky"] and f["unit5_sticky"])
+        self.assertEqual(len(f["set_interface_failed"]), 1)
+
+    def test_kernel_73_unit5_alone_is_not_fu2(self):
+        f = H.parse_kernel_log(K73_LOG.splitlines()[1] + "\n")
+        self.assertFalse(f["fu2_sticky"])
+        self.assertTrue(f["unit5_sticky"])
+
     def test_unit_distinction(self):
         f = H.parse_kernel_log(FAIL_LOG)
         self.assertTrue(f["fu2_sticky"] and f["unit5_sticky"])

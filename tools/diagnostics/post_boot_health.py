@@ -19,13 +19,14 @@ TS = re.compile(r"^(?:\[\s*(?P<up>\d+\.\d+)\]|(?P<wall>\w{3} \d+ [\d:.]+))")
 
 
 def parse_kernel_log(text):
-    """-> dict of findings. FU2 = unit 2, the separate unit 5 is reported on its own."""
+    """-> dict of findings. FU2 = unit 2, the separate unit 5 is reported on its own.
+    Kernel <= 7.2 logs `sticky mixer values`, 7.3 logs `broken mixer GET_CUR` for the same condition."""
     out = {"fu2_sticky": False, "unit5_sticky": False, "other_sticky": [], "set_interface_failed": [],
            "ep0_timeouts": [], "new_device": [], "driver_registered": [], "disconnects": []}
     for line in text.splitlines():
         tm = TS.match(line)
         stamp = tm.group(0) if tm else ""
-        m = re.search(r"usb (?P<dev>[\d.-]+): (?P<unit>\d+):(?P<ch>\d+): sticky mixer values", line)
+        m = re.search(r"usb (?P<dev>[\d.-]+): (?P<unit>\d+):(?P<ch>\d+): (?:sticky mixer values|broken mixer GET_CUR)", line)
         if m:
             u = int(m.group("unit"))
             if u == 2:
