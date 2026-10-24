@@ -14,6 +14,9 @@
 #include "core/OutputControl.hpp"
 #include "core/RetryPolicy.hpp"
 #include "transport/ControlLease.hpp"
+#ifdef LEWITT_HAVE_ALSA
+#include "desktop/AlsaDesktopMixer.hpp"
+#endif
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 
@@ -105,7 +108,58 @@ void DeviceWorker::startRealTimer() {
     armPreciseStatusTimer();
 }
 
+DeviceWorker::~DeviceWorker() { dropDesktopLink(); }
+
+void DeviceWorker::dropDesktopLink() {
+    link_.reset();
+    if (mixer_ && !desktopLinkWanted_) mixer_.reset();
+    desktopLinkState_ = desktopLinkWanted_ ? "waiting" : "off";
+}
+
+// Called right after a successful settings refresh on a connected real device.
+void DeviceWorker::serviceDesktopLink() {
+    if (!desktopLinkWanted_ || !mixer_ || !session_ || session_->state() != ConnectionState::Connected ||
+        !session_->settings())
+        return;
+    const auto now = std::chrono::steady_clock::now();
+    if (!mixer_->isOpen()) {
+        if (now < nextMixerOpen_) return;
+        nextMixerOpen_ = now + std::chrono::seconds(2);   // no busy retry while the control is missing
+        link_.reset();
+        if (auto s = mixer_->open(); !s) {
+            desktopLinkState_ = "waiting";
+            return;
+        }
+    }
+    if (!link_) {
+        LinkOptions o;
+        o.hardwareWrites = session_->writesEnabled();
+        o.desktopWrites = true;
+        link_ = std::make_unique<DesktopVolumeLink>(*session_, *mixer_, VolumeSyncConfig{}, o, [](const std::string& m) {
+            std::fprintf(stderr, "openwitty: desktop volume: %s\n", m.c_str());
+        });
+        if (!link_->start(now)) {
+            link_.reset();
+            desktopLinkState_ = "waiting";
+            return;
+        }
+        desktopLinkState_ = "active";
+        return;
+    }
+    const int r = mixer_->waitForEvent(0);
+    if (r < 0) {                                          // card removed / control gone
+        mixer_->close();
+        link_.reset();
+        desktopLinkState_ = "waiting";
+        return;
+    }
+    if (r == 1) link_->onDesktopEvent(now);
+    else link_->onHardwareSample(outputLevel(*session_->settings(), Output::Speaker), now);
+    if (!link_->healthy()) link_.reset();               // restarts read-only on the next sample
+}
+
 void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t, WritePolicy policy) {
+    link_.reset();                       // the link refers to the session that is about to go away
     {
         std::lock_guard lk(activeM_);
         active_ = nullptr;               // old transport is about to be destroyed
@@ -155,6 +209,8 @@ void DeviceWorker::cancelAll() {
 }
 
 void DeviceWorker::connectMock() {
+    desktopLinkWanted_ = false;          // simulation never drives the desktop volume
+    dropDesktopLink();
     intentionalDisconnect_ = true;
     lostLink_ = false;
     lastTransportError_.clear();
@@ -193,6 +249,14 @@ void DeviceWorker::connectUsb() {
                      outputWritePolicy(/*speaker=*/true, /*headphone=*/true));
     else
         adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
+    // The desktop volume follows only when output writes are opted in (and ALSA support is built).
+    desktopLinkWanted_ = envAuthorized("OPENWITTY_OUTPUT_WRITES");
+#ifdef LEWITT_HAVE_ALSA
+    if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
+#else
+    desktopLinkWanted_ = false;
+#endif
+    dropDesktopLink();
     intentionalDisconnect_ = false;
     lostLink_ = false;
     lastOpenError_ = Errc::Ok;
@@ -261,6 +325,7 @@ void DeviceWorker::endMeasurementSessionBestEffort() {
 }
 
 void DeviceWorker::disconnectDevice() {
+    dropDesktopLink();
     if (timer_) timer_->stop();
     if (scanTimer_) scanTimer_->stop();
     endMeasurementSessionBestEffort();
@@ -353,6 +418,7 @@ void DeviceWorker::poll() {
     const qint64 pollGapUs = lastPollNs_ ? (pollStart - lastPollNs_) / 1000 : 0;
     if (traceEnabled_) lastPollNs_ = pollStart;
     if (session_->state() != ConnectionState::Connected) {
+        dropDesktopLink();            // after a reconnect the link starts read-only again
         if (timer_) timer_->stop();   // no background activity while disconnected
         if (usbMode_) armRescan();    // link lost: look again with backoff
         publish();
@@ -394,6 +460,7 @@ void DeviceWorker::poll() {
         const auto before = session_->settings();
         auto result = refreshDeviceState(traceEnabled_ ? &timing : nullptr);
         if (result && before && session_->settings()) kinds = changedKinds(*before, *session_->settings());
+        if (result && usbMode_) serviceDesktopLink();
     }
     qint64 sequence = 0;
     if (traceEnabled_) {
@@ -558,6 +625,8 @@ void DeviceWorker::publish() {
                   .arg(session_->info().vid, 4, 16, QChar('0')).arg(session_->info().pid, 4, 16, QChar('0'))
                   .arg(caps.apiMajor).arg(caps.apiMinor);
     }
+    // Desktop (KDE/PipeWire) volume integration: off | waiting | active (see serviceDesktopLink()).
+    v["desktop.volumeLink"] = desktopLinkState_;
     v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
     v["write.verifying"] = verifying_;
     // `ui.state` is the sole connection-state source of truth and is what QML renders. Keep

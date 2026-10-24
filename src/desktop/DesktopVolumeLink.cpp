@@ -59,6 +59,12 @@ void DesktopVolumeLink::onPollTick(Clock::time_point now) {
     apply(sync_.tick(now), now);
 }
 
+void DesktopVolumeLink::onHardwareSample(const OutputLevel& hw, Clock::time_point now) {
+    if (sync_.phase() == SyncPhase::Unknown) return;
+    apply(sync_.onHardware(hw, now), now);
+    apply(sync_.tick(now), now);
+}
+
 void DesktopVolumeLink::apply(const SyncAction& a, Clock::time_point now) {
     if (!a.note.empty() && !a.empty()) log(a.note);
     if (a.setDesktop) {
@@ -73,6 +79,11 @@ void DesktopVolumeLink::apply(const SyncAction& a, Clock::time_point now) {
     const OutputLevel target = *a.writeSpeaker;
     if (!opt_.hardwareWrites) {
         log(fmt("dry run: would write speaker %.2f dB %s", target.db, target.muted));
+        sync_.abandonWrite();
+        return;
+    }
+    if (session_.pendingSettings()) {        // another client's unconfirmed edit: never piggyback on it
+        log("speaker write deferred: another unconfirmed edit is pending in this session");
         sync_.abandonWrite();
         return;
     }

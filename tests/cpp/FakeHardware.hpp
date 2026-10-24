@@ -18,7 +18,10 @@ public:
     void close() override { m_->close(); }
     bool isOpen() const override { return m_->isOpen(); }
     DeviceInfo info() const override { return m_->info(); }
-    Result<Bytes> read(MessageId id) override { return m_->read(id); }
+    Result<Bytes> read(MessageId id) override {
+        ++readCalls;
+        return m_->read(id);
+    }
     Status write(MessageId id, std::span<const std::uint8_t> d) override {
         ++writeCalls;
         if (dropWrites) return okStatus();     // device acknowledges but ignores (like a stubbed SET)
@@ -29,6 +32,7 @@ public:
     void clearCancel() override { m_->clearCancel(); }
     bool dropWrites{false};
     int writeCalls{0};
+    int readCalls{0};
 
 private:
     MockTransport* m_;

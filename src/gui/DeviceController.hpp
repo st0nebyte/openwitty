@@ -15,6 +15,8 @@
 #include "core/ReadFreshness.hpp"
 #include "core/PollCadence.hpp"
 #include "core/DeviceSession.hpp"
+#include "desktop/DesktopMixer.hpp"
+#include "desktop/DesktopVolumeLink.hpp"
 #include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
 #include "MeterPresentation.hpp"
@@ -24,6 +26,7 @@ class DeviceWorker : public QObject {
 public:
     explicit DeviceWorker(lewitt::RealPollCadence realCadence = lewitt::kStatus48Hz,
                           int settingsHz = 16);
+    ~DeviceWorker() override;
 public slots:
     void connectMock();
     void connectUsb();
@@ -105,6 +108,16 @@ private:
     QString scanSignature_;              // device list + node permissions at the last failed open
     QString deviceListSignature();
     void noteOpenFailure(const lewitt::Status& s);
+    // Phase 8D: desktop volume integration hosted in the GUI while it owns the device (the
+    // background openwitty-volumed yields to the GUI). Only with the output-write opt-in on a real
+    // device; the link refers to session_, so it is always dropped before session_ changes.
+    void serviceDesktopLink();
+    void dropDesktopLink();
+    std::unique_ptr<lewitt::IDesktopMixer> mixer_;
+    std::unique_ptr<lewitt::DesktopVolumeLink> link_;
+    bool desktopLinkWanted_{false};
+    std::chrono::steady_clock::time_point nextMixerOpen_{};
+    QString desktopLinkState_{"off"};   // off | waiting | active
 };
 
 class DeviceController : public QObject {

@@ -229,3 +229,31 @@ TEST(DesktopMixerHelpers, RawDbMappingMatchesTheConnect2Control) {
     EXPECT_EQ(dbToRaw(10, 0, 120, -60, 0), 120);
     EXPECT_EQ(dbToRaw(std::numeric_limits<double>::quiet_NaN(), 0, 120, -60, 0), 0);   // never louder on NaN
 }
+
+TEST(DesktopLink, NeverPiggybacksOnAnotherPendingEdit) {
+    Rig r;
+    ASSERT_TRUE(r.link->start(r.t0));
+    // the GUI left a failed LED edit pending for the user to retry/discard
+    ASSERT_TRUE(r.session->edit([](SettingsMessage& m) { return m.setLedBrightness(7); }).ok());
+    r.mixer.level = {-36.0, false};
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    ASSERT_TRUE(r.session->pendingSettings().has_value());       // the other edit is left untouched
+    EXPECT_EQ(r.session->pendingSettings()->ledBrightness(), 7);
+    EXPECT_EQ(r.link->sync().phase(), SyncPhase::Synced);
+    r.session->discardPending();                                 // user discards it: the next move applies
+    r.mixer.level = {-37.0, false};
+    r.link->onDesktopEvent(r.t0 + 8s);
+    EXPECT_EQ(r.hw->writeCalls, 1);
+    EXPECT_DOUBLE_EQ(r.device().db, -37);
+}
+
+TEST(DesktopLink, HostProvidedSampleNeedsNoExtraRead) {
+    Rig r;
+    ASSERT_TRUE(r.link->start(r.t0));
+    const int readsBefore = r.hw->readCalls;
+    r.link->onHardwareSample(OutputLevel{-12.0, false}, r.t0 + 7s);     // GUI read this itself
+    EXPECT_EQ(r.hw->readCalls, readsBefore);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -12);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}

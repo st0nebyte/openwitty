@@ -46,9 +46,12 @@ use the same `DeviceSession`/`OutputControl` code, so they cannot apply differen
   while the request is fresh (30 s) or the lease is held. The GUI removes the request once it owns the
   device. A stale request (crashed GUI) expires by itself.
 * GUI closed → the lease is free → the daemon reconnects and starts **read-only** again.
-* While the GUI owns the device, desktop-slider changes are **not** applied by the daemon (busy state);
-  the GUI's own speaker/headphone controls work (with the opt-in). Hosting the desktop link inside the
-  GUI worker is a possible next step; the link is Qt-free and non-blocking for that purpose.
+* While the GUI owns the device it hosts the **same** `DesktopVolumeLink` in its worker thread (with the
+  `OPENWITTY_OUTPUT_WRITES=1` opt-in on a real device): desktop-slider changes keep reaching the device, GUI
+  speaker moves are mirrored to KDE, and the GUI's settings refresh (62.5 ms) is reused as the hardware sample, so
+  the link adds no extra polling. The link never stages on top of an unconfirmed GUI edit (it writes nothing
+  while one is pending). It is dropped and restarted read-only on every disconnect, reconnect or session change,
+  and it is never active in simulation. State is published as `desktop.volumeLink` (`off|waiting|active`).
 * CLI writes while the daemon or GUI runs fail cleanly with `ControlInUse` (no competing writer).
 
 ## Authority and synchronization rules (core/VolumeSync)
@@ -108,7 +111,7 @@ options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error
 * CTest `cli_*` / `volumed_*` – NaN/−inf/out-of-range volume, `true`/`"1 "`/`yes` instead of `1`, missing field variable;
   all refused before a transport exists.
 
-Totals: Release CTest **240/240**, USB call-site audit **PASS** (extended: one gated GUI output site, output policy byte scope,
+Totals (after the GUI-hosted link): Release CTest **242/242** (the GUI suite runs as one CTest entry), USB call-site audit **PASS** (extended: one gated GUI output site, output policy byte scope,
 daemon speaker-only/double opt-in/dry-run default/single verified write path), `git diff --check` clean, privacy grep clean.
 
 Live, read-only: `openwitty-volumed` (dry run) for 8 s: connected, found card 3, read speaker −23.50 dB unmuted, desktop
@@ -143,7 +146,7 @@ by explicit volume/mute moves while the service or the opted-in GUI runs.
 |---|---|
 | startup/reconnect never write; login hold; bounded increases; mute; knob vs. desktop ordering; echo suppression; coalescing; no retry; byte scope; authorization exactness; card lookup; lease yield file | the daemon's writes on the real device and the KDE slider round trip in the FU2-broken state |
 | daemon dry run reads the real device and ALSA control correctly (live, read-only) | knob → KDE mirroring with the real PipeWire (does WirePlumber accept the ALSA re-align without its own counter-write?) |
-| | GUI ↔ daemon hand-over with the real lease |
+| GUI-hosted link: pending-edit guard, host-provided samples without extra reads, off in simulation | GUI ↔ daemon hand-over with the real lease, GUI-hosted link on the real device |
 | | behaviour across a real boot with the quirk (routes present, daemon start read-only) |
 
 ## Proposed first live validation (needs fresh physical audio-safety confirmation)

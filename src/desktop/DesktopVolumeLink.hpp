@@ -7,7 +7,9 @@
 //     written again and is never "corrected" towards an older value;
 //   * hardware writes go through stageOutput() + DeviceSession::commitAndVerify(): fresh snapshot,
 //     exact-byte scope (speaker bytes only), one SET, read-back verification, never retried;
-//   * with writes disabled (dry run) decisions are only reported.
+//   * with writes disabled (dry run) decisions are only reported;
+//   * while the session holds another client's unconfirmed edit (the GUI keeps failed edits pending
+//     for the user to retry or discard) the link never stages on top of it: it writes nothing.
 #pragma once
 #include <functional>
 #include <string>
@@ -38,6 +40,9 @@ public:
     void onDesktopEvent(Clock::time_point now);
     // Periodic hardware read (knob changes) plus rate-limit flush.
     void onPollTick(Clock::time_point now);
+    // Same as onPollTick() for a host that has just read the settings itself (the GUI worker):
+    // no additional device I/O.
+    void onHardwareSample(const OutputLevel& hw, Clock::time_point now);
     void reset() { sync_.reset(); }
 
     const VolumeSync& sync() const { return sync_; }
