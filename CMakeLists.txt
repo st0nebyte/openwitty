@@ -98,6 +98,16 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
                    ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service @ONLY)
     install(FILES ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service DESTINATION ${LEWITT_SYSTEMD_USER_UNIT_DIR})
     install(FILES packaging/modprobe/openwitty-connect2.conf DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
+    # The generated user unit must verify cleanly (keys in the right sections, valid ExecStart).
+    find_program(LEWITT_SYSTEMD_ANALYZE systemd-analyze)
+    if(LEWITT_BUILD_TESTS AND LEWITT_SYSTEMD_ANALYZE)
+        add_test(NAME systemd_user_unit_verifies
+                 COMMAND sh -c "d=\$(mktemp -d) && sed 's#@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed#'\"$1\"'#' \"$2\" > \"\$d/openwitty-volumed.service\" && \"$3\" --user verify \"\$d/openwitty-volumed.service\"; r=\$?; rm -rf \"\$d\"; exit \$r"
+                         sh $<TARGET_FILE:openwitty-volumed> ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service.verify ${LEWITT_SYSTEMD_ANALYZE})
+        set_tests_properties(systemd_user_unit_verifies PROPERTIES FAIL_REGULAR_EXPRESSION "Unknown key|ignoring|Failed|not found|Invalid")
+        file(READ packaging/systemd/openwitty-volumed.service.in _ow_unit)
+        file(WRITE ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service.verify "${_ow_unit}")
+    endif()
 endif()
 
 add_executable(openwitty-cli src/cli/main.cpp)
@@ -176,6 +186,20 @@ if(LEWITT_BUILD_TESTS)
             add_test(NAME volumed_rejects_bad_arguments COMMAND $<TARGET_FILE:openwitty-volumed> --max-increase-db nan)
             set_tests_properties(volumed_writes_need_exact_env PROPERTIES PASS_REGULAR_EXPRESSION "refused: --vendor-fallback")
             set_tests_properties(volumed_rejects_bad_arguments PROPERTIES PASS_REGULAR_EXPRESSION "usage: openwitty-volumed")
+            # exactly one mode; conflicting or misplaced flags are rejected before anything else happens,
+            # even with valid write authorization in the environment (no stale or last-flag-wins writes)
+            set(_ow_vd $<TARGET_FILE:openwitty-volumed>)
+            set(_ow_auth LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1)
+            add_test(NAME volumed_rejects_fallback_plus_dry_run COMMAND ${CMAKE_COMMAND} -E env ${_ow_auth} ${_ow_vd} --vendor-fallback --dry-run)
+            add_test(NAME volumed_rejects_dry_run_plus_fallback COMMAND ${CMAKE_COMMAND} -E env ${_ow_auth} ${_ow_vd} --dry-run --vendor-fallback)
+            add_test(NAME volumed_rejects_check_plus_fallback COMMAND ${CMAKE_COMMAND} -E env ${_ow_auth} ${_ow_vd} --check --vendor-fallback)
+            add_test(NAME volumed_rejects_repeated_mode COMMAND ${_ow_vd} --dry-run --dry-run)
+            add_test(NAME volumed_rejects_increase_without_fallback COMMAND ${_ow_vd} --max-increase-db 5)
+            add_test(NAME volumed_rejects_options_with_check COMMAND ${_ow_vd} --check --poll-ms 500)
+            set_tests_properties(volumed_rejects_fallback_plus_dry_run volumed_rejects_dry_run_plus_fallback
+                                 volumed_rejects_check_plus_fallback volumed_rejects_repeated_mode
+                                 volumed_rejects_increase_without_fallback volumed_rejects_options_with_check
+                                 PROPERTIES PASS_REGULAR_EXPRESSION "Exactly one mode flag at most")
         endif()
     endif()
     include(GoogleTest)
@@ -278,6 +302,7 @@ install(FILES packaging/linux/io.github.st0nebyte.openwitty.desktop DESTINATION 
 install(FILES packaging/linux/io.github.st0nebyte.openwitty.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
               docs/HARDWARE_TEST_PLAN.md docs/HANDOFF_HARDWARE_TESTING.md docs/THIRD_PARTY.md
+              docs/VOLUME_INTEGRATION.md
               PROTOCOL.md FEATURES.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES packaging/udev/70-openwitty.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)

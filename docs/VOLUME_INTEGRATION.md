@@ -39,15 +39,19 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Limitations:** it hides genuine control errors of this device from ALSA clients (they read 0); it affects nothing else;
   kernels without the string form of `quirk_flags` ignore it; a kernel that handles the broken control itself makes it
   unnecessary. It is a device-specific compatibility workaround, not a fix of the device.
-* **Policy:** OpenWitty never installs it silently. `openwitty-volumed --check` (read-only, no USB I/O) reports whether the
+* **Policy:** OpenWitty never installs it silently. `openwitty-volumed --check` reports whether the
   mixer loads and whether the quirk is configured/active, and explains the finding; installing it is a documented manual step
   (or a packager decision with the same explanation). It takes effect at the next replug or boot; removing the file undoes it.
 * **Upstream:** the right long-term fix is in the kernel (keep a per-channel control readable when only some channels stall,
   or a device quirk for 29c2:0004); worth reporting to linux-sound with the Phase 8C analysis.
 
 ## Using it
+Modes are mutually exclusive: no flag = mirror, or exactly one of `--vendor-fallback`, `--dry-run`, `--check`; conflicting or
+repeated mode flags, `--max-increase-db` outside the fallback, and options with `--check` are rejected before anything runs.
+`--check` makes no OpenWitty vendor USB access and no intentional hardware SET; it does open the CONNECT 2's ALSA mixer, which
+can make the kernel issue USB control *reads* to the device.
 ```
-openwitty-volumed --check                                   # read-only diagnosis
+openwitty-volumed --check                                   # setup diagnosis
 systemctl --user enable --now openwitty-volumed.service     # mirror mode (device read-only)
 journalctl --user -u openwitty-volumed -f                   # what it does
 systemctl --user disable --now openwitty-volumed.service    # undo

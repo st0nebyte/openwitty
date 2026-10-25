@@ -15,7 +15,9 @@
 //                                        in which the device ignores Feature Unit 2). Needs
 //                                        LEWITT_ALLOW_HARDWARE_WRITE=1 and LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1
 //   openwitty-volumed --dry-run          writes nothing at all (neither device nor ALSA), logs decisions
-//   openwitty-volumed --check            read-only diagnosis of the desktop audio setup, no USB I/O
+//   openwitty-volumed --check            diagnosis of the desktop audio setup: no OpenWitty vendor USB access
+//                                        and no intentional hardware SET; it does open the ALSA mixer,
+//                                        which can make the kernel issue USB control reads to the device
 // Options: --max-increase-db N (0..20, default 10, fallback only)  --poll-ms N (250..5000, default 1000)
 // Policy: core/VolumeSync.hpp (startup is read-only, bounded increases, no retries of unverified
 // writes, knob changes win over older desktop requests).
@@ -62,16 +64,20 @@ struct Args {
 
 Args parse(int argc, char** argv) {
     Args a;
+    int modeFlags = 0;
+    bool increaseGiven = false, pollGiven = false;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
-        if (s == "--vendor-fallback") a.mode = Mode::Fallback, a.writes = true;
-        else if (s == "--dry-run") a.mode = Mode::DryRun;
-        else if (s == "--check") a.mode = Mode::Check;
+        if (s == "--vendor-fallback") a.mode = Mode::Fallback, ++modeFlags;
+        else if (s == "--dry-run") a.mode = Mode::DryRun, ++modeFlags;
+        else if (s == "--check") a.mode = Mode::Check, ++modeFlags;
         else if (s == "--max-increase-db" && i + 1 < argc) {
+            increaseGiven = true;
             char* end = nullptr;
             a.maxIncreaseDb = std::strtod(argv[++i], &end);
             if (!end || *end || !std::isfinite(a.maxIncreaseDb) || a.maxIncreaseDb < 0 || a.maxIncreaseDb > 20) a.ok = false;
         } else if (s == "--poll-ms" && i + 1 < argc) {
+            pollGiven = true;
             char* end = nullptr;
             const long v = std::strtol(argv[++i], &end, 10);
             if (!end || *end || v < 250 || v > 5000) a.ok = false;
@@ -80,6 +86,12 @@ Args parse(int argc, char** argv) {
             a.ok = false;
         }
     }
+    // Exactly one mode, decided once: no flag silently overrides another, and write authorization is
+    // derived from the final mode only (never left over from an earlier flag).
+    if (modeFlags > 1) a.ok = false;
+    if (increaseGiven && a.mode != Mode::Fallback) a.ok = false;    // only the fallback ever raises a level
+    if (pollGiven && a.mode == Mode::Check) a.ok = false;           // --check takes no options
+    a.writes = a.ok && a.mode == Mode::Fallback;
     return a;
 }
 
@@ -124,8 +136,11 @@ void sleepMs(int ms) {
 int main(int argc, char** argv) {
     Args a = parse(argc, argv);
     if (!a.ok) {
-        say("usage: openwitty-volumed [--vendor-fallback | --dry-run | --check] [--max-increase-db 0..20] "
-            "[--poll-ms 250..5000]");
+        say("usage: openwitty-volumed [--poll-ms 250..5000]                     (mirror mode, device read-only)\n"
+            "       openwitty-volumed --vendor-fallback [--max-increase-db 0..20] [--poll-ms 250..5000]\n"
+            "       openwitty-volumed --dry-run [--poll-ms 250..5000]\n"
+            "       openwitty-volumed --check\n"
+            "Exactly one mode flag at most; --max-increase-db only with --vendor-fallback.");
         return 64;
     }
     if (geteuid() == 0) {

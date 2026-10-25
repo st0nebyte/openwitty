@@ -5,7 +5,9 @@
 # device by the kernel; OpenWitty only ever writes the level the device already has (re-read first,
 # rounded down, never unmuting). Enable:
 #     systemctl --user enable --now openwitty-volumed.service
-# Check the audio setup first (read-only):  @CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --check
+# Check the audio setup first:  @CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --check
+#   (no OpenWitty vendor USB access, no intentional hardware SET; opening the ALSA mixer can make the
+#    kernel issue USB control reads to the device)
 # Vendor fallback for a device that ignores the standard volume control (writes the device!):
 #     systemctl --user edit openwitty-volumed.service   and add
 #         [Service]
@@ -16,18 +18,18 @@
 #     systemctl --user disable --now openwitty-volumed.service
 [Unit]
 Description=OpenWitty CONNECT 2 desktop volume sync (hardware knob -> desktop)
-Documentation=file://@CMAKE_INSTALL_FULL_DOCDIR@
+Documentation=file://@CMAKE_INSTALL_FULL_DOCDIR@/VOLUME_INTEGRATION.md man:systemd.unit(5)
 After=pipewire.service wireplumber.service
 PartOf=graphical-session.target
+# Never restart in a tight loop if something is badly wrong (start-rate limits belong to [Unit]).
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed
 Restart=on-failure
 RestartSec=5
-# Never restart in a tight loop if something is badly wrong.
-StartLimitIntervalSec=60
-StartLimitBurst=3
 NoNewPrivileges=yes
 PrivateTmp=yes
 

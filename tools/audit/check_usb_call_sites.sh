@@ -88,8 +88,8 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
    && grep -q 'envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME")' src/daemon/main.cpp \
    && grep -q 'bool writes{false};' src/daemon/main.cpp \
    && grep -q 'readOnlyHardwareOptions()), WritePolicy{}' src/daemon/main.cpp \
-   && grep -q 'a.mode = Mode::Fallback, a.writes = true' src/daemon/main.cpp \
-   && [ "$(grep -c 'a.writes = true' src/daemon/main.cpp)" -eq 1 ] \
+   && grep -q 'a.writes = a.ok && a.mode == Mode::Fallback;' src/daemon/main.cpp \
+   && [ "$(grep -cE 'a\.writes *=' src/daemon/main.cpp)" -eq 1 ] \
    && ! grep -nE 'hardwareWriteOffsets|allowHardwareWrites|sendTrigger|commit\(' src/daemon/main.cpp src/desktop/*.cpp >/dev/null \
    && [ "$(grep -c 'session_.commitAndVerify(' src/desktop/DesktopVolumeLink.cpp)" -eq 1 ] \
    && grep -q 'stageOutput(m, Output::Speaker' src/desktop/DesktopVolumeLink.cpp; then
