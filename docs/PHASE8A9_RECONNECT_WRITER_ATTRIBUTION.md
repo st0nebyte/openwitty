@@ -6,7 +6,7 @@ This phase authorized **one** owner-operated physical disconnect/reconnect and o
 
 | Preflight item | Observation | Limit |
 |---|---|---|
-| Repository | `phase7-hardware-integration` at `10249be60f4425baf1ec6bb9bf43c5ca7b9c50b0`; clean worktree before this note; private `origin` branch matched local HEAD. | No application source or production polling change. |
+| Repository | `phase7-hardware-integration` at `ff030b5991f369b15de385c4bc071555128ef750`; clean worktree before this note; private `origin` branch matched local HEAD. | No application source or production polling change. |
 | Kernel and USB | `7.2.10-1-cachyos`; one enumerated CONNECT 2 `29c2:0004`; usbfs node had a user read/write ACL. | Enumeration/permissions only, not proof that post-disconnect BPF hooks will attach. No serial retained. |
 | Audio topology | One stereo ALSA playback PCM and one PipeWire CONNECT 2 sink. PipeWire sink input and source-output listings were empty; the relevant ALSA playback and capture substream status files both said `closed`. | Does not prove external amplifiers/listeners are safe or exclude every possible future stream. |
 | Current Linux volume | `wpctl` reported **85%**, with no muted flag. PipeWire output route `analog-output`: `route.hw-volume=false`, `channelVolumes=softVolumes=[0.614138,0.614138]`, route mute `false`. | KDE display was inferred from the current default PipeWire sink, not independently photographed. |

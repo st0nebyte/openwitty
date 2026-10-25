@@ -28,7 +28,7 @@ At a later normal boot the hardware Speaker was read as −20.50 dB while `route
 
 | Check | Observed on 2026-10-23 | Limit |
 |---|---|---|
-| Repository and owner | Expected branch/HEAD `b724361cda012ce0d4791c0c7605811faec78358`, clean starting tree; no OpenWitty GUI/CLI/probe process or held control lease found. | Local diagnostic work below is not application-code change. |
+| Repository and owner | Expected branch/HEAD `33036cfb6cb2e978ac7b552c5fcab823210d6e3c`, clean starting tree; no OpenWitty GUI/CLI/probe process or held control lease found. | Local diagnostic work below is not application-code change. |
 | USB / audio graph | USB enumeration showed one `29c2:0004` CONNECT 2; PipeWire showed one CONNECT 2 stereo sink, suspended; no active sink input was listed. | Passive enumeration; no ALSA mixer query. Absence of a listed sink input does not prove all external amplification is safe. |
 | Boot mixer result | Current kernel again logged Feature Unit 2 sticky rejection, plus a later separate AudioStreaming interface 2 alt-0 `usb_set_interface` timeout. Current analog-output route reports `route.hw-volume=false`, `channelVolumes=softVolumes=0.614138`, mute true; KDE/PipeWire display ~85% / −4.23 dB. `device.restore-routes=true`. | The timeout is not Feature Unit 2. Current values differ from the historical 45% first reconnect. |
 | One permitted hardware GET | Speaker **−33.34 dB muted**; Headphones **−32.40 dB muted**. The CLI released its lease normally. | A pre-reconnect read occurs *after* this boot's kernel probe; it cannot establish a pre-probe physical state. No second pre-test GET is permitted. |

@@ -59,7 +59,7 @@ use the same `DeviceSession`/`OutputControl` code, so they cannot apply differen
   and it is never active in simulation. State is published as `desktop.volumeLink` (`off|waiting|active`).
 * CLI writes while the daemon or GUI runs fail cleanly with `ControlInUse` (no competing writer).
 
-## Review findings addressed (after f52b24c)
+## Review findings addressed (after 07a76f8)
 
 **1. "Read-only start" means no *vendor* write – an ALSA control write is not side-effect free.**
 Aligning the desktop writes the card's `PCM Playback Volume/Switch`. With a working Feature Unit 2 the kernel

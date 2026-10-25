@@ -35,7 +35,7 @@ reconnects the device nor opens a USB control endpoint.
 ## Connected baseline (Test A)
 
 At the start of this run the branch was `phase7-hardware-integration` at
-`006c954ef78dbe836554788799db89f8d0dfd64c`, with a clean worktree.
+`44b99eddfab46297444636908c06a14dea3239fd`, with a clean worktree.
 No OpenWitty process was running. The CONNECT 2 was present at `29c2:0004`:
 configuration 1 of 1, high-speed USB. Interface 0 was AudioControl and
 interfaces 1/2 were AudioStreaming, all bound to `snd-usb-audio`; interface 3

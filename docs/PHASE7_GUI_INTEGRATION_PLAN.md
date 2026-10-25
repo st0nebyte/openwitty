@@ -5,8 +5,8 @@ settings / 48 Hz status** after Phase 7H hardware acceptance. Earlier 2/4 Hz
 descriptions below record the cadence at those milestones, not today's default.
 See `HARDWARE_TEST_RESULTS.md` §§29–30 for the validation and default-mode smoke test.
 Superseded for implementation status by the Phase 7B addendum below.
-No new hardware write path was added. Baseline: branch `phase6e-work-preparation` @ `7d8a4c0` (117 tests), which sits on
-`hardware-validation-2026-10-14` @ `d4f99c6` (106 tests). The home computer's unpushed Panic Mute
+No new hardware write path was added. Baseline: branch `phase6e-work-preparation` @ `94b89a3` (117 tests), which sits on
+`hardware-validation-2026-10-14` @ `dd34dc3` (106 tests). The home computer's unpushed Panic Mute
 commits (108/108 there) are **not** in this tree; section 7 lists where they will collide.
 
 Evidence labels used below: **HW-read** = offset confirmed by physically operating the control
@@ -122,7 +122,7 @@ swap remain separate internal stages. Phase 7D's single-client stage measurement
 last real-device data; no true action-to-visible latency is claimed. A future externally marked,
 time-synchronized physical-control/video test is needed. Retain 2 Hz settings and 4 Hz status;
 4 Hz settings would add two scheduled GETs/second and requires hardware evidence before adoption.
-The `f793ab7` compact header remains code-tested but not visually reconfirmed. Audio and
+The `0c8dcc9` compact header remains code-tested but not visually reconfirmed. Audio and
 front-panel readiness still cannot be inferred from control GET success. All real GUI controls
 remain read-only.
 

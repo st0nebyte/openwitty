@@ -88,8 +88,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 
 ## KDE Plasma acceptance (Phase 9B, 2026-10-25)
 
-System: CachyOS, Linux 7.3.0, KDE Plasma 6.8 on Wayland; user-local install of `230b7dd` (window, tray) with the
-background service process started earlier from `07220fb` (left running; its code is functionally unchanged
+System: CachyOS, Linux 7.3.0, KDE Plasma 6.8 on Wayland; user-local install of `a0e899e` (window, tray) with the
+background service process started earlier from `39c66cf` (left running; its code is functionally unchanged
 since, CMake replaces installed files without disturbing a running process). Vendor fallback and
 speaker/headphone control off throughout.
 
@@ -113,7 +113,7 @@ end-to-end single-instance script, ASan/UBSan 265/265, USB audit, packaging stag
 **Defects found and fixed during the acceptance test:** opening the window while the service held the device
 showed a red "already in use by another OpenWitty process" for 1–2 s (the normal hand-over) — now presented as
 "Connecting — taking over the CONNECT 2 from the OpenWitty background service…" with 300 ms lease retries
-(`8eda3b1`); the header indicator still said "Error" (`7fc6015`); "usb" shown as "USB" (`230b7dd`).
+(`6b2f4cd`); the header indicator still said "Error" (`ca7fa0d`); "usb" shown as "USB" (`a0e899e`).
 
 **Login (owner logged out and in, 18:29):** the tray icon came back by itself (`openwitty-tray` started by the
 session's XDG autostart, parent the systemd user manager); `openwitty-volumed` was stopped with the old session
@@ -270,6 +270,30 @@ the name (an early `LICENSE`, the first Debian `changelog`/`copyright`, `docs/AU
 the hardware docs). Procedure and results: "History rewrite (Phase 9D)" below. New commits use the GitHub no-reply
 address (`git config user.email`).
 
+### History rewrite (Phase 9D, 2026-10-25)
+
+* **Backups** (private, `~/Backups/`, mode 0700): `openwitty-pre-history-rewrite-20261025-2000.{git,bundle}` and
+  `…-worktree.tar.gz` (local `.git`), and `openwitty-pre-history-rewrite-20261025-2031.{git,bundle}` (the exact
+  remote state that was rewritten, all 8 refs incl. `refs/pull/*`; bundle verified).
+* **Rewrite** (`git filter-repo` in a disposable mirror, `--prune-empty never --prune-degenerate never`, so no
+  commit is dropped — the old "Update LICENSE" commit stays as an empty commit): author/committer identities mapped
+  to `st0nebyte <133608037+st0nebyte@users.noreply.github.com>`; in file revisions the handle and first name replaced
+  by `st0nebyte`, the two ACL/ownership examples by `<user>`; hash references in commit messages updated by filter-repo.
+* **Verified before pushing:** commit count identical on all 8 refs; only the no-reply identity (and GitHub's own
+  committer for 7 web merges) remains; 0 personal strings in identities, messages and every blob of every ref; branch
+  tips differ from the originals only in the replaced lines (1–2 doc lines).
+* **Pushed** with exact leases: `phase7-hardware-integration` 9615d05→`d39c727`, `hardware-validation-2026-10-14`
+  868331c→`171990e`, `phase6e-work-preparation` 7d8a4c0→`94b89a3`, `phase7a-interface-discovery` be0d3f3→`820412d`.
+  Local branches reset to them; hash references in the docs translated with filter-repo's commit map (34 in 15 files).
+* **Not rewritten:** `main` (`ef61433`, all 29 commits carry the personal identity — see below) and GitHub's
+  `refs/pull/1..3` (read-only, GitHub-managed; they keep the old commits; removing them needs GitHub support). GitHub
+  may also keep the old commits reachable by hash until its garbage collection; the repository is private.
+* **Open (owner decision): `main`.** Keeping `main` unchanged leaves the identity in the default branch, and the
+  rewritten development branch no longer shares commits with it (the common history up to `f641709` now has new
+  hashes), so a later merge would duplicate those 14 commits. Rewriting `main` with the same rules (prepared and
+  verified in the disposable mirror: `ef61433` → `9da2276`, tree differs in one doc line) restores the common history.
+  It needs a force-push to the protected default branch.
+
 ### Arch
 
 Done in Phase 9D: `namcap` (installed for this: `namcap` + 3 Python libraries, no upgrades) — see the checklist.
@@ -334,7 +358,7 @@ CachyOS host; nothing installed, the running user-local installation, service, t
 Release build: CTest 292/292, GUI 57/57, tray 17/17, race 7/7 (5 repeats in 9B; race and tray also under
 ASan/UBSan); `build-asan`: 272/272; USB audit PASS; `packaging_staging` and `install_staging_user_unit` PASS;
 real rootless `makepkg`: `check()` 291/291 — its first run exposed the single-instance socket-path defect fixed in
-`f90f528`; privacy grep and `git diff --check` clean.
+`67f866f`; privacy grep and `git diff --check` clean.
 
 ## Validation run (Phase 9A)
 

@@ -11,7 +11,7 @@ was performed. Compare with
 
 ## New normal-boot evidence: owner-reported shutdown/start
 
-The worktree was clean at `4deec9d7166d96a3bae0bf2480586ab6812af2a8`
+The worktree was clean at `acdb41b54f0d60c0d03101e2a8a6cf85a18b031e`
 before capture. The host booted at approximately **23:46:20 CEST** with the
 same `7.2.10-1-cachyos` kernel, PipeWire `1:1.6.9-1` and WirePlumber
 `0.5.18-1.1`. The private 0600 topology snapshot was captured at 23:47:35

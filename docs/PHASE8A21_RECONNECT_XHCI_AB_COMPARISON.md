@@ -14,7 +14,7 @@ performed by OpenWitty; the only physical action was one user-performed unplug/r
    no device action): deadline path, SIGTERM path and SIGKILL-of-parent path all left tracefs identical to the
    baseline (kprobe_events empty, no instances, buffer 1410 KB, tracing_on 1). Caveat found: `pkill -f` by name
    also kills the watchdog (same command line); kill the session by PID.
-4. Preparation checkpoint committed and pushed (`c9d23a6`) before the hardware step.
+4. Preparation checkpoint committed and pushed (`256d0d7`) before the hardware step.
 5. Pre/post state via the GET-only `openwitty-cli read settings --method interface --interface 3`, `amixer -c C2
    controls` (names only), `pw-dump`, `pactl get-sink-volume` (no volume/mute SET at any point).
 

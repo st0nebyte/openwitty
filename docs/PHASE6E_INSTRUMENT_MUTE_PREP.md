@@ -4,7 +4,7 @@ Status: **prepared and tested against simulation only.** No instrument-mute SET 
 been sent to a real CONNECT 2. Authorization to *execute* it on hardware has **not** been
 given; the existing hardware-write approval covers LED brightness (byte 37) only.
 
-Baseline: branch `hardware-validation-2026-10-14` @ `d4f99c6` (106 tests). This branch adds
+Baseline: branch `hardware-validation-2026-10-14` @ `dd34dc3` (106 tests). This branch adds
 11 tests (117 total on the full build).
 
 ## What was added

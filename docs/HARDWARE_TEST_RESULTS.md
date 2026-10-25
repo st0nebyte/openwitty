@@ -764,9 +764,9 @@ all three trials with identical values each time — flagged for future investig
 The observations in this section were recorded during the preceding validation session; they are
 preserved here as that session's evidence and are not claims of a later independent retest.
 
-Branch `phase7-hardware-integration` (merge of `hardware-validation-2026-10-14` @ `868331c` into
-`phase7a-interface-discovery` @ `be0d3f3`, which itself sits on `phase6e-work-preparation` @
-`7d8a4c0`). Full history/branch verification and merge conflict resolution recorded in the merge
+Branch `phase7-hardware-integration` (merge of `hardware-validation-2026-10-14` @ `171990e` into
+`phase7a-interface-discovery` @ `820412d`, which itself sits on `phase6e-work-preparation` @
+`94b89a3`). Full history/branch verification and merge conflict resolution recorded in the merge
 commit message; not repeated here. Build: 54/54 targets. Full suite: 137/137, stable across 3
 repeated runs (exceeds the expected 135 Phase-7A baseline + 3 Panic Mute tests).
 
@@ -859,7 +859,7 @@ confirmation. That separate session is recorded in §18 below.
 ## 18. Phase 7C — live read-only GUI validation, 2026-10-17
 
 This is a new hardware session, distinct from the prior-session record in §17. The starting tree
-was clean on `phase7-hardware-integration` at `087dcd1`. The CONNECT 2 (`29c2:0004`) was present
+was clean on `phase7-hardware-integration` at `33c19f2`. The CONNECT 2 (`29c2:0004`) was present
 in normal mode, interface 3 was vendor-specific (`ff/f0/00`) and unbound, and the current user had
 usbfs access. The ALSA `snd-usb-audio` card remained present. No kernel driver was detached, no DFU
 interface was opened, and no USB SET was sent. All physical changes below were made by the owner
@@ -1035,11 +1035,11 @@ multi-client test.
 
 ### 20. Phase 7E — independent data freshness (2026-10-17)
 
-The Phase 7E software work starts from `f793ab7` on `phase7-hardware-integration` with a clean
+The Phase 7E software work starts from `0c8dcc9` on `phase7-hardware-integration` with a clean
 worktree. At inspection time a previously launched read-only GUI owned the control lease and the
 CONNECT 2 was enumerated. **No new physical fault, concurrent-client, unplug/replug or manual
 control experiment was performed for this section.** Phase 7D's physical observations and
-stage timings above remain the last real-device measurements. The `f793ab7` compact-header fix
+stage timings above remain the last real-device measurements. The `0c8dcc9` compact-header fix
 still has an automated layout check, but has not been reconfirmed by a new real-device screenshot.
 
 Settings and status now carry independent monotonic last-success timestamps. At the production
@@ -1090,7 +1090,7 @@ checks, **not** real USB or physical-control latency measurements.
 
 ### 21. Phase 7F — read-only acceptance and meter-source investigation (2026-10-17)
 
-Starting branch `phase7-hardware-integration` at `53c24e80655270f144bb057e6ceb838f03327ee0`
+Starting branch `phase7-hardware-integration` at `91c58bffa1be1cbb19410a091a6cad03df7e4f41`
 was clean. Passive USB enumeration found a CONNECT 2 (`29c2:0004`); its usbfs node was
 read/write-accessible to the logged-in user through the existing ACL. ALSA and PipeWire both
 listed the interface. A previously running OpenWitty GUI (PID 13477) held the per-user
@@ -1153,7 +1153,7 @@ read-only software baseline and plan documentation, not the pending real-screen 
 ### 22. Phase 7G — initial read-only meter rendering (2026-10-17)
 
 Starting branch `phase7-hardware-integration` at
-`2ed45798179595351bf547e65b9e2a3f0a89c097` was clean. The older GUI had been closed
+`a39144c32b0df889e9ea5939533898c311c06b5d` was clean. The older GUI had been closed
 normally; no OpenWitty process held the control lease. Passive enumeration found the CONNECT 2
 in application mode and ALSA listed its USB-Audio card. The new eight-channel presentation
 model was first exercised by deterministic unit/QML tests and an offscreen mock screenshot.
@@ -1197,7 +1197,7 @@ separately approval-gated.
 
 ### 23. Phase 7G.2 — bounded meter diagnostic prepared (2026-10-18)
 
-Starting branch `phase7-hardware-integration` at `727a3da20ed54588b35561bd3126826c26bb3ac6`
+Starting branch `phase7-hardware-integration` at `49d1e199ca958f15fe504fd40ca3c1992800dff9`
 was clean. Passive checks found one CONNECT 2 in normal application mode (`29c2:0004`),
 vendor-specific control interface 3 (`ff/f0`, zero endpoints, unbound), a writable usbfs node
 through the existing user ACL, and the card in ALSA/PipeWire. No OpenWitty process or held
@@ -1262,7 +1262,7 @@ either approved probe run. This is an owner report, not instrumented XRUN eviden
 
 ### 24. Phase 7G.3 — opt-in 8 Hz real-GUI comparison (in progress, 2026-10-18)
 
-The branch started clean at `214a5e0e0a456e24e59f6091a9b4b24963cf18cf`. A temporary
+The branch started clean at `fb0a335008825ea8eb8d708f2c0652d05ecc256c`. A temporary
 `--experimental-status-8hz` GUI startup option changes only the real-device status timer
 from 250 to 125 ms and settings from every second to every fourth status tick, preserving
 2 Hz settings. Status age thresholds become 188 ms fresh / 375 ms stale in the opt-in mode;
@@ -1317,7 +1317,7 @@ sample, a separate 128-byte read remained unchanged, and no periodic control
 errors were observed. The report/JSON reside on a separate Windows computer
 and were not read in this Linux session. These are **not OpenWitty measurements**.
 
-The local branch started clean at `f13bdafd6c78ea075ec99c4986c6493a0c3a092a`.
+The local branch started clean at `5b8e54994bf0061c1693209b1ffde12dd09a40ea`.
 The existing read-only meter probe was extended to bounded 40/48 Hz allowlisted
 rates, with at most 400/480 status GETs over ten seconds, respectively, and one
 API GET per run. It remains dry-run-only without `--execute` and holds the same
@@ -1472,7 +1472,7 @@ its 4 Hz production status default
 ### 26. Phase 7G.5 — experimental 48 Hz GUI software preparation (2026-10-18)
 
 Starting from clean branch `phase7-hardware-integration` at
-`ba34d701a61cf2a91d18ed3cd2bb778c90fea960`, an explicitly selectable
+`3e85ad6a54db1fa21f1aedc573326a1b14dad1d4`, an explicitly selectable
 `--experimental-status-48hz` **real read-only GUI** mode was added. This phase
 did **not** launch that mode against the physical device. The 4 Hz production
 default, existing 8 Hz option, 2 Hz settings target, single control owner,
@@ -1498,7 +1498,7 @@ capability was enabled, and no 48 Hz GUI GET was sent in this phase.
 
 ### 27. Phase 7G.5 — approved 48 Hz real-GUI visual run (2026-10-18)
 
-The owner explicitly approved launching the prepared read-only GUI with white-noise playback. Preflight found a clean worktree at `a06601e06cf6647b4456a5a0514bc9f97a238e08`, the CONNECT 2 at USB VID:PID `29c2:0004`, accessible vendor interface 3, no competing OpenWitty process or held control lease, and CONNECT 2 audio interfaces still attached to `snd-usb-audio`. No serial or raw USB capture is recorded here.
+The owner explicitly approved launching the prepared read-only GUI with white-noise playback. Preflight found a clean worktree at `8f24d3af3ad81273e046897413dbf0e36922c018`, the CONNECT 2 at USB VID:PID `29c2:0004`, accessible vendor interface 3, no competing OpenWitty process or held control lease, and CONNECT 2 audio interfaces still attached to `snd-usb-audio`. No serial or raw USB capture is recorded here.
 
 Launch command: `OPENWITTY_TRACE_LATENCY=2 OPENWITTY_TRACE_METER_FRAMES=1 build-release/src/gui/openwitty --experimental-status-48hz`. The same serialized, leased control connection was used; no GUI USB write path was enabled. A sustained trace segment yielded an average interval equivalent to **48.00 status GETs/s** (median gap about 20.4 ms; p95 about 21.4 ms), while settings GETs continued at approximately **2/s**. Status GET median was about 0.26 ms and p95 about 0.30 ms. No USB errors appeared in the observed diagnostic output. These are internal timings, not physical-sound-to-screen latency.
 

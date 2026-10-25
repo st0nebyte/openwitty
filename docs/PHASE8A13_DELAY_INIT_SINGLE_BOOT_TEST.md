@@ -24,7 +24,7 @@ no existing `usbcore.quirks` override. `/proc/cmdline` visibility ≠ proof the 
 
 ## Preflight baseline (2026-10-23 20:25 CEST, read-only)
 - Repo `st0nebyte/openwitty`, branch `phase7-hardware-integration`, HEAD
-  `1e92e3720eca75a78c0a6e87d5367dc9203e727b` = origin; `main` = `ef6143363cdd69c25e3baa8f278068d838a6ac72`;
+  `c98d886b56162ea2f77b4c6395dbc1c8384beda3` = origin; `main` = `ef6143363cdd69c25e3baa8f278068d838a6ac72`;
   worktree clean at start.
 - Other agent processes seen: a separate `codex` CLI session (cwd = home dir, not the repo) and the
   background Codex daemon; no file in the repo was modified in the previous 20 min. No

@@ -219,7 +219,7 @@ change still not followed afterwards is reported as before. The vendor fallback 
 three steps up and three down, device followed each with ≈0.7 s delay, no notice, final state consistent (−17.50 dB).
 
 ### Follow-up review (offline, after Phase 8H)
-Both findings below were **reproduced by deterministic tests** against the code of `87af0f7` (they failed before the fix);
+Both findings below were **reproduced by deterministic tests** against the code of `33a41b1` (they failed before the fix);
 neither was observed on the device. Fixed without changing the architecture, the fresh read before every decision, the
 no-retry rule or the never-unmute rule.
 
@@ -252,7 +252,7 @@ no-retry rule or the never-unmute rule.
 **Settings wording.** The switch is now "Show the volume knob in the desktop volume" and explains that Linux cannot see the
 knob, while the desktop slider and the Mute button work without OpenWitty.
 
-## Suspend/resume (Phase 8I, 2026-10-25, installed `07220fb`)
+## Suspend/resume (Phase 8I, 2026-10-25, installed `39c66cf`)
 Service enabled in mirror mode (fallback and speaker/headphone control off). Before: service PID unchanged since start,
 0 restarts; device −20.00 dB unmuted (service's vendor GET), ALSA −20.00 dB on, sink 0.46; quirk active; output route
 with `route.hw-volume`/`route.hw-mute`; `mem_sleep` = deep, USB `power/control` = on, `persist` = 1.

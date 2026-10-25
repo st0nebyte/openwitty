@@ -139,7 +139,7 @@ device is affected and your own session never reads that file.
    | OpenWitty installed as | File |
    |---|---|
    | system package | `/usr/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf` |
-   | user-local CMake install | `~/.local/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf` (installs of `72a71f7` or later) |
+   | user-local CMake install | `~/.local/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf` (installs of `7e215ff` or later) |
    | source checkout | `packaging/wireplumber/51-openwitty-connect2-login-screen.conf` |
 
    Check with `ls -l <file>`; if it is missing, your installation predates the rule — use the source checkout's copy.
