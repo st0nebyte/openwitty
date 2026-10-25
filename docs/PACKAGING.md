@@ -20,7 +20,11 @@ root and nothing is installed on the build host.
 * The `.deb` Depends come from `dpkg-shlibdeps` (Qt, libusb, alsa-lib) plus `qml6-module-qtquick`,
   `qml6-module-qtquick-window`, `qml6-module-qtquick-shapes`, `qt6-qpa-plugins` and `libqt6svg6` (QML modules and
   the SVG image plugin are loaded at run time, so shlibdeps cannot see them).
-* Run-time dependencies on Arch: `qt6-base qt6-declarative qt6-svg libusb alsa-lib hicolor-icon-theme`.
+* Run-time dependencies on Arch: `qt6-base qt6-declarative qt6-svg libusb alsa-lib hicolor-icon-theme` (`qt6-base`
+  also provides Qt Widgets, Network and D-Bus for the tray icon and the single-instance channel).
+* `openwitty-tray` is installed but never autostarted by a package: there is no `/etc/xdg/autostart` entry; the
+  login entry is written into the user's `~/.config/autostart` only by the Settings switch. The tray links no
+  libusb and no ALSA (checked by `packaging_staging` and `desktop_single_instance_and_tray`).
 * The systemd user unit is installed **disabled**; packages put it into the distribution's user unit directory
   by passing an absolute `-DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user` (the default
   `<prefix>/share/systemd/user` is also on systemd's search path and is right for `~/.local`). Note: the exact

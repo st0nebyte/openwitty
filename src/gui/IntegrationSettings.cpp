@@ -1,25 +1,18 @@
 #include "IntegrationSettings.hpp"
 
 #include <QClipboard>
+#include <QFileInfo>
 #include <QGuiApplication>
-#include <QProcess>
+#include <QStandardPaths>
 
+#include "GuiActivation.hpp"
+#include "ServiceState.hpp"
+#include "TrayAutostart.hpp"
 
 using namespace lewitt;
 
 namespace {
-constexpr const char* kUnit = "openwitty-volumed.service";
-
-int runProcess(const QString& program, const QStringList& args, QString* out) {
-    QProcess p;
-    p.start(program, args);
-    if (!p.waitForFinished(5000)) {
-        p.kill();
-        return -1;
-    }
-    if (out) *out = QString::fromUtf8(p.readAllStandardOutput());
-    return p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -1;
-}
+constexpr const char* kUnit = kVolumeServiceUnit;
 }  // namespace
 
 static std::optional<AudioSetupStatus> realProbe() {
@@ -30,9 +23,13 @@ static std::optional<AudioSetupStatus> realProbe() {
 #endif
 }
 
-IntegrationSettings::IntegrationSettings(QObject* parent, Runner runner, SetupProbe probe)
-    : QObject(parent), runner_(runner ? std::move(runner) : Runner(runProcess)),
+IntegrationSettings::IntegrationSettings(QObject* parent, Runner runner, SetupProbe probe, Launcher launcher,
+                                         QString trayProgram)
+    : QObject(parent), runner_(runner ? std::move(runner) : Runner(runCommand)),
       probe_(probe ? std::move(probe) : SetupProbe(realProbe)),
+      launcher_(launcher ? std::move(launcher) : Launcher(spawnDetached)),
+      trayProgram_(trayProgram.isEmpty() ? siblingProgram("openwitty-tray") : std::move(trayProgram)),
+      trayAutostart_(trayAutostartEnabled()),
       path_(QString::fromStdString(userConfigPath())) {
     // Configuration and service state only; the setup check (opens the CONNECT 2's ALSA mixer) runs when
     // the Desktop integration page is opened (refresh()).
@@ -53,27 +50,36 @@ int IntegrationSettings::run(const QString& program, const QStringList& args, QS
 
 void IntegrationSettings::refresh() {
     loadConfig();
+    trayAutostart_ = trayAutostartEnabled();
     refreshService();
     refreshSetup();
     emit changed();
 }
 
 void IntegrationSettings::refreshService() {
-    QString out;
-    const int rc = run("systemctl", {"--user", "show", "-p", "LoadState", "-p", "UnitFileState", "-p", "ActiveState", kUnit}, &out);
-    if (rc != 0) {
-        serviceState_ = "unknown";
-        return;
+    serviceState_ = serviceStateName(queryServiceState(runner_));
+}
+
+bool IntegrationSettings::trayInstalled() const {
+    const QFileInfo fi(trayProgram_);
+    return fi.isAbsolute() ? fi.isExecutable() : !QStandardPaths::findExecutable(trayProgram_).isEmpty();
+}
+
+bool IntegrationSettings::setTrayAutostart(bool on) {
+    QString err;
+    bool ok;
+    if (on) {
+        ok = trayInstalled() && enableTrayAutostart(trayProgram_, &err);
+        if (!trayInstalled()) err = "the tray icon (openwitty-tray) is not installed";
+        if (ok && !launcher_(trayProgram_, {})) err = "the login entry was written, but the tray icon could not be started now";
+    } else {
+        ok = disableTrayAutostart(&err);
+        if (trayInstalled()) run(trayProgram_, {"--quit"});   // a running icon goes away now; harmless if none runs
     }
-    auto value = [&](const QString& key) {
-        for (const auto& line : out.split('\n'))
-            if (line.startsWith(key + "=")) return line.mid(key.size() + 1).trimmed();
-        return QString();
-    };
-    if (value("LoadState") != "loaded") serviceState_ = "not-installed";
-    else if (value("ActiveState") == "active") serviceState_ = "active";
-    else if (value("UnitFileState") == "enabled") serviceState_ = "enabled";
-    else serviceState_ = "disabled";
+    trayAutostart_ = trayAutostartEnabled();
+    lastError_ = err.isEmpty() ? QString() : "System tray icon: " + err + ".";
+    emit changed();
+    return ok && err.isEmpty();
 }
 
 void IntegrationSettings::refreshSetup() {
@@ -173,6 +179,7 @@ bool IntegrationSettings::resetToDefaults() {
         problems << (serviceState_ == "unknown"
                          ? QString("the background service state could not be checked")
                          : QString("the background service could not be disabled (%1)").arg(lastError_));
+    if (trayAutostart_ && !setTrayAutostart(false)) problems << "the tray icon login entry could not be removed";
     if (problems.isEmpty()) {
         lastError_.clear();
     } else {

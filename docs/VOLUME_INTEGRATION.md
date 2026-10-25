@@ -80,7 +80,8 @@ systemctl --user disable --now openwitty-volumed.service    # undo
 | Keep it running when OpenWitty is closed | off | `systemctl --user enable --now` / `disable --now` of `openwitty-volumed.service`, only when you flip it; shows "not installed / off / on / running" | no |
 | Vendor fallback | off; needs desktop sync | if the device does not follow a desktop volume change, the background service applies it through the vendor protocol (speaker volume/mute only, ≤ 10 dB louder per step, read-back verified, never at start-up). Enabling shows an explanation that must be confirmed | **yes** |
 | Speaker/headphone control | off | OpenWitty's own speaker and headphone faders may change the device (scoped to those bytes, ≤ 10 dB louder per step, read-back verified); confirmation required; applied at once by reconnecting the session | **yes** |
-| Reset desktop integration | – | after confirmation: all of the above off and the background service disabled; the kernel quirk is not touched | no |
+| Show OpenWitty in the system tray | off | starts `openwitty-tray` now and at login (XDG autostart entry); off removes the entry and quits the icon. The icon shows the knob-display and service state and opens OpenWitty; it never uses the device and never changes the service (Phase 9B) | no |
+| Reset desktop integration | – | after confirmation: all of the above off, the background service disabled and the tray login entry removed; the kernel quirk is not touched | no |
 
 The page also shows the setup status (sound card present, hardware volume available, kernel quirk configured/active,
 plain-language findings) and explains the kernel quirk with the exact line to install and how to remove it; OpenWitty

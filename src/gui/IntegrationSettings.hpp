@@ -31,13 +31,19 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(bool quirkActive READ quirkActive NOTIFY changed)
     Q_PROPERTY(QStringList findings READ findings NOTIFY changed)
     Q_PROPERTY(QString quirkInstructions READ quirkInstructions CONSTANT)
+    // Optional system tray icon (openwitty-tray): installed at all, and started at login (XDG autostart).
+    Q_PROPERTY(bool trayInstalled READ trayInstalled CONSTANT)
+    Q_PROPERTY(bool trayAutostart READ trayAutostart NOTIFY changed)
 public:
     // Runs a command (program + arguments), returns its exit status and stdout. Injectable for tests.
     using Runner = std::function<int(const QString& program, const QStringList& args, QString* out)>;
     // Collects the desktop audio setup status; nullopt = not available (built without ALSA). Injectable
     // so tests never open the real device's mixer.
     using SetupProbe = std::function<std::optional<lewitt::AudioSetupStatus>()>;
-    explicit IntegrationSettings(QObject* parent = nullptr, Runner runner = {}, SetupProbe probe = {});
+    // Starts a program detached (the tray icon). Injectable for tests.
+    using Launcher = std::function<bool(const QString& program, const QStringList& args)>;
+    explicit IntegrationSettings(QObject* parent = nullptr, Runner runner = {}, SetupProbe probe = {},
+                                 Launcher launcher = {}, QString trayProgram = {});
 
     bool desktopSync() const { return cfg_.desktopVolumeSync == lewitt::DesktopVolumeSync::Mirror; }
     bool vendorFallback() const { return cfg_.vendorFallback; }
@@ -57,6 +63,9 @@ public:
     bool quirkActive() const { return quirkActive_; }
     QStringList findings() const { return findings_; }
     QString quirkInstructions() const;
+    bool trayInstalled() const;
+    bool trayAutostart() const { return trayAutostart_; }
+    QString trayProgram() const { return trayProgram_; }
     const lewitt::UserConfig& config() const { return cfg_; }
 
     Q_INVOKABLE void refresh();                        // config + service state + setup check
@@ -70,6 +79,9 @@ public:
     // Defaults in the file, then the background service off. Partial failure is reported in lastError.
     Q_INVOKABLE bool resetToDefaults();
     Q_INVOKABLE void copyQuirkInstructions();
+    // On: write the login autostart entry and start the tray icon now (it is single-instance). Off: remove
+    // the entry and ask a running tray icon to quit. Never touches the background service.
+    Q_INVOKABLE bool setTrayAutostart(bool on);
 
 signals:
     void changed();
@@ -85,6 +97,9 @@ private:
 
     Runner runner_;
     SetupProbe probe_;
+    Launcher launcher_;
+    QString trayProgram_;
+    bool trayAutostart_{false};
     QString path_;
     lewitt::UserConfig cfg_;
     QStringList warnings_;

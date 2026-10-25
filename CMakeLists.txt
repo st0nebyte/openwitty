@@ -67,9 +67,13 @@ add_library(lewitt_core STATIC
     src/core/WriteVerification.cpp
     src/core/DeviceManager.cpp
     src/core/OutputControl.cpp
-    src/core/VolumeSync.cpp
-    src/core/UserConfig.cpp)
+    src/core/VolumeSync.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
+# The user settings file on its own (no USB, no ALSA): shared by the core and the tray companion.
+add_library(lewitt_config STATIC src/core/UserConfig.cpp)
+target_include_directories(lewitt_config PUBLIC src ${CMAKE_BINARY_DIR}/generated)
+target_compile_options(lewitt_config PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(lewitt_core PUBLIC lewitt_config)
 target_compile_options(lewitt_core PRIVATE -Wall -Wextra -Wpedantic)
 if(LEWITT_ENABLE_USB)
     target_link_libraries(lewitt_core PUBLIC PkgConfig::LIBUSB)
@@ -337,7 +341,7 @@ find_program(LEWITT_GZIP gzip)
 if(LEWITT_GZIP)
     set(_gzdir ${CMAKE_BINARY_DIR}/packaging-gz)
     file(MAKE_DIRECTORY ${_gzdir})
-    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1 man/openwitty-volumed.1)
+    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1 man/openwitty-volumed.1 man/openwitty-tray.1)
         get_filename_component(_n ${_f} NAME)
         if(_n STREQUAL "changelog")
             set(_out ${_gzdir}/changelog.Debian.gz)
@@ -356,6 +360,9 @@ if(LEWITT_GZIP)
             DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
     if(TARGET openwitty-volumed)
         install(FILES ${_gzdir}/openwitty-volumed.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    endif()
+    if(LEWITT_BUILD_GUI)
+        install(FILES ${_gzdir}/openwitty-tray.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
     endif()
     install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli.1.gz \
         \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz)

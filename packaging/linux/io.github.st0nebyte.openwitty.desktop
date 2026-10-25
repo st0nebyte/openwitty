@@ -7,12 +7,16 @@ Comment=Unofficial, experimental Linux control application for the LEWITT CONNEC
 Exec=openwitty
 Icon=openwitty
 Terminal=false
-StartupNotify=false
+StartupNotify=true
 StartupWMClass=openwitty
 Categories=AudioVideo;Audio;Mixer;
 Keywords=audio;interface;mixer;CONNECT 2;LEWITT;microphone;
-Actions=Simulated;
+Actions=DesktopIntegration;Simulated;
 
 [Desktop Action Simulated]
 Name=Start with simulated device
 Exec=openwitty --mock
+
+[Desktop Action DesktopIntegration]
+Name=Desktop integration settings
+Exec=openwitty --show settings-desktop

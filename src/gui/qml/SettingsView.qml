@@ -187,6 +187,15 @@ Rectangle {
                          + ". While this window is open it takes over." }
             Text { visible: integration.serviceIdleOn; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
                    text: "Desktop sync is off, so the background service only idles. You can turn it off here." }
+            ToggleSwitch { objectName: "trayAutostartSwitch"; width: 310; label: "Show OpenWitty in the system tray"
+                           visible: integration.trayInstalled
+                           checked: integration.trayAutostart
+                           tip: "Adds an OpenWitty icon to the system tray, now and at every login."
+                           onToggled: (b) => integration.setTrayAutostart(b) }
+            Text { visible: integration.trayInstalled; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "The icon shows whether the knob display and the background service are on, and opens this "
+                       + "window. It never uses the device. Closing this window keeps the background service running; "
+                       + "\"Quit tray icon\" in its menu removes only the icon." }
             Rectangle { width: 310; height: 1; color: "#333" }
             Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Options that write the device" }
             ToggleSwitch { width: 310; label: "Vendor fallback (writes the device)"
@@ -290,12 +299,12 @@ Rectangle {
 
     Rectangle {
         id: confirmReset
-        visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 130; radius: 6
+        visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 140; radius: 6
         color: Theme.panelHi; border.color: Theme.warn
         Column { anchors.centerIn: parent; spacing: 10
             Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
-                   text: "Turn off desktop volume sync, the vendor fallback, speaker/headphone control and the background "
-                       + "service? The kernel quirk, if you installed it, is not touched." }
+                   text: "Turn off desktop volume sync, the vendor fallback, speaker/headphone control, the background "
+                       + "service and the system tray icon? The kernel quirk, if you installed it, is not touched." }
             Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmReset.visible = false }
                 ToggleButton { width: 70; text: "Reset"; primary: true

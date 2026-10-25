@@ -36,6 +36,8 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 | 16 | Vendor fallback validated on hardware | **NOT DONE** — documented as experimental |
 | 17 | GUI *Speaker/headphone control* exercised on hardware | **NOT DONE** — documented as not exercised |
 | 18 | Version and release metadata decided | **OPEN** — see "Versioning" |
+| 19 | Tray icon and single window (Phase 9B): offscreen tests (tray unavailable, service disabled/running/idle/not installed, repeated opens, quit leaves the service alone, autostart on/off/reset), end-to-end single-instance script, no USB/ALSA linkage | PASS (offline) |
+| 20 | Tray icon and window activation live on KDE Plasma (Wayland) | **PENDING** — short user acceptance test, see below |
 
 ## Known limitations and experimental features
 
@@ -55,6 +57,21 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 * Not supported: CONNECT 6; firmware update and factory reset (deliberately not implemented); presets.
 * Not a replacement for LEWITT CONTROL CENTER.
 
+## Pending live check: tray icon and window activation (KDE Plasma, Wayland)
+
+Offline tests cannot show a real Status Notifier tray or Wayland focus. A short acceptance test on the
+development system (no device writes, no service changes beyond what the user switches):
+
+1. Settings → Desktop integration → "Show OpenWitty in the system tray": the icon appears; tooltip and menu show
+   the knob-display and service state as on the page.
+2. Close the window; left-click the icon: OpenWitty opens. Click it again (window open): the same window comes
+   to the front — check that KWin actually focuses it (without an activation token it may only highlight it).
+3. "Desktop integration settings…" opens that page; launcher action of the same name likewise.
+4. Turn the knob display off in the window: the tray status follows within a few seconds; the service line says idle.
+5. "Quit tray icon": the icon goes away; `systemctl --user is-active openwitty-volumed` is unchanged.
+6. Log out and in with the tray setting on: the icon comes back. Turn the setting off: icon and
+   `~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop` are gone.
+
 ## Installation and rollback
 
 `docs/INSTALLATION.md` (packages, user-local install, USB permission rule, kernel quirk, desktop integration,
@@ -64,6 +81,7 @@ service, uninstall). Rollback of a user-local install:
 systemctl --user disable --now openwitty-volumed.service      # if it was enabled
 xargs -d '\n' rm -f < build-local/install_manifest.txt
 systemctl --user daemon-reload
+openwitty-tray --quit; rm -f ~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop   # if the tray was on
 rm -r ~/.config/openwitty                                     # optional: settings
 ```
 

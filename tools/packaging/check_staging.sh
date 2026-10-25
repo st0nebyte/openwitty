@@ -18,7 +18,7 @@ DESTDIR=$stage cmake --install "$build" --prefix /usr >/dev/null || { echo "inst
 P=$stage/usr
 
 echo "== file layout"
-need=(bin/openwitty-cli bin/openwitty
+need=(bin/openwitty-cli bin/openwitty bin/openwitty-tray share/man/man1/openwitty-tray.1.gz
       share/applications/io.github.st0nebyte.openwitty.desktop
       share/metainfo/io.github.st0nebyte.openwitty.metainfo.xml
       share/icons/hicolor/scalable/apps/openwitty.svg
@@ -74,7 +74,7 @@ if [ -x "$build/openwitty-volumed" ]; then
 fi
 
 echo "== runtime independence"
-for b in "$P/bin/openwitty-cli" "$P/bin/openwitty" $( [ -x "$P/bin/openwitty-volumed" ] && echo "$P/bin/openwitty-volumed" ); do
+for b in "$P/bin/openwitty-cli" "$P/bin/openwitty" "$P/bin/openwitty-tray" $( [ -x "$P/bin/openwitty-volumed" ] && echo "$P/bin/openwitty-volumed" ); do
     n=$(basename "$b")
     if have readelf; then
         if readelf -d "$b" | grep -Eq 'RPATH|RUNPATH'; then bad "$n has RPATH/RUNPATH: $(readelf -d "$b" | grep -E 'RPATH|RUNPATH')"
@@ -90,10 +90,22 @@ for b in "$P/bin/openwitty-cli" "$P/bin/openwitty" $( [ -x "$P/bin/openwitty-vol
     fi
 done
 
+echo "== tray icon (optional, never autostarted by the package, no device code)"
+if (cd "$stage" && find . -path '*autostart*' | grep -q .); then bad "an autostart entry is installed"
+else ok "no autostart entry installed (the tray starts only when the user turns it on)"; fi
+if have readelf; then
+    readelf -d "$P/bin/openwitty-tray" | grep NEEDED | grep -Eq 'libusb|libasound' && bad "openwitty-tray links libusb/ALSA" \
+        || ok "openwitty-tray links neither libusb nor ALSA"
+fi
+
 echo "== launch (isolated, no hardware)"
-export QT_QPA_PLATFORM=offscreen HOME=$stage/home; mkdir -p "$HOME"
+export QT_QPA_PLATFORM=offscreen HOME=$stage/home XDG_RUNTIME_DIR=$stage/run XDG_CONFIG_HOME=$stage/home/.config
+mkdir -p "$HOME"; mkdir -m 700 "$XDG_RUNTIME_DIR"
 v=$("$P/bin/openwitty-cli" --version 2>&1) && ok "openwitty-cli --version: $v" || bad "openwitty-cli --version"
 "$P/bin/openwitty" --version >/dev/null 2>&1 && ok "gui --version" || bad "gui --version"
+"$P/bin/openwitty-tray" --version >/dev/null 2>&1 && ok "tray --version" || bad "tray --version"
+"$P/bin/openwitty-tray" --wait-for-tray-seconds 0 >/dev/null 2>&1 && ok "tray without a system tray exits cleanly" \
+    || bad "tray without a system tray failed"
 if "$P/bin/openwitty-cli" read settings --mock >/dev/null 2>&1; then ok "cli mock read"; else bad "cli mock read"; fi
 shot=$stage/shot.png
 if timeout 60 "$P/bin/openwitty" --mock --screenshot "$shot" >"$stage/gui.log" 2>&1 && [ -s "$shot" ]; then

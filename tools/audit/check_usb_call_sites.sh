@@ -106,6 +106,17 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
 grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }
+# Phase 9B: the tray companion and the shared desktop-UI helpers never reach the device, the control lease
+# or ALSA, and never change the background service (they only read `systemctl --user show`).
+if grep -rnE 'UsbTransport|DeviceSession|ControlLease|libusb|snd_|AlsaDesktopMixer|DesktopMixer|collectAudioSetup|#include "(transport|desktop|protocol|core/(DeviceSession|VolumeSync|OutputControl))' \
+       src/tray src/desktopui >/dev/null; then
+    echo "FAIL tray/desktop-UI code references device, lease or ALSA code:"
+    grep -rnE 'UsbTransport|DeviceSession|ControlLease|libusb|snd_|AlsaDesktopMixer|DesktopMixer|collectAudioSetup|#include "(transport|desktop|protocol|core/(DeviceSession|VolumeSync|OutputControl))' src/tray src/desktopui
+    fail=1
+else echo "ok   tray and desktop-UI helpers never reference device, lease or ALSA code"; fi
+if grep -rnE '"(enable|disable|start|stop|restart|kill|mask|--now)"' src/tray src/desktopui >/dev/null; then
+    echo "FAIL tray/desktop-UI code can change the background service"; fail=1
+else echo "ok   tray and desktop-UI helpers only read the service state"; fi
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

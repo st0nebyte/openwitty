@@ -36,6 +36,10 @@ What works on real hardware (one device, one system):
   `openwitty-volumed` user service keeps it working while the window is closed and starts with
   the desktop session. Validated with the window open and closed, handing over between the two,
   at boot/login and across suspend/resume. It never writes the device.
+- **Optional system tray icon** (`openwitty-tray`, Settings → Desktop integration): shows whether the knob
+  display and the background service are on and opens OpenWitty; it never uses the device. Opening
+  OpenWitty while it is already open brings the existing window to the front. (Tested offscreen; a live
+  KDE check is pending.)
 - **Mute button and desktop slider work natively:** the kernel already passes the Mute button
   and desktop volume/mute changes between the device and the desktop. OpenWitty is not involved.
 - **Kernel compatibility quirk (Linux 7.3):** on this kernel a broken microphone control of the

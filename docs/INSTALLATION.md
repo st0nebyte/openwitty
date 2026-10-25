@@ -17,6 +17,7 @@ performs them.
 | `bin/openwitty` | the application (Qt 6 / QML) |
 | `bin/openwitty-cli` (+ `lewitt-cli` alias) | diagnostic command-line tool, read-only unless a write command is explicitly enabled |
 | `bin/openwitty-volumed` | desktop volume service (see below) |
+| `bin/openwitty-tray` | optional system tray icon (see below); never started by the installation |
 | `lib/systemd/user/openwitty-volumed.service` (packages) or `share/systemd/user/…` (user-local/default builds) | systemd **user** unit, installed **disabled** |
 | `share/applications/io.github.st0nebyte.openwitty.desktop` | menu entry "OpenWitty" (+ "Start with simulated device") |
 | `share/metainfo/…metainfo.xml`, `share/icons/hicolor/…` | AppStream data, own icons (no LEWITT artwork) |
@@ -24,8 +25,8 @@ performs them.
 | `lib/udev/rules.d/70-openwitty.rules` | USB permission rule, **system packages only** |
 | `share/doc/openwitty/` | documentation, licences, `examples/openwitty-connect2.conf` (kernel quirk example, not active) |
 
-Run-time dependencies: Qt 6 (Core, Gui, Qml, Quick, Svg and the QtQuick QML modules), libusb-1.0 and
-alsa-lib. The desktop integration was tested with PipeWire/WirePlumber; `systemd` (user session) is
+Run-time dependencies: Qt 6 (Core, Gui, Widgets, Network, DBus, Qml, Quick, Svg and the QtQuick QML modules),
+libusb-1.0 and alsa-lib. The desktop integration was tested with PipeWire/WirePlumber; `systemd` (user session) is
 needed only for the optional background service.
 
 ## Arch Linux / CachyOS
@@ -138,7 +139,26 @@ journalctl --user -u openwitty-volumed
 systemctl --user disable --now openwitty-volumed.service
 ```
 
-**"Reset desktop integration"** turns everything off again and disables the service. The settings live in
+### System tray icon (optional)
+
+**"Show OpenWitty in the system tray"** (Settings → Desktop integration) starts `openwitty-tray` now and at every
+login (an XDG autostart entry in `~/.config/autostart/`); turning it off removes that entry and the icon. Its
+tooltip and menu show whether the volume knob is shown in the desktop volume and whether the background service
+runs; the menu has **Open OpenWitty**, **Desktop integration settings…** and **Quit tray icon**, and a left
+click opens OpenWitty. The icon only reads the settings file and `systemctl --user show`: it never uses the
+device and never starts or stops the service. On a desktop without a system tray it exits quietly; OpenWitty
+works the same without it. Tested offscreen; on KDE Plasma it uses the standard Status Notifier tray.
+
+### What closing and quitting do
+
+| Action | Effect |
+|---|---|
+| Close the OpenWitty window | the window ends and releases the device; a running background service takes it back |
+| "Quit tray icon" | only the icon goes away (until the next login, if the tray setting is on) |
+| "Keep it running…" off | the background service is disabled and stopped |
+| Open OpenWitty while it is open (launcher, tray) | the open window comes to the front; no second window, no second device session |
+
+**"Reset desktop integration"** turns everything off again, disables the service and removes the tray login entry. The settings live in
 `~/.config/openwitty/openwitty.conf`; deleting that file restores the defaults.
 
 The other options on that page write the device and need confirmation: *Speaker/headphone control* (OpenWitty's
@@ -148,7 +168,8 @@ the desktop volume).
 ## Uninstall
 
 1. In OpenWitty: Settings → Desktop integration → **Reset desktop integration** (or
-   `systemctl --user disable --now openwitty-volumed.service`).
+   `systemctl --user disable --now openwitty-volumed.service`, `openwitty-tray --quit` and
+   `rm ~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop`).
 2. Remove the program:
    * package: `sudo pacman -R openwitty` / `sudo apt remove openwitty`;
    * user-local: `xargs -d '\n' rm -f < build-local/install_manifest.txt` and `systemctl --user daemon-reload`

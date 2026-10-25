@@ -31,7 +31,12 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   hardware**.
 - `openwitty-cli`: device listing, diagnosis, read-only reads, and four opt-in single-setting write commands
   (LED brightness and speaker volume/mute verified on hardware; instrument mute prepared, never executed).
-- One-writer control lease shared by all OpenWitty processes; USB call-site audit; man pages for all three
+- Optional system tray icon `openwitty-tray` (Qt's Status Notifier tray, no KDE libraries): status of the knob
+  display and the background service, Open OpenWitty, Desktop integration settings, Quit tray icon. Never uses
+  the device or changes the service; started at login only when the user turns it on.
+- Single window per session: a second start brings the open window to the front (Wayland activation token
+  forwarded) instead of opening a second device session. Launcher action "Desktop integration settings".
+- One-writer control lease shared by all OpenWitty processes; USB call-site audit; man pages for all four
   programs; Arch PKGBUILD and Debian packaging; udev `uaccess` rule.
 
 ### Known limitations

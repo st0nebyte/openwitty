@@ -6,8 +6,11 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <cstdio>
+#include <memory>
 
 #include "DeviceController.hpp"
+#include "GuiActivation.hpp"
+#include "InstanceChannel.hpp"
 #include "IntegrationSettings.hpp"
 #include "lewitt/version.hpp"
 
@@ -50,6 +53,20 @@ int main(int argc, char** argv) {
         return 64;
     }
 
+    // One OpenWitty window per user session: a second start (launcher, tray) brings the running window to
+    // the front instead - before any device code runs, so there is never a second device session.
+    // Screenshot runs (offscreen tests, packaging checks) are independent of a running window.
+    std::unique_ptr<InstanceChannel> instance;
+    if (!p.isSet(shot)) {
+        const GuiActivation request{p.value(show), qEnvironmentVariable("XDG_ACTIVATION_TOKEN")};
+        if (InstanceChannel::send("gui", encodeGuiActivation(request))) {
+            std::puts("OpenWitty is already open: its window was brought to the front.");
+            return 0;
+        }
+        instance = std::make_unique<InstanceChannel>("gui");
+        instance->listen();   // if another start wins this race, the control lease still keeps one device owner
+    }
+
     DeviceController controller(nullptr, p.isSet(legacyPolling));
     if (p.isSet(quitAfterSeconds)) {
         QObject::connect(&controller, &DeviceController::errorChanged, &app, [&] {
@@ -73,15 +90,35 @@ int main(int argc, char** argv) {
             if (controller.traceEnabled())
                 QObject::connect(w, &QQuickWindow::frameSwapped, &controller, &DeviceController::traceFrameSwapped);
         }
-    if (p.isSet(show) && !engine.rootObjects().isEmpty()) {
+    auto showPage = [&](const QString& page) {
+        if (engine.rootObjects().isEmpty() || page.isEmpty()) return;
         QObject* root = engine.rootObjects().first();
-        if (p.value(show) == "settings") root->setProperty("showSettings", true);
-        if (p.value(show) == "settings-desktop") {
+        if (page == "settings") root->setProperty("showSettings", true);
+        if (page == "settings-desktop") {
             root->setProperty("showSettings", true);
             if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "desktop");
         }
-        if (p.value(show) == "wizard") root->setProperty("showWizard", true);
-        if (p.value(show) == "onboarding") root->setProperty("showOnboarding", true);
+        if (page == "wizard") root->setProperty("showWizard", true);
+        if (page == "onboarding") root->setProperty("showOnboarding", true);
+    };
+    if (p.isSet(show)) showPage(p.value(show));
+    if (instance) {
+        QObject::connect(instance.get(), &InstanceChannel::messageReceived, &app, [&](const QString& m) {
+            GuiActivation a;
+            if (!decodeGuiActivation(m, &a)) return;
+            auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0));
+            if (!w) return;
+            // Wayland: a token from the requester lets the compositor give us focus (Qt reads it from the
+            // environment on activation); without one the compositor may only highlight the window.
+            if (!a.token.isEmpty()) qputenv("XDG_ACTIVATION_TOKEN", a.token.toUtf8());
+            if (w->windowStates() & Qt::WindowMinimized) w->setWindowStates(w->windowStates() & ~Qt::WindowMinimized);
+            w->show();
+            w->raise();
+            w->requestActivate();
+            showPage(a.page);
+            std::puts("openwitty: activation request from another start (window brought to the front)");
+            std::fflush(stdout);
+        });
     }
     if (p.isSet(mock)) controller.connectMock();
     else controller.connectUsb();  // read-only; reports "not found" if absent

@@ -19,7 +19,12 @@ Settings \(-> Desktop integration shows whether the desktop hardware volume is a
 the optional kernel compatibility quirk, and can keep the desktop (KDE/PipeWire) volume in step
 with the speaker volume knob, also in the background through the
 .BR openwitty-volumed (1)
-user service.
+user service, and can add an optional status icon to the system tray
+.RB ( openwitty-tray (1)).
+.PP
+Only one window runs per desktop session: starting OpenWitty again (launcher, tray icon) brings the open
+window to the front, on the requested page, and the second start exits. Closing the window ends it and
+releases the device; the background service, if enabled, keeps running.
 .SH OPTIONS
 .TP
 .B \-\-mock
@@ -48,5 +53,6 @@ Deleting it restores the defaults (everything off).
 .SH SEE ALSO
 .BR openwitty-cli (1),
 .BR openwitty-volumed (1),
+.BR openwitty-tray (1),
 /usr/share/doc/openwitty/INSTALLATION.md,
 /usr/share/doc/openwitty/VOLUME_INTEGRATION.md

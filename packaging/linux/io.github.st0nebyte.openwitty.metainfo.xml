@@ -24,6 +24,8 @@
   <provides>
     <binary>openwitty</binary>
     <binary>openwitty-cli</binary>
+    <binary>openwitty-tray</binary>
+    <binary>openwitty-volumed</binary>
     <modalias>usb:v29C2p0004d*</modalias>
     <modalias>usb:v29C2p0002d*</modalias>
   </provides>

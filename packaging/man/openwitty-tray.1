@@ -1,0 +1,40 @@
+.TH OPENWITTY-TRAY 1 "October 2026" "openwitty 0.1.0" "User Commands"
+.SH NAME
+openwitty-tray \- OpenWitty status icon for the system tray (unofficial, experimental)
+.SH SYNOPSIS
+.B openwitty-tray
+.RB [ \-\-wait\-for\-tray\-seconds " n] [" \-\-quit "] [" \-\-version ]
+.SH DESCRIPTION
+An optional status icon for the desktop's system tray (KDE Plasma and other desktops that provide a
+Status Notifier host). Its tooltip and menu show whether the speaker volume knob is shown in the desktop
+volume and whether the
+.BR openwitty-volumed (1)
+background service runs. The menu opens OpenWitty, opens its Desktop integration settings, or quits the
+icon. A left click opens OpenWitty. An OpenWitty window that is already open is brought to the front
+instead of starting a second one.
+.PP
+The tray icon never opens the CONNECT 2, never reads the desktop mixer and never starts, stops or changes
+the background service: it reads only the OpenWitty settings file and \fBsystemctl \-\-user show\fR.
+Quitting it removes only the icon; closing the OpenWitty window does not stop the service either.
+.PP
+It is not started automatically after installation. Turn on \fIShow OpenWitty in the system tray\fR in
+OpenWitty under Settings \(-> Desktop integration to start it now and at every login; turning it off removes
+the login entry and quits a running icon. Only one tray icon runs per session.
+.SH OPTIONS
+.TP
+.BI \-\-wait\-for\-tray\-seconds " n"
+At login the system tray may appear a little later: wait up to n seconds (0\-300, default 30). Without a
+system tray the program then exits quietly; OpenWitty itself works without it.
+.TP
+.B \-\-quit
+Ask a running tray icon to quit, then exit.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/autostart/io.github.st0nebyte.openwitty-tray.desktop
+The login entry, present only while the setting is on.
+.TP
+.I $XDG_CONFIG_HOME/openwitty/openwitty.conf
+OpenWitty settings (read only).
+.SH SEE ALSO
+.BR openwitty (1),
+.BR openwitty-volumed (1)
