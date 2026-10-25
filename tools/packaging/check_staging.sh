@@ -34,7 +34,12 @@ need=(bin/openwitty-cli bin/openwitty
       share/doc/openwitty/USB_PERMISSIONS.md
       share/doc/openwitty/copyright)
 for f in "${need[@]}"; do [ -e "$P/$f" ] && ok "$f" || bad "missing $f"; done
-if grep -q 'LEWITT_HAVE_USB' "$build/CMakeCache.txt" 2>/dev/null || grep -q 'LEWITT_ENABLE_USB:BOOL=ON' "$build/CMakeCache.txt"; then
+# The udev rule is optional (LEWITT_INSTALL_UDEV_RULES, e.g. OFF for user-local installs): check exactly
+# what the configuration promises.
+if grep -q 'LEWITT_INSTALL_UDEV_RULES:BOOL=OFF' "$build/CMakeCache.txt" 2>/dev/null; then
+    [ ! -e "$P/lib/udev/rules.d/70-openwitty.rules" ] && ok "udev rule not installed (LEWITT_INSTALL_UDEV_RULES=OFF)" \
+        || bad "udev rule installed although LEWITT_INSTALL_UDEV_RULES=OFF"
+elif grep -q 'LEWITT_HAVE_USB' "$build/CMakeCache.txt" 2>/dev/null || grep -q 'LEWITT_ENABLE_USB:BOOL=ON' "$build/CMakeCache.txt"; then
     [ -e "$P/lib/udev/rules.d/70-openwitty.rules" ] && ok "udev rule (70-)" || bad "udev rule missing"
 fi
 # nothing outside the prefix, nothing proprietary

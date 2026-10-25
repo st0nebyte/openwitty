@@ -19,6 +19,11 @@ check "user-local ExecStart = installed binary" "grep -qx 'ExecStart=$tmp/home/.
 check "user-local binary exists and is executable" "[ -x '$tmp/home/.local/bin/openwitty-volumed' ]"
 check "user-local docs installed" "[ -f '$tmp/home/.local/share/doc/openwitty/VOLUME_INTEGRATION.md' ]"
 check "unit recorded in install manifest" "grep -q 'share/systemd/user/openwitty-volumed.service' '$build/install_manifest.txt'"
+# every installed file or link must be in the manifest (uninstall from the manifest leaves nothing behind)
+unlisted=$(cd "$tmp/home/.local" && find . \( -type f -o -type l \) | sed "s#^\.#$tmp/home/.local#" | while read -r f; do
+    grep -qxF "$f" "$build/install_manifest.txt" || echo "$f"; done)
+check "every installed file and link is in the manifest" "[ -z \"\$unlisted\" ]"
+[ -n "$unlisted" ] && echo "     not in manifest: $unlisted"
 check "no unenabled-unit leftovers in lib/systemd" "[ ! -e '$tmp/home/.local/lib/systemd/user/openwitty-volumed.service' ]"
 check "no configure-time placeholder left" "! grep -q '@CMAKE_INSTALL' '$u1'"
 if command -v systemd-analyze >/dev/null 2>&1; then

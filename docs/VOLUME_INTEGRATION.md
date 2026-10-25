@@ -38,7 +38,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 | Ordinary boot: quirk active, mixer loads, hardware-volume route present, FU2 SET reaches the device | observed once (Phase 8E, 2026-10-25) |
 | Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); the owner turned the speaker volume knob up (−36 → −27 dB), mirrored to the desktop step by step; the speaker output was already selected on the CONNECT 2, and the owner pressed the Mute button (short presses) several times, deliberately more often than planned; the speaker mute was mirrored to the desktop, and after a physical unmute the desktop was left muted with the notice, as designed; no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
 | The exact mute/unmute sequence of that test | not reconstructable (extra button presses, log without timestamps); the final unmuted desktop state is not attributed to the kernel, WirePlumber or OpenWitty. Logging fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level) |
-| Vendor fallback in the "SET ignored" state; GUI ↔ daemon hand-over; suspend/resume; second ordinary boot | not yet tested on the device |
+| Settings page + installed background service (Phase 8G, 2026-10-25, same boot, user-local install): all 8 steps below, see "Settings validation" | passed |
+| Vendor fallback in the "SET ignored" state; suspend/resume; second ordinary boot | not yet tested on the device |
 
 ## Kernel compatibility quirk
 `options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error` (example: `packaging/modprobe/openwitty-connect2.conf`).
@@ -131,7 +132,7 @@ systemctl --user daemon-reload
 rm -f ~/.config/openwitty/openwitty.conf                   # optional: forget the settings
 ```
 
-## First real-device validation of the settings (proposal)
+## Settings validation (real device)
 Scope: the Settings page, mirror on/off from the page, the background-service switch, the GUI ↔ daemon hand-over.
 **Vendor fallback and Speaker/headphone control stay off throughout.** Nothing changes the speaker level except the owner's
 knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or audio-service restart.
@@ -143,7 +144,8 @@ knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or
 4. Turn "Keep it running when OpenWitty is closed" on: `systemctl --user status` shows active; `journalctl --user -u
    openwitty-volumed` shows "waiting: device handed over" / "device in use by another OpenWitty client" while the window is open.
 5. Close the window: the service log shows "device connected" and a read-only start. Owner turns the knob: KDE follows
-   (service-hosted mirror). One small desktop decrease (`wpctl set-volume @DEFAULT_AUDIO_SINK@ <current−0.02>`): the device
+   (service-hosted mirror). One small desktop decrease (`wpctl set-volume <node-id> <current−0.02>`, after checking with
+   `wpctl inspect` that the node is the CONNECT 2 – never the default sink blindly): the device
    follows through the kernel, no "did not follow" notice.
 6. Reopen the window: the service releases the device ("another OpenWitty client asked for the device"), the window connects
    and mirrors; close it again: the service takes the device back.
@@ -154,6 +156,26 @@ knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or
 Evidence: service journal (journald timestamps), the settings file, `systemctl --user status`, vendor GET
 (`openwitty-cli read settings --method interface --interface 3`, only while no other OpenWitty process holds the device),
 `amixer -c <card> sget PCM`, `wpctl get-volume`.
+
+**Result (2026-10-25, Phase 8G, one machine, one boot; vendor fallback and Speaker/headphone control off throughout):**
+| Step | Observed |
+|---|---|
+| 1 | Install into `~/.local` (35 manifest entries incl. compatibility links); unit loaded, disabled, inactive; `systemd-analyze --user verify` clean; no settings file |
+| 2 | Page: hardware volume available, quirk active, all switches off, "Keep it running" disabled while sync is off, service "off" |
+| 3 | File written with `desktop_volume_sync = mirror`, both writing keys `false`; knob turns mirrored by the window (−50.9 → −20.0 dB); ALSA −20.00 dB (rounded down), sink 0.46; one "alignment skipped: the device changed meanwhile" during a fast turn (expected); no "did not follow" |
+| 4 | Unit enabled and active; journal: mirror mode, "waiting: device in use by another OpenWitty client" |
+| 5 | Window closed: "device connected", read-only start; knob mirrored over the full range (−60 → 0 dB); desktop decrease 1.00 → 0.98 reached the device through the kernel (device −0.50 dB, ALSA −0.50 dB); no vendor SET (read-only transport), no "did not follow" |
+| 6 | Reopen: "another OpenWitty client asked for the device: releasing it", window mirrored; close: same service process (no restart) took the device back read-only and mirrored |
+| 7 | Sync off: journal "settings changed: idle", page showed the "only idles" hint; service switch off: systemd stopped it cleanly, disabled/inactive |
+| 8 | Reset: file back to defaults, service disabled; window closed; vendor GET speaker −39.50 dB unmuted (headphone −32.40 dB muted, unchanged since the baseline), ALSA −39.50 dB on, sink 0.22 – consistent |
+
+Not covered by this run: the vendor fallback, the speaker/headphone control, the Mute button through the service, a second
+boot, suspend/resume, login with the service already enabled.
+
+**Why the desktop shows 10 % at the knob's minimum.** The CONNECT 2's speaker range ends at −60 dB, which is quiet but not
+silent. PipeWire/KDE display volume on a cubic scale, and −60 dB is exactly 10 % there (∛10⁻³). The mirror therefore shows
+10 %, the truth about the device. Dragging the desktop slider below 10 % sets the device to −60 dB and PipeWire attenuates the
+rest in software, which the knob cannot do. Silence from the device itself is the Mute button (mirrored as desktop mute).
 
 ## Prepared hardware checkpoints (optional, each needs the owner's go-ahead)
 1. **Reproduce the ordinary-boot result.** Owner reboots normally; nothing OpenWitty-related runs before the test; then

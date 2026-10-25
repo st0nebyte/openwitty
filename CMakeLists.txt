@@ -158,8 +158,10 @@ if(LEWITT_ENABLE_USB)
     endif()
 endif()
 # Compatibility alias for the pre-rebranding command name (docs, scripts, muscle memory).
+# Recorded in install_manifest.txt so an uninstall from the manifest does not leave a dangling link.
 install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli \
-    \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/lewitt-cli)")
+    \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/lewitt-cli)
+    list(APPEND CMAKE_INSTALL_MANIFEST_FILES \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/lewitt-cli\")")
 
 if(LEWITT_BUILD_TESTS)
     enable_testing()
@@ -353,7 +355,8 @@ if(LEWITT_GZIP)
     install(FILES ${_gzdir}/openwitty-cli.1.gz ${_gzdir}/openwitty.1.gz
             DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
     install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli.1.gz \
-        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz)")
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz)
+        list(APPEND CMAKE_INSTALL_MANIFEST_FILES \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz\")")
 endif()
 if(LEWITT_INSTALL_UDEV_RULES)
     install(FILES packaging/udev/70-openwitty.rules DESTINATION ${LEWITT_UDEV_RULES_DIR})
