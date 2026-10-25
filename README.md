@@ -70,6 +70,13 @@ What does **not** exist yet:
 
 See [FEATURES.md](FEATURES.md) for the exact list and evidence level.
 
+### Desktop volume (KDE/PipeWire)
+
+On Linux 7.3 the CONNECT 2's hardware volume may be missing from the desktop because of a broken microphone
+control on the device; a per-device kernel compatibility quirk works around it (opt-in, documented). The optional
+`openwitty-volumed` user service keeps the desktop volume in step with the hardware knob. Run
+`openwitty-volumed --check` for a read-only diagnosis, and see [docs/VOLUME_INTEGRATION.md](docs/VOLUME_INTEGRATION.md).
+
 ## Quick start (no hardware needed)
 
 ```sh

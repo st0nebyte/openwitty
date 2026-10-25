@@ -909,7 +909,7 @@ TEST(GuiState, UsbModeNeverClaimsSimulationOrWritability) {
 // Phase 8D: the desktop volume link is never active in simulation, even with the opt-in set.
 TEST(GuiBackend, DesktopVolumeLinkIsOffInSimulation) {
     app();
-    qputenv("OPENWITTY_OUTPUT_WRITES", "1");
+    qputenv("OPENWITTY_DESKTOP_SYNC", "1");
     {
         DeviceController c;
         c.connectMock();
@@ -917,5 +917,5 @@ TEST(GuiBackend, DesktopVolumeLinkIsOffInSimulation) {
         ASSERT_TRUE(waitFor([&] { return c.values().contains("desktop.volumeLink"); }));
         EXPECT_EQ(c.values()["desktop.volumeLink"].toString(), "off");
     }
-    qunsetenv("OPENWITTY_OUTPUT_WRITES");
+    qunsetenv("OPENWITTY_DESKTOP_SYNC");
 }

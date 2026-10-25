@@ -50,14 +50,15 @@ struct Rig {
     std::vector<std::string> log;
     VolumeSync::TimePoint t0 = VolumeSync::TimePoint{} + 100s;
 
-    explicit Rig(bool hardwareWrites = true, bool desktopWrites = true, double hwDb = -30, bool hwMuted = false) {
+    explicit Rig(DeviceWriteMode mode = DeviceWriteMode::Fallback, bool desktopWrites = true, double hwDb = -30,
+                 bool hwMuted = false) {
         auto t = std::make_unique<FakeHardware>(&mock);
         hw = t.get();
         session = std::make_unique<DeviceSession>(std::move(t), outputWritePolicy(true, false));
         EXPECT_TRUE(session->connect().ok());
         setDevice(hwDb, hwMuted);
         LinkOptions o;
-        o.hardwareWrites = hardwareWrites;
+        o.deviceWrites = mode;
         o.desktopWrites = desktopWrites;
         o.verify = fastPoll();
         link = std::make_unique<DesktopVolumeLink>(*session, mixer, VolumeSyncConfig{}, o,
@@ -98,7 +99,7 @@ TEST(DesktopLink, StartupIsReadOnlyForTheDeviceEvenIfTheDesktopIsLouder) {
 }
 
 TEST(DesktopLink, DryRunWritesNothingAnywhere) {
-    Rig r(/*hardwareWrites=*/false, /*desktopWrites=*/false);
+    Rig r(DeviceWriteMode::None, /*desktopWrites=*/false);
     r.mixer.level = {0.0, false};
     ASSERT_TRUE(r.link->start(r.t0));
     r.mixer.level = {-20.0, false};
@@ -290,7 +291,7 @@ TEST(DesktopLink, AlignmentNeverUnmutesAndExplainsTheDifference) {
 }
 
 TEST(DesktopLink, AlignmentRoundsDownToTheControlGrid) {
-    Rig r(true, true, -23.4, false);                             // between two 0.5 dB steps
+    Rig r(DeviceWriteMode::Fallback, true, -23.4, false);        // between two 0.5 dB steps
     r.mixer.level = {0.0, false};
     ASSERT_TRUE(r.link->start(r.t0));
     EXPECT_DOUBLE_EQ(r.mixer.level.db, -23.5);                   // not -23.0
@@ -310,4 +311,53 @@ TEST(DesktopLink, ChangeRejectedForAPendingEditIsVisibleAndRestoresConsistency) 
     r.session->discardPending();
     r.link->onHardwareSample(OutputLevel{-30.0, false}, r.t0 + 7s);
     EXPECT_TRUE(r.link->notice().empty());
+}
+
+// Native (default) mode: KDE/PipeWire stay authoritative through the kernel path; the link only mirrors.
+TEST(DesktopLinkNative, DeviceThatFollowsTheKernelIsLeftAlone) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-40.0, false};
+    r.setDevice(-40.0, false);                                  // the kernel's SET_CUR reached the device
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_TRUE(r.link->notice().empty());
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -40);
+}
+
+TEST(DesktopLinkNative, ADesktopChangeTheDeviceIgnoresIsReportedNeverWritten) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-40.0, false};                             // device ignores FU2: stays at -30
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -40);                    // the user's desktop value is not overwritten
+    EXPECT_NE(r.link->notice().find("did not follow"), std::string::npos);
+    r.mixer.level = {-30.0, false};                             // back in step (user moved back)
+    r.link->onDesktopEvent(r.t0 + 8s);
+    EXPECT_TRUE(r.link->notice().empty());
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLinkNative, KnobIsMirroredWithoutAnyDeviceWrite) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.setDevice(-22.0, false);
+    r.link->onPollTick(r.t0 + 7s);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -22);
+    r.setDevice(-26.0, true);                                   // knob down and mute button
+    r.link->onPollTick(r.t0 + 9s);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -26);
+    EXPECT_TRUE(r.mixer.level.muted);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLinkNative, LargeDesktopIncreaseIsTheUsersChoiceAndNotCorrected) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-5.0, false};
+    r.setDevice(-5.0, false);                                   // the kernel applied the user's slider
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -5);                     // no clamp fight with the native path
 }

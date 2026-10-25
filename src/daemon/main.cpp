@@ -1,19 +1,24 @@
-// openwitty-volumed: keeps the CONNECT 2 speaker output in step with the desktop volume.
+// openwitty-volumed: keeps the desktop's view of the CONNECT 2 speaker in step with the device.
 //
-// The KDE/PipeWire volume of the CONNECT 2 sink ends up in the card's ALSA "PCM Playback" control.
-// The kernel cannot read the device's speaker level back (broken GET_CUR), so knob changes never reach
-// the desktop, and in some device states (seen after software re-enumeration) the device ignores the
-// UAC Feature Unit requests that control produces. It always honours the vendor settings message on
-// interface 3. This daemon applies desktop volume/mute
-// changes to the device through that message and mirrors hardware-knob changes back to the desktop.
+// The KDE/PipeWire volume of the CONNECT 2 sink ends up in the card's ALSA "PCM Playback" control and,
+// in the normal case (verified on an ordinary boot, Phase 8E), reaches the device through the kernel:
+// KDE/PipeWire stay authoritative for slider moves. The kernel cannot read the speaker level back
+// ("broken GET_CUR"), so it never learns about hardware-knob changes; this daemon reads the device
+// through the vendor protocol (interface 3) and mirrors such changes to the desktop.
+//
+//   openwitty-volumed                    mirror mode (default): device opened READ-ONLY; knob changes are
+//                                        mirrored to the ALSA control under the alignment safety rules
+//                                        (fresh re-read, round down, never unmute); a desktop change the
+//                                        device does not follow is reported, never corrected
+//   openwitty-volumed --vendor-fallback  additionally applies such a change through the vendor settings
+//                                        message (speaker bytes only; for the verified exceptional state
+//                                        in which the device ignores Feature Unit 2). Needs
+//                                        LEWITT_ALLOW_HARDWARE_WRITE=1 and LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1
+//   openwitty-volumed --dry-run          writes nothing at all (neither device nor ALSA), logs decisions
+//   openwitty-volumed --check            read-only diagnosis of the desktop audio setup, no USB I/O
+// Options: --max-increase-db N (0..20, default 10, fallback only)  --poll-ms N (250..5000, default 1000)
 // Policy: core/VolumeSync.hpp (startup is read-only, bounded increases, no retries of unverified
 // writes, knob changes win over older desktop requests).
-//
-//   openwitty-volumed                      dry run: reads and logs decisions, writes nothing
-//   openwitty-volumed --allow-hardware-writes
-//                                          also needs LEWITT_ALLOW_HARDWARE_WRITE=1 and
-//                                          LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1 (exactly "1")
-// Options: --max-increase-db N (0..20, default 10)  --poll-ms N (250..5000, default 1000)
 //
 // Device ownership: the per-user ControlLease. When another OpenWitty client (the GUI) asks for the
 // device with a yield request, the daemon releases it and waits until the lease is free again.
@@ -31,7 +36,10 @@
 #include "core/Authorization.hpp"
 #include "core/DeviceSession.hpp"
 #include "core/OutputControl.hpp"
+#include <alsa/asoundlib.h>
+
 #include "desktop/AlsaDesktopMixer.hpp"
+#include "desktop/AudioSetupCheck.hpp"
 #include "desktop/DesktopVolumeLink.hpp"
 #include "transport/ControlLease.hpp"
 #include "transport/UsbTransport.hpp"
@@ -42,8 +50,11 @@ namespace {
 volatile std::sig_atomic_t gStop = 0;
 void onSignal(int) { gStop = 1; }
 
+enum class Mode { Mirror, Fallback, DryRun, Check };
+
 struct Args {
-    bool writes{false};
+    Mode mode{Mode::Mirror};
+    bool writes{false};               // vendor writes (fallback mode only)
     double maxIncreaseDb{10.0};
     int pollMs{1000};
     bool ok{true};
@@ -53,7 +64,9 @@ Args parse(int argc, char** argv) {
     Args a;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
-        if (s == "--allow-hardware-writes") a.writes = true;
+        if (s == "--vendor-fallback") a.mode = Mode::Fallback, a.writes = true;
+        else if (s == "--dry-run") a.mode = Mode::DryRun;
+        else if (s == "--check") a.mode = Mode::Check;
         else if (s == "--max-increase-db" && i + 1 < argc) {
             char* end = nullptr;
             a.maxIncreaseDb = std::strtod(argv[++i], &end);
@@ -88,6 +101,21 @@ std::unique_ptr<DeviceSession> makeSession(bool writes) {
     return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(readOnlyHardwareOptions()), WritePolicy{});
 }
 
+int runCheck() {
+    const AudioSetupStatus st = collectAudioSetup();
+    auto row = [](const char* k, const std::string& v) { std::printf("%-32s %s\n", k, v.c_str()); };
+    row("CONNECT 2 sound card:", st.card ? "ALSA card " + std::to_string(*st.card) : "not found");
+    row("ALSA mixer loads:", !st.card ? "-" : st.mixerLoadError ? snd_strerror(*st.mixerLoadError) : "yes");
+    row("hardware volume control:", st.volumeControl ? "yes (PCM Playback Volume)" : "no");
+    row("compatibility quirk configured:", st.quirkConfigured ? "yes" : "no");
+    for (const auto& f : st.quirkFiles) row("", f);
+    row("compatibility quirk active:", !st.moduleLoaded ? "snd-usb-audio not loaded" : st.quirkActive ? "yes" : "no");
+    const auto findings = audioSetupFindings(st);
+    if (findings.empty()) std::printf("\nDesktop hardware volume is available.\n");
+    for (const auto& f : findings) std::printf("\n- %s\n", f.c_str());
+    return findings.empty() ? 0 : 1;
+}
+
 void sleepMs(int ms) {
     for (int i = 0; i < ms / 50 && !gStop; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
@@ -96,15 +124,17 @@ void sleepMs(int ms) {
 int main(int argc, char** argv) {
     Args a = parse(argc, argv);
     if (!a.ok) {
-        say("usage: openwitty-volumed [--allow-hardware-writes] [--max-increase-db 0..20] [--poll-ms 250..5000]");
+        say("usage: openwitty-volumed [--vendor-fallback | --dry-run | --check] [--max-increase-db 0..20] "
+            "[--poll-ms 250..5000]");
         return 64;
     }
     if (geteuid() == 0) {
         say("refusing to run as root: run openwitty-volumed in the desktop user's session");
         return 2;
     }
+    if (a.mode == Mode::Check) return runCheck();
     if (a.writes && !(envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME"))) {
-        say("refused: --allow-hardware-writes also needs LEWITT_ALLOW_HARDWARE_WRITE=1 and "
+        say("refused: --vendor-fallback also needs LEWITT_ALLOW_HARDWARE_WRITE=1 and "
             "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1 (exactly \"1\")");
         return 2;
     }
@@ -115,10 +145,14 @@ int main(int argc, char** argv) {
     VolumeSyncConfig cfg;
     cfg.maxIncreaseDb = a.maxIncreaseDb;
     LinkOptions opt;
-    opt.hardwareWrites = a.writes;
-    opt.desktopWrites = a.writes;              // a dry run changes nothing at all, not even ALSA
-    say(std::string("openwitty-volumed: ") + (a.writes ? "hardware writes ENABLED (speaker volume/mute only)"
-                                                       : "dry run (no writes)"));
+    opt.deviceWrites = a.mode == Mode::Fallback ? DeviceWriteMode::Fallback
+                     : a.mode == Mode::Mirror   ? DeviceWriteMode::Native
+                                                : DeviceWriteMode::None;
+    opt.desktopWrites = a.mode != Mode::DryRun;   // a dry run changes nothing at all, not even ALSA
+    say(std::string("openwitty-volumed: ") +
+        (a.mode == Mode::Fallback ? "mirror + vendor fallback (device writes: speaker volume/mute only)"
+         : a.mode == Mode::Mirror ? "mirror mode (device read-only; desktop control follows the device)"
+                                  : "dry run (no writes)"));
 
     std::unique_ptr<DeviceSession> session;
     AlsaDesktopMixer mixer;

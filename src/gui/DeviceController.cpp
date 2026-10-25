@@ -133,7 +133,7 @@ void DeviceWorker::serviceDesktopLink() {
     }
     if (!link_) {
         LinkOptions o;
-        o.hardwareWrites = session_->writesEnabled();
+        o.deviceWrites = DeviceWriteMode::Native;   // KDE/PipeWire stay authoritative; the GUI only mirrors
         o.desktopWrites = true;
         link_ = std::make_unique<DesktopVolumeLink>(*session_, *mixer_, VolumeSyncConfig{}, o, [](const std::string& m) {
             std::fprintf(stderr, "openwitty: desktop volume: %s\n", m.c_str());
@@ -249,8 +249,9 @@ void DeviceWorker::connectUsb() {
                      outputWritePolicy(/*speaker=*/true, /*headphone=*/true));
     else
         adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
-    // The desktop volume follows only when output writes are opted in (and ALSA support is built).
-    desktopLinkWanted_ = envAuthorized("OPENWITTY_OUTPUT_WRITES");
+    // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device:
+    // separate opt-in OPENWITTY_DESKTOP_SYNC=1, independent of the output-write opt-in.
+    desktopLinkWanted_ = envAuthorized("OPENWITTY_DESKTOP_SYNC");
 #ifdef LEWITT_HAVE_ALSA
     if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
 #else

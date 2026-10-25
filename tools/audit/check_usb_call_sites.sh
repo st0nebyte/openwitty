@@ -72,6 +72,10 @@ if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/Dev
    || ! grep -A1 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/true)'; then
     echo "FAIL GUI output writes must be one gated outputControlHardwareOptions()+outputWritePolicy() site"; fail=1
 else echo "ok   GUI output writes: one site, exact opt-in, output-scoped policy"; fi
+# the GUI-hosted desktop link only mirrors (native mode); it never uses the vendor fallback
+if grep -q 'o.deviceWrites = DeviceWriteMode::Native' src/gui/DeviceController.cpp && ! grep -q 'DeviceWriteMode::Fallback' src/gui/*.cpp; then
+    echo "ok   GUI desktop link is native (mirror-only)"
+else echo "FAIL GUI desktop link must stay in native mode"; fail=1; fi
 # the output policy itself may only name the speaker/headphone volume and mute bytes
 if grep -A4 'std::vector<std::size_t> outputWriteOffsets' src/core/OutputControl.cpp | grep -q 'kSpeakerVolume, kSpeakerVolume + 1, kSpeakerMute' \
    && grep -A4 'std::vector<std::size_t> outputWriteOffsets' src/core/OutputControl.cpp | grep -q 'kHeadphoneVolume, kHeadphoneVolume + 1, kHeadphoneMute' \
@@ -83,10 +87,13 @@ else echo "FAIL output write policy scope changed"; fail=1; fi
 if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/daemon/main.cpp \
    && grep -q 'envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME")' src/daemon/main.cpp \
    && grep -q 'bool writes{false};' src/daemon/main.cpp \
+   && grep -q 'readOnlyHardwareOptions()), WritePolicy{}' src/daemon/main.cpp \
+   && grep -q 'a.mode = Mode::Fallback, a.writes = true' src/daemon/main.cpp \
+   && [ "$(grep -c 'a.writes = true' src/daemon/main.cpp)" -eq 1 ] \
    && ! grep -nE 'hardwareWriteOffsets|allowHardwareWrites|sendTrigger|commit\(' src/daemon/main.cpp src/desktop/*.cpp >/dev/null \
    && [ "$(grep -c 'session_.commitAndVerify(' src/desktop/DesktopVolumeLink.cpp)" -eq 1 ] \
    && grep -q 'stageOutput(m, Output::Speaker' src/desktop/DesktopVolumeLink.cpp; then
-    echo "ok   openwitty-volumed: speaker-only policy, exact double opt-in, dry run default, one verified write path"
+    echo "ok   openwitty-volumed: read-only mirror default, vendor writes only via --vendor-fallback (speaker bytes, exact double opt-in), one verified write path"
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
 grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }

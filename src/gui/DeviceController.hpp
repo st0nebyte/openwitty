@@ -108,9 +108,10 @@ private:
     QString scanSignature_;              // device list + node permissions at the last failed open
     QString deviceListSignature();
     void noteOpenFailure(const lewitt::Status& s);
-    // Phase 8D: desktop volume integration hosted in the GUI while it owns the device (the
-    // background openwitty-volumed yields to the GUI). Only with the output-write opt-in on a real
-    // device; the link refers to session_, so it is always dropped before session_ changes.
+    // Desktop volume mirroring hosted in the GUI while it owns the device (the background
+    // openwitty-volumed yields to the GUI). Native mode only (never a device write); opt-in
+    // OPENWITTY_DESKTOP_SYNC=1 on a real device. The link refers to session_, so it is always
+    // dropped before session_ changes.
     void serviceDesktopLink();
     void dropDesktopLink();
     std::unique_ptr<lewitt::IDesktopMixer> mixer_;

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Phase 8E: does a vendor settings SET make the CONNECT 2 honour Feature Unit 2 (kernel/ALSA volume) again?
 
-Question: after an ordinary boot the device ignores UAC SET_CUR on Feature Unit 2 (the ALSA "PCM Playback Volume"
-that PipeWire/KDE use). In one earlier session it later accepted them, after several vendor settings writes. Is the
-vendor settings SET the trigger, or time, or something else?
+Question: is UAC SET_CUR on Feature Unit 2 (the ALSA "PCM Playback Volume" that PipeWire/KDE use) honoured in the
+current device state, and if not, does a vendor settings SET, time, or something else restore it? (First run, ordinary
+boot 2026-10-25: honoured at P0. The tool is kept for repeating the measurement, e.g. after suspend/resume.)
 
 Measurement (a "probe"): set the ALSA control 1 dB below the current level, wait, read the complete 128-byte device
 settings with the vendor GET, and classify: followed (speaker reached the target), not followed (nothing changed), or

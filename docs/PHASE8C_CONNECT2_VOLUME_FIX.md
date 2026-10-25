@@ -1,8 +1,11 @@
-# Phase 8C – Working speaker volume on Linux 7.3: root causes and fix
+# Phase 8C – Speaker volume on Linux 7.3: root causes, quirk and vendor-write workaround
 
-Status: **fix implemented and verified live** on kernel 7.3.0-5-cachyos (2026-10-24), owner-authorized autonomous debugging.
-The Python bridge below is the reference implementation; the maintained integration is the native `openwitty-volumed`
-(Phase 8D, `PHASE8D_VOLUME_INTEGRATION.md`). Do not install the Python bridge as a service.
+Status: fixes implemented and verified live on kernel 7.3.0-5-cachyos (2026-10-24), owner-authorized autonomous debugging.
+**Corrected by Phase 8E (2026-10-25):** on an ordinary boot Feature Unit 2 *does* honour SET_CUR; "broken GET_CUR" only means
+the kernel cannot read the level back. The "SET ignored" state below was measured only after software re-enumeration. With
+the kernel quirk of problem 1, normal KDE/PipeWire volume works after an ordinary boot (one observation so far). The maintained
+integration is the native `openwitty-volumed` (Phase 8D, `PHASE8D_VOLUME_INTEGRATION.md`); the Python bridge is a superseded
+reference and must not be installed as a service.
 
 ## Two independent problems
 
@@ -18,18 +21,25 @@ The Python bridge below is the reference implementation; the maintained integrat
   `Mic Capture Volume` reads `72,72,0,0`, PipeWire shows 2 routes and `analog-output` `route.hw-volume=true`.
   Persistent in `/etc/modprobe.d/openwitty-connect2.conf` (snd-usb-audio is not in the initramfs, no rebuild needed).
 
-### 2. Feature Unit 2 (speaker volume) ignores UAC SET_CUR unless the device is power-cycled and probed at once (WORKED AROUND)
-| Sequence | FU2 after probe |
-|---|---|
-| normal boot (autoload ≈9 s after enumeration) | broken GET_CUR, -110; "SET ignored" was **inferred, not measured** here – Phase 8E measured an ordinary boot: SET **followed** |
-| late load 317 s after boot (8A.24) / unbound replug + load 120 s later (8A.25) | broken |
-| physical replug with driver loaded (8A.21, 8A.26, 8A.26B, 8C) – probe within 0.3 s of power-up | **healthy, SET followed** |
-| software re-enumeration via `authorized` 0→1 (no reset, no power cycle) | broken |
-| `USBDEVFS_RESET` port reset (no power cycle) | broken |
-| re-probe of a device that was healthy a minute earlier (`authorized` toggle) | broken |
+### 2. Feature Unit 2: GET_CUR is broken; SET_CUR is honoured except in some states (WORKAROUND KEPT AS FALLBACK)
+Two different properties were mixed up during the investigation; they are separated here.
+* **GET_CUR (read-back):** the kernel's sanity test sees a constant value and logs `broken mixer GET_CUR` (7.3) /
+  `sticky mixer values` (7.2). The value is the device's real current level. Consequence: the kernel never learns about
+  hardware-knob changes.
+* **SET_CUR (write):** measured directly only where a vendor GET was taken after an ALSA/PipeWire volume change:
 
-Only power-up followed by an immediate probe gives a working FU2. This controller has no per-port power switching (HCCPARAMS PPC=0),
-so the power cycle cannot be done in software. Cause inside the device: unknown.
+| Device state | FU2 SET measured with vendor read-back |
+|---|---|
+| ordinary boot, autoload (Phase 8E, 2026-10-25) | **followed** (−33 → −34 dB) |
+| physical replug with the driver loaded (8A.26, 8A.26B, 8C) | followed |
+| software re-enumeration via `authorized` 0→1 (8C, 21:14) | **ignored** (sink 0.30, device stayed −20 dB) |
+| `USBDEVFS_RESET` port reset (8C, 21:16) | **ignored** (device stayed −23.5 dB) |
+| same instance later, after several vendor writes (8D live test) | followed |
+| late load after boot (8A.24), unbound replug + late load (8A.25) | not measured (only the GET classification) |
+
+Earlier versions of this table called the ordinary boot "SET ignored"; that was an inference from the GET classification and
+is wrong for the boot measured in Phase 8E. Whether ordinary users can reach the "ignored" state (e.g. through suspend/resume,
+which re-initializes USB) is open. The controller has no per-port power switching (HCCPARAMS PPC=0).
 
 **The vendor settings message on interface 3 is honoured in every state.** One `speaker-volume` vendor write in the FU2-broken state
 was verified (−23.5 → −30.0 dB, read back by GET). Hence the workaround:

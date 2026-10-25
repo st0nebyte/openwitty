@@ -1,5 +1,10 @@
 # Phase 8D – Native speaker/headphone volume integration
 
+> **Superseded in parts (2026-10-25):** the current architecture, modes (`mirror` default with a read-only device,
+> `--vendor-fallback`, `--dry-run`, `--check`), the quirk policy and the checkpoints are in `VOLUME_INTEGRATION.md`.
+> The `--allow-hardware-writes` flag described below was replaced by `--vendor-fallback`; the GUI-hosted link now uses its
+> own opt-in `OPENWITTY_DESKTOP_SYNC=1` and native mode only. This note is kept as the record of Phase 8D.
+
 Status: **implemented and tested offline; read-only (dry-run) smoke test on the real device passed.**
 No hardware SET, no service activation, no audio-stack restart, no reboot or reconnect was performed
 in this phase. The live write validation is proposed at the end and needs a fresh safety confirmation.

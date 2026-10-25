@@ -1,23 +1,28 @@
 # OpenWitty desktop-volume integration for the LEWITT CONNECT 2 (user service).
 #
-# Installed DISABLED. It writes the device's speaker volume/mute when you move the desktop volume,
-# so enable it only after reading docs/PHASE8D_VOLUME_INTEGRATION.md:
+# Installed DISABLED. Default (mirror) mode opens the CONNECT 2 read-only and keeps the desktop volume
+# in step with the device (hardware knob). Note: updating the desktop's ALSA control is forwarded to the
+# device by the kernel; OpenWitty only ever writes the level the device already has (re-read first,
+# rounded down, never unmuting). Enable:
 #     systemctl --user enable --now openwitty-volumed.service
-# Dry run first (no writes at all):
-#     @CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed
+# Check the audio setup first (read-only):  @CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --check
+# Vendor fallback for a device that ignores the standard volume control (writes the device!):
+#     systemctl --user edit openwitty-volumed.service   and add
+#         [Service]
+#         Environment=LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1
+#         ExecStart=
+#         ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --vendor-fallback
 # Undo:
 #     systemctl --user disable --now openwitty-volumed.service
 [Unit]
-Description=OpenWitty CONNECT 2 speaker volume integration (desktop volume -> device)
+Description=OpenWitty CONNECT 2 desktop volume sync (hardware knob -> desktop)
 Documentation=file://@CMAKE_INSTALL_FULL_DOCDIR@
 After=pipewire.service wireplumber.service
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-Environment=LEWITT_ALLOW_HARDWARE_WRITE=1
-Environment=LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1
-ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --allow-hardware-writes
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed
 Restart=on-failure
 RestartSec=5
 # Never restart in a tight loop if something is badly wrong.

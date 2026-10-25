@@ -20,9 +20,19 @@
 
 namespace lewitt {
 
+// Who applies a desktop (KDE/PipeWire) volume change to the device.
+enum class DeviceWriteMode {
+    None,      // dry run: decisions are only logged
+    Native,    // default: the kernel/ALSA path is authoritative (it reaches the device when Feature Unit 2
+               // honours SET_CUR, verified on an ordinary boot); the link never writes the device and
+               // only reports a desktop change the device did not follow
+    Fallback,  // additionally apply such a change through the vendor settings message (for the verified
+               // exceptional state in which the device ignores Feature Unit 2)
+};
+
 struct LinkOptions {
-    bool hardwareWrites{false};   // false = dry run: nothing is written to the device
-    bool desktopWrites{true};     // re-align the ALSA control (no physical change); off in dry run
+    DeviceWriteMode deviceWrites{DeviceWriteMode::None};
+    bool desktopWrites{true};     // mirror the device level to the ALSA control (knob changes); off in dry run
     PollPolicy verify{};
 };
 
@@ -74,6 +84,7 @@ private:
     int desktopWrites_{0};
     bool healthy_{true};
     bool rejectedForPending_{false};
+    bool notFollowed_{false};          // Native mode: a desktop change the device did not follow
     int alignDepth_{0};
     std::string notice_;
 };

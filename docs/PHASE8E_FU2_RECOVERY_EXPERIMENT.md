@@ -1,14 +1,15 @@
-# Phase 8E – Does a vendor settings SET make the CONNECT 2 honour Feature Unit 2 again?
+# Phase 8E – FU2 SET_CUR on an ordinary boot (and the vendor-SET recovery hypothesis)
 
-Status: **prepared and tested offline; not executed.** Needs one ordinary reboot by the owner and a separate fresh
-audio-safety confirmation before the active test.
+Status: **executed 2026-10-25 on one ordinary boot. Result: FU2 honoured SET_CUR at boot (`FU2_HEALTHY_AT_BOOT`)**, so the
+vendor-SET hypothesis could not be tested and is not needed for the ordinary boot path. See "Result" at the end; the design
+below is kept because it is the procedure for repeating the measurement (another boot, suspend/resume).
 
-## Why
-After an ordinary boot the device ignores UAC SET_CUR on Feature Unit 2 – the ALSA `PCM Playback Volume` that
-PipeWire/KDE drive – so desktop volume has no effect (Phase 8C). In the session of Phase 8D the same device instance
-first ignored FU2 (directly after a port reset, 21:16) and later honoured it (21:5x); in between several vendor settings
-writes were made. If a vendor settings SET is the trigger, one guarded device-initialization write would leave normal
-KDE/PipeWire volume in charge and make the permanent bridge unnecessary.
+## Why (as of the preparation)
+Phase 8C assumed that after an ordinary boot the device ignores UAC SET_CUR on Feature Unit 2 – an inference from the kernel's
+`broken mixer GET_CUR` classification that this experiment showed to be wrong for the boot measured. What had actually been
+measured: the same device instance first ignored FU2 directly after a software port reset (21:16) and later honoured it (21:5x),
+with several vendor settings writes in between. If a vendor settings SET had been the trigger, one guarded device-initialization
+write would have left normal KDE/PipeWire volume in charge.
 
 ## Competing explanations and how the design separates them
 | Explanation | Observable |

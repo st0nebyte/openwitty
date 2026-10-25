@@ -80,9 +80,14 @@ void DesktopVolumeLink::beginStep() {
 void DesktopVolumeLink::endStep() {
     const auto& d = sync_.desktop();
     const auto& h = sync_.hardware();
+    if (notFollowed_ && d && h && d->muted == h->muted && std::fabs(d->db - h->db) <= sync_.config().toleranceDb)
+        notFollowed_ = false;                 // back in step (device followed later, or desktop moved back)
     if (rejectedForPending_)
         notice_ = "A desktop volume change was not applied because another OpenWitty change is still "
                   "unconfirmed (retry or discard it). The desktop shows the speaker level again.";
+    else if (notFollowed_)
+        notice_ = "The CONNECT 2 did not follow the desktop volume: its standard volume control is not "
+                  "responding in this state. OpenWitty's vendor fallback can apply desktop changes instead.";
     else if (d && h && d->muted && !h->muted)
         notice_ = "The desktop shows the speaker as muted, but the CONNECT 2 speaker is not muted. "
                   "Unmute in the desktop or in OpenWitty to bring them back in step.";
@@ -146,8 +151,17 @@ void DesktopVolumeLink::alignDesktop(const DesktopLevel& target, Clock::time_poi
 }
 
 void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point now) {
-    if (!opt_.hardwareWrites) {
+    if (opt_.deviceWrites == DeviceWriteMode::None) {
         log(fmt("dry run: would write speaker %.2f dB %s", target.db, target.muted));
+        sync_.abandonWrite();
+        return;
+    }
+    if (opt_.deviceWrites == DeviceWriteMode::Native) {
+        // The fresh read before this decision showed the device did NOT follow the kernel's request.
+        // Native mode never corrects that by itself; it says so once.
+        if (!notFollowed_) log(fmt("the device did not follow the desktop change (wanted %.2f dB %s); "
+                                   "no vendor write in native mode", target.db, target.muted));
+        notFollowed_ = true;
         sync_.abandonWrite();
         return;
     }

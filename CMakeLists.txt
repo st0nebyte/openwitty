@@ -77,7 +77,8 @@ endif()
 
 # Desktop (ALSA) volume integration: policy glue is always built and tested; the libasound backend
 # and the openwitty-volumed daemon need alsa-lib and the USB transport.
-add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp)
+add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp
+            src/desktop/AudioSetupCheck.cpp)
 target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
 target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
 option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
@@ -141,7 +142,8 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_control_lease.cpp)       # Phase 7D process ownership
     target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
     target_sources(lewitt_tests PRIVATE tests/cpp/test_output_control.cpp tests/cpp/test_volume_sync.cpp
-                                        tests/cpp/test_desktop_link.cpp)       # Phase 8D volume integration
+                                        tests/cpp/test_desktop_link.cpp        # Phase 8D volume integration
+                                        tests/cpp/test_audio_setup_check.cpp)  # Phase 8F setup diagnosis
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
     if(LEWITT_ENABLE_USB)
         # Phase 8D CLI refusals. Every case is rejected before a transport exists (argument parsing or
@@ -170,9 +172,9 @@ if(LEWITT_BUILD_TESTS)
         if(TARGET openwitty-volumed)
             add_test(NAME volumed_writes_need_exact_env COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset}
                      LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=true
-                     $<TARGET_FILE:openwitty-volumed> --allow-hardware-writes)
+                     $<TARGET_FILE:openwitty-volumed> --vendor-fallback)
             add_test(NAME volumed_rejects_bad_arguments COMMAND $<TARGET_FILE:openwitty-volumed> --max-increase-db nan)
-            set_tests_properties(volumed_writes_need_exact_env PROPERTIES PASS_REGULAR_EXPRESSION "refused: --allow-hardware-writes")
+            set_tests_properties(volumed_writes_need_exact_env PROPERTIES PASS_REGULAR_EXPRESSION "refused: --vendor-fallback")
             set_tests_properties(volumed_rejects_bad_arguments PROPERTIES PASS_REGULAR_EXPRESSION "usage: openwitty-volumed")
         endif()
     endif()
