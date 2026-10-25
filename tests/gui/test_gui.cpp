@@ -62,9 +62,17 @@ QGuiApplication* app() {
     static char name[] = "lewitt_gui_tests";
     static char* argv[] = {name, nullptr};
     // Intentionally leaked: avoids static-destruction order problems at process exit.
-    static QGuiApplication* a = new QGuiApplication(argc, argv);
+    static QGuiApplication* a = [] {
+        // A held lease is reported at once in these tests; the hand-over grace has its own tests.
+        DeviceController::setHandoverGrace(std::chrono::milliseconds(0));
+        return new QGuiApplication(argc, argv);
+    }();
     return a;
 }
+struct HandoverGrace {
+    explicit HandoverGrace(std::chrono::milliseconds g) { DeviceController::setHandoverGrace(g); }
+    ~HandoverGrace() { DeviceController::setHandoverGrace(std::chrono::milliseconds(0)); }
+};
 // Settings backend for QML tests: no systemctl, no real ALSA/device access.
 IntegrationSettings* fakeIntegration() {
     static IntegrationSettings* s = new IntegrationSettings(
@@ -1167,4 +1175,42 @@ TEST(Qml, DesktopIntegrationPageLoadsWithoutErrors) {
     root->setProperty("open", "desktop");
     QCoreApplication::processEvents();
     EXPECT_EQ(root->property("open").toString(), "desktop");
+}
+
+// Phase 9B acceptance finding: opening the window while openwitty-volumed holds the device showed a red
+// "already in use" error for 1-2 s. During the hand-over grace it is "connecting", without an error.
+TEST(GuiState, ServiceHandOverIsPresentedAsConnectingNotAsAnError) {
+    app();
+    BlockRealUsb block;          // the held lease plays the background service (no USB I/O)
+    ASSERT_TRUE(block.ready());
+    HandoverGrace grace(std::chrono::seconds(8));
+    DeviceController c;
+    c.connectUsb();
+    c.flush();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("ui.state"); }));
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 1200) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);   // a few retries
+    c.flush();
+    EXPECT_EQ(c.values().value("ui.state").toString(), "connecting");
+    EXPECT_EQ(c.values().value("ui.detail").toString(), "Taking over from the OpenWitty background service");
+    EXPECT_TRUE(c.values().value("ui.error").toString().isEmpty());
+    EXPECT_TRUE(c.lastError().isEmpty()) << c.lastError().toStdString();
+    EXPECT_NE(c.connection(), "Connected");
+    EXPECT_FALSE(c.writable());
+}
+
+TEST(GuiState, ALeaseThatStaysTakenIsReportedAfterTheHandOverGrace) {
+    app();
+    BlockRealUsb block;
+    ASSERT_TRUE(block.ready());
+    HandoverGrace grace(std::chrono::milliseconds(400));
+    DeviceController c;
+    c.connectUsb();
+    ASSERT_TRUE(waitFor([&] { return c.lastError().contains("already in use"); }, 5000));
+    // the error message is signalled just before the state is published
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "error"; }, 3000))
+        << c.values().value("ui.state").toString().toStdString();
+    EXPECT_FALSE(c.values().value("ui.error").toString().isEmpty());
+    EXPECT_FALSE(c.writable());
 }

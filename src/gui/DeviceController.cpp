@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -24,6 +25,7 @@
 using namespace lewitt;
 
 namespace {
+std::atomic<long long> gHandoverGraceMs{8000};
 qint64 nowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -266,8 +268,9 @@ void DeviceWorker::connectUsb() {
     lastOpenError_ = Errc::Ok;
     lastTransportError_.clear();
     auto s = session_->connect();
-    if (!s) report(s);
+    if (!inHandover(s) && !s) report(s);
     noteOpenFailure(s);
+    if (handingOver_) backoffMs_ = 300;
     markInitialReads();
     if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
@@ -304,6 +307,7 @@ void DeviceWorker::rescan() {
     }
     freshness_.reset();
     auto s = session_->reconnect();
+    const bool handover = inHandover(s);
     noteOpenFailure(s);
     if (s) {
         markInitialReads();
@@ -312,8 +316,8 @@ void DeviceWorker::rescan() {
         lastTransportError_.clear();
         startRealTimer();
     } else {
-        report(s);
-        backoffMs_ = s.error().code == Errc::ControlInUse ? 1000 : std::min(backoffMs_ * 2, 8000);
+        if (!handover) report(s);
+        backoffMs_ = handover ? 300 : s.error().code == Errc::ControlInUse ? 1000 : std::min(backoffMs_ * 2, 8000);
         armRescan();
     }
     publish();
@@ -380,6 +384,19 @@ QString DeviceWorker::deviceListSignature() {
         sig += QString("%1:%2:%3:%4:%5;").arg(c.usb.bus).arg(c.usb.address).arg(c.usb.pid)
                    .arg(QString::fromStdString(c.usb.sysfsPath)).arg(c.usb.nodeWritable);
     return sig;
+}
+
+bool DeviceWorker::inHandover(const Status& s) {
+    if (s || s.error().code != Errc::ControlInUse) {
+        handoverSince_.reset();
+        handingOver_ = false;
+        return false;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!handoverSince_) handoverSince_ = now;
+    handingOver_ = now - *handoverSince_ < DeviceController::handoverGrace();
+    if (handingOver_) lastTransportError_.clear();
+    return handingOver_;
 }
 
 void DeviceWorker::noteOpenFailure(const Status& s) {
@@ -639,8 +656,10 @@ void DeviceWorker::publish() {
         case ConnectionState::Error: uiState = lostLink_ ? "connection-lost" : "error"; break;
         case ConnectionState::Disconnected: uiState = lostLink_ ? "connection-lost" : "disconnected"; break;
     }
+    const bool takingOver = handingOver_ && cs != ConnectionState::Connected;
+    if (takingOver) uiState = "connecting";
     v["ui.state"] = uiState;
-    v["ui.error"] = (cs == ConnectionState::Connected) ? QString() : lastTransportError_;
+    v["ui.error"] = (cs == ConnectionState::Connected || takingOver) ? QString() : lastTransportError_;
     if (session_ && cs == ConnectionState::Connected) {
         const auto& caps = session_->capabilities();
         v["ui.device"] = session_->isSimulated()
@@ -664,6 +683,7 @@ void DeviceWorker::publish() {
                    : uiState == "real-writable" ? "Connected with authorized controls"
                    : uiState == "connection-lost" ? "Connection lost"
                    : uiState == "error" ? "Hardware error"
+                   : takingOver ? "Taking over from the OpenWitty background service"
                    : uiState == "connecting" ? "Connecting" : "Disconnected";
     if (session_) {
         auto mode = deviceModeFromPid(session_->info().pid);
@@ -917,6 +937,9 @@ DeviceController::DeviceController(QObject* parent, bool diagnosticLegacyPolling
     });
     thread_.start();
 }
+
+void DeviceController::setHandoverGrace(std::chrono::milliseconds grace) { gHandoverGraceMs = grace.count(); }
+std::chrono::milliseconds DeviceController::handoverGrace() { return std::chrono::milliseconds(gHandoverGraceMs.load()); }
 
 DeviceController::~DeviceController() {
     worker_->cancelAll();    // wake/abort any in-flight request before asking the worker to stop

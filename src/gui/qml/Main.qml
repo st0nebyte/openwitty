@@ -143,9 +143,10 @@ Window {
         Rectangle { visible: !win.live; x: 0; y: 50; width: parent.width; height: 323; color: "#1f1f1f"; z: 5
             Text { anchors.centerIn: parent; color: "#fff"; font.pixelSize: 20; font.bold: true
                    text: device.values["restarting"] ? "Device restarting… (simulated)"
-                         : device.connection === "Connecting" ? "Connecting…" : "No LEWITT device connected!" }
+                         : win.uiState === "connecting" ? "Connecting…" : "No LEWITT device connected!" }
             Text { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height / 2 + 26; color: Theme.textDim
-                   font.pixelSize: 11; text: device.lastError.length ? device.lastError
+                   font.pixelSize: 11; text: win.uiState === "connecting" ? (device.values["ui.detail"] || "")
+                                         : device.lastError.length ? device.lastError
                                          : "Use the buttons above to start the simulated device." }
         }
         SettingsView { objectName: "settingsView"; visible: win.showSettings; x: 0; y: 0; width: parent.width; height: parent.height; z: 10
@@ -184,7 +185,10 @@ Window {
                        + ". Audio and front-panel readiness not verified."
                      : win.uiState === "real-writable"
                      ? "REAL DEVICE — individually authorized controls enabled."
-                     : win.uiState === "connecting" ? "Connecting to the device…"
+                     : win.uiState === "connecting"
+                     ? (device.values["ui.detail"] === "Taking over from the OpenWitty background service"
+                        ? "Connecting — taking over the CONNECT 2 from the OpenWitty background service…"
+                        : "Connecting to the device…")
                      : win.uiState === "connection-lost"
                      ? "Connection to the device was lost — retrying when it reappears. " + win.uiError
                      : win.uiState === "error" ? "Cannot communicate with the device. " + win.uiError

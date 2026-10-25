@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QVariantMap>
 #include <memory>
+#include <optional>
+#include <chrono>
 
 #include <atomic>
 #include <mutex>
@@ -109,6 +111,12 @@ private:
     QString scanSignature_;              // device list + node permissions at the last failed open
     QString deviceListSignature();
     void noteOpenFailure(const lewitt::Status& s);
+    // Opening the window while openwitty-volumed holds the device: the first attempts find the control
+    // lease taken while the service is handing it over. For a short grace period that is presented as
+    // "connecting (taking over from the background service)" and retried quickly, not as an error.
+    bool inHandover(const lewitt::Status& s);
+    std::optional<std::chrono::steady_clock::time_point> handoverSince_;
+    bool handingOver_{false};
     // Desktop volume mirroring hosted in the GUI while it owns the device (the background
     // openwitty-volumed yields to the GUI). Native mode only (never a device write); on a real device
     // when the user setting "desktop sync" is on. The link refers to session_, so it is always
@@ -137,6 +145,9 @@ class DeviceController : public QObject {
     Q_PROPERTY(int statusPollingHz READ statusPollingHz CONSTANT)
 public:
     explicit DeviceController(QObject* parent = nullptr, bool diagnosticLegacyPolling = false);
+    // How long "control in use" counts as a hand-over in progress (default 8 s; tests use 0 or short values).
+    static void setHandoverGrace(std::chrono::milliseconds grace);
+    static std::chrono::milliseconds handoverGrace();
     ~DeviceController() override;
     QString connection() const { return connection_; }
     QString backend() const { return backend_; }
