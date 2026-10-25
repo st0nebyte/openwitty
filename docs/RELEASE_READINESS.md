@@ -291,9 +291,13 @@ address (`git config user.email`).
   differed only in the identity fields; after the mapping they converged, so `main` is now an ancestor of the
   development branch (no merge was made; 130 development commits are not in `main`). Across all branches: 173
   distinct old commits → 158 rewritten (15 duplicates absorbed), every old commit maps to an existing new one.
+* **Final check from a fresh mirror of GitHub** (each field on its own line — an earlier check joined the fields,
+  which can hide a name at a word boundary): all branches 0 personal strings in identities, messages and file
+  revisions; identity names only `st0nebyte` and `GitHub`.
 * **Not rewritten — unresolved privacy blocker:** GitHub's `refs/pull/1..3/head` (`66bc210`, `d1d5e4e`, `6cef96f`;
-  read-only, GitHub-managed) still point at the old commits with the personal identity, and GitHub may keep old
-  commits reachable by hash until its garbage collection. Options: see "Pull-request refs" below.
+  read-only, GitHub-managed) still point at the old commits: the **first name** is in the author/committer name of
+  18 commits (the e-mail address is not; their file revisions are clean). GitHub may also keep old commits reachable
+  by hash until its garbage collection. Options: see "Pull-request refs" below.
 
 ### Pull-request refs (open)
 
