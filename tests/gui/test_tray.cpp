@@ -217,9 +217,9 @@ TEST(TrayController, StatusFollowsTheSettingsWhenRefreshed) {
 TEST(InstanceChannel, SecondInstanceDeliversItsRequestToTheFirst) {
     app();
     InstanceChannel first("t-deliver");
-    ASSERT_TRUE(first.listen());
+    ASSERT_EQ(first.acquire(), InstanceChannel::Acquire::Owner);
     InstanceChannel second("t-deliver");
-    EXPECT_FALSE(second.listen());                          // a live primary is never replaced
+    EXPECT_EQ(second.acquire(), InstanceChannel::Acquire::Busy);   // a live owner is never replaced
     QStringList got;
     QObject::connect(&first, &InstanceChannel::messageReceived, [&](const QString& m) { got << m; });
     EXPECT_TRUE(inThreadWhileProcessingEvents([] { return InstanceChannel::send("t-deliver", "a\nb"); }));
@@ -236,13 +236,13 @@ TEST(InstanceChannel, StaleSocketOfACrashedInstanceIsReplaced) {
     ASSERT_TRUE(f.open(QIODevice::WriteOnly));
     f.close();
     InstanceChannel c("t-stale");
-    EXPECT_TRUE(c.listen());
+    EXPECT_EQ(c.acquire(), InstanceChannel::Acquire::Owner);
 }
 
 TEST(GuiActivation, RunningWindowIsActivatedInsteadOfStartingAnother) {
     app();
     InstanceChannel gui("gui");
-    ASSERT_TRUE(gui.listen());
+    ASSERT_EQ(gui.acquire(), InstanceChannel::Acquire::Owner);
     QStringList got;
     QObject::connect(&gui, &InstanceChannel::messageReceived, [&](const QString& m) { got << m; });
     int spawned = 0;

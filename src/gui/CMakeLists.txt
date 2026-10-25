@@ -104,11 +104,23 @@ if(LEWITT_BUILD_TESTS)
     add_test(NAME tray_integration COMMAND lewitt_tray_tests)
     set_tests_properties(tray_integration PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/lsan.supp")
+    # Single-instance ownership under real cross-process competition (barrier-synchronised helpers).
+    add_executable(lewitt_instance_race_helper ${CMAKE_SOURCE_DIR}/tests/gui/instance_race_helper.cpp)
+    target_link_libraries(lewitt_instance_race_helper PRIVATE lewitt_desktopui)
+    add_executable(lewitt_instance_race_tests ${CMAKE_SOURCE_DIR}/tests/gui/test_instance_race.cpp)
+    target_link_libraries(lewitt_instance_race_tests PRIVATE lewitt_desktopui GTest::gtest_main)
+    target_compile_definitions(lewitt_instance_race_tests PRIVATE
+        LEWITT_RACE_HELPER="$<TARGET_FILE:lewitt_instance_race_helper>")
+    add_dependencies(lewitt_instance_race_tests lewitt_instance_race_helper)
+    add_test(NAME instance_race COMMAND lewitt_instance_race_tests)
+    set_tests_properties(instance_race PROPERTIES TIMEOUT 120
+        ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/tests/lsan.supp")
     # End-to-end: tray unavailable (offscreen has none), second window start, tray --quit.
     add_test(NAME desktop_single_instance_and_tray
-             COMMAND sh ${CMAKE_SOURCE_DIR}/tests/gui/check_single_instance.sh $<TARGET_FILE:openwitty> $<TARGET_FILE:openwitty-tray>)
+             COMMAND sh ${CMAKE_SOURCE_DIR}/tests/gui/check_single_instance.sh $<TARGET_FILE:openwitty> $<TARGET_FILE:openwitty-tray>
+                     $<TARGET_FILE:lewitt_instance_race_helper>)
     set_tests_properties(desktop_single_instance_and_tray PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" PASS_REGULAR_EXPRESSION "SINGLE INSTANCE: PASS" TIMEOUT 40)
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" PASS_REGULAR_EXPRESSION "SINGLE INSTANCE: PASS" TIMEOUT 90)
 endif()
 
 add_executable(lewitt_bench_gui EXCLUDE_FROM_ALL ${CMAKE_SOURCE_DIR}/tests/bench/bench_gui.cpp)

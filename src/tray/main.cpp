@@ -46,12 +46,17 @@ int main(int argc, char** argv) {
         std::fputs("--wait-for-tray-seconds requires 0-300\n", stderr);
         return 64;
     }
-    if (InstanceChannel::send("tray", "activate")) {
-        std::puts("openwitty-tray: already running");
-        return 0;
-    }
     InstanceChannel channel("tray");
-    channel.listen();
+    switch (channel.claimOrForward("activate", 5000)) {
+        case InstanceChannel::Role::Forwarded:
+            std::puts("openwitty-tray: already running");
+            return 0;
+        case InstanceChannel::Role::Failed:
+            std::fprintf(stderr, "openwitty-tray: not starting a second tray icon: %s\n", qPrintable(channel.lastError()));
+            return 1;
+        case InstanceChannel::Role::Primary:
+            break;
+    }
 
     TrayModel model;
     const QString gui = siblingProgram("openwitty");

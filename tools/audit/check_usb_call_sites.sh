@@ -117,6 +117,12 @@ else echo "ok   tray and desktop-UI helpers never reference device, lease or ALS
 if grep -rnE '"(enable|disable|start|stop|restart|kill|mask|--now)"' src/tray src/desktopui >/dev/null; then
     echo "FAIL tray/desktop-UI code can change the background service"; fail=1
 else echo "ok   tray and desktop-UI helpers only read the service state"; fi
+# Single instance: both programs act on every claim outcome, and the window claims before any device code.
+if grep -q 'InstanceChannel::Role::Failed' src/gui/main.cpp && grep -q 'InstanceChannel::Role::Failed' src/tray/main.cpp \
+   && ! grep -rnE '\.listen\(' src/gui src/tray >/dev/null \
+   && [ "$(grep -n 'claimOrForward' src/gui/main.cpp | head -1 | cut -d: -f1)" -lt "$(grep -n 'DeviceController controller' src/gui/main.cpp | cut -d: -f1)" ]; then
+    echo "ok   window/tray single-instance claim handled, before any device code"
+else echo "FAIL single-instance claim must be handled (Failed) and precede DeviceController"; fail=1; fi
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

@@ -5,14 +5,17 @@
 #   * openwitty-tray --quit without a running icon;
 #   * a second (and third, fourth) window start brings the running window to the front and exits;
 #   * the tray links no USB or ALSA library.
-#   check_single_instance.sh <openwitty> <openwitty-tray>
+#   * two tray icons started together: exactly one runs;
+#   * an owner that holds the window lock but never answers: a new window start fails (exit 3) before any
+#     device code instead of becoming a second window.
+#   check_single_instance.sh <openwitty> <openwitty-tray> <instance_race_helper>
 set -u
-gui=$1; tray=$2
+gui=$1; tray=$2; helper=$3
 tmp=$(mktemp -d) || exit 1
-trap 'kill "$first" 2>/dev/null; rm -rf "$tmp"' EXIT
+trap 'kill "$first" "$hang" 2>/dev/null; rm -rf "$tmp"' EXIT
 mkdir -m 700 "$tmp/run" "$tmp/config"
 export XDG_RUNTIME_DIR="$tmp/run" XDG_CONFIG_HOME="$tmp/config" QT_QPA_PLATFORM=offscreen
-first=
+first=; hang=
 fail=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
 
@@ -41,6 +44,29 @@ sleep 0.5
 n=$(grep -c 'activation request from another start' "$tmp/first.log")
 check "the first window received all three requests ($n)" "[ $n -eq 3 ]"
 check "the first window is still running" "kill -0 $first"
+
+kill "$first" 2>/dev/null; wait "$first" 2>/dev/null; first=
+
+# Two tray icons at once (offscreen has no tray: each waits 3 s for one, so both overlap).
+"$tray" --wait-for-tray-seconds 3 >"$tmp/t1.log" 2>&1 &
+t1=$!
+"$tray" --wait-for-tray-seconds 3 >"$tmp/t2.log" 2>&1 &
+t2=$!
+wait $t1 $t2
+n=$(cat "$tmp/t1.log" "$tmp/t2.log" | grep -c 'already running')
+check "two trays started together: exactly one runs, the other defers ($n)" "[ $n -eq 1 ]"
+
+# An owner that holds the lock but never answers (helper: lock, then 14 s without listening).
+"$helper" gui claim "$tmp/go" 0 14000 "activate" >"$tmp/hang.log" 2>&1 &
+hang=$!
+: > "$tmp/go"
+i=0; while ! grep -q LOCKED "$tmp/hang.log" && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+s=$(date +%s)
+"$gui" --mock >"$tmp/blocked.out" 2>"$tmp/blocked.err"; rc=$?
+d=$(( $(date +%s) - s ))
+check "window start with an unanswering owner fails with exit 3 after the deadline (${d}s)" "[ $rc -eq 3 ] && [ $d -ge 9 ] && [ $d -le 13 ]"
+check "it explains why and starts nothing" "grep -q 'not starting a second window' '$tmp/blocked.err' && [ ! -s '$tmp/blocked.out' ]"
+kill "$hang" 2>/dev/null; wait "$hang" 2>/dev/null; hang=
 
 if command -v readelf >/dev/null 2>&1; then
     needed=$(readelf -d "$tray" | grep NEEDED)

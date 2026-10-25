@@ -59,12 +59,17 @@ int main(int argc, char** argv) {
     std::unique_ptr<InstanceChannel> instance;
     if (!p.isSet(shot)) {
         const GuiActivation request{p.value(show), qEnvironmentVariable("XDG_ACTIVATION_TOKEN")};
-        if (InstanceChannel::send("gui", encodeGuiActivation(request))) {
-            std::puts("OpenWitty is already open: its window was brought to the front.");
-            return 0;
-        }
         instance = std::make_unique<InstanceChannel>("gui");
-        instance->listen();   // if another start wins this race, the control lease still keeps one device owner
+        switch (instance->claimOrForward(encodeGuiActivation(request))) {
+            case InstanceChannel::Role::Forwarded:
+                std::puts("OpenWitty is already open: its window was brought to the front.");
+                return 0;
+            case InstanceChannel::Role::Failed:
+                std::fprintf(stderr, "openwitty: not starting a second window: %s\n", qPrintable(instance->lastError()));
+                return 3;
+            case InstanceChannel::Role::Primary:
+                break;
+        }
     }
 
     DeviceController controller(nullptr, p.isSet(legacyPolling));
