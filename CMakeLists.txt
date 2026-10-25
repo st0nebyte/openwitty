@@ -92,12 +92,24 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
     target_link_libraries(openwitty-volumed PRIVATE lewitt_desktop)
     target_compile_options(openwitty-volumed PRIVATE -Wall -Wextra -Wpedantic)
     install(TARGETS openwitty-volumed RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    # systemd user unit: installed, never enabled by the build or install step.
-    set(LEWITT_SYSTEMD_USER_UNIT_DIR "lib/systemd/user" CACHE STRING
+    # systemd user unit: installed, never enabled by the build or install step. The default
+    # <prefix>/share/systemd/user is on systemd's user unit search path for ~/.local (as
+    # $XDG_DATA_HOME/systemd/user), /usr/local and /usr; distribution packages may point this at
+    # pkg-config's systemduserunitdir instead. Generated at install time (see InstallUserUnit.cmake).
+    set(LEWITT_SYSTEMD_USER_UNIT_DIR "${CMAKE_INSTALL_DATADIR}/systemd/user" CACHE STRING
         "systemd user unit destination (relative to the install prefix, or absolute)")
-    configure_file(packaging/systemd/openwitty-volumed.service.in
-                   ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service @ONLY)
-    install(FILES ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service DESTINATION ${LEWITT_SYSTEMD_USER_UNIT_DIR})
+    # Build trees configured before this change cached the old default, which is not on the user
+    # search path for ~/.local: migrate exactly that value (an explicit packager choice is kept).
+    if(LEWITT_SYSTEMD_USER_UNIT_DIR STREQUAL "lib/systemd/user")
+        set(LEWITT_SYSTEMD_USER_UNIT_DIR "${CMAKE_INSTALL_DATADIR}/systemd/user" CACHE STRING
+            "systemd user unit destination (relative to the install prefix, or absolute)" FORCE)
+    endif()
+    install(CODE "set(OW_UNIT_TEMPLATE \"${CMAKE_SOURCE_DIR}/packaging/systemd/openwitty-volumed.service.in\")
+                  set(OW_BINDIR \"${CMAKE_INSTALL_BINDIR}\")
+                  set(OW_DOCDIR \"${CMAKE_INSTALL_DOCDIR}\")
+                  set(OW_UNITDIR \"${LEWITT_SYSTEMD_USER_UNIT_DIR}\")
+                  set(OW_GENERATED_DIR \"${CMAKE_BINARY_DIR}/packaging/install\")")
+    install(SCRIPT packaging/systemd/InstallUserUnit.cmake)
     install(FILES packaging/modprobe/openwitty-connect2.conf DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
     # The generated user unit must verify cleanly (keys in the right sections, valid ExecStart).
     find_program(LEWITT_SYSTEMD_ANALYZE systemd-analyze)
@@ -108,6 +120,12 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
         set_tests_properties(systemd_user_unit_verifies PROPERTIES FAIL_REGULAR_EXPRESSION "Unknown key|ignoring|Failed|not found|Invalid")
         file(READ packaging/systemd/openwitty-volumed.service.in _ow_unit)
         file(WRITE ${CMAKE_BINARY_DIR}/packaging/openwitty-volumed.service.verify "${_ow_unit}")
+    endif()
+    # Disposable staging installs: user-local prefix override and a DESTDIR package build.
+    if(LEWITT_BUILD_TESTS)
+        add_test(NAME install_staging_user_unit
+                 COMMAND sh ${CMAKE_SOURCE_DIR}/tools/packaging/check_install_staging.sh ${CMAKE_BINARY_DIR} ${CMAKE_COMMAND})
+        set_tests_properties(install_staging_user_unit PROPERTIES PASS_REGULAR_EXPRESSION "INSTALL STAGING: PASS")
     endif()
 endif()
 

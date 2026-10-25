@@ -20,6 +20,8 @@ class IntegrationSettings : public QObject {
     // not-installed | disabled | enabled | active | unknown
     Q_PROPERTY(QString serviceState READ serviceState NOTIFY changed)
     Q_PROPERTY(QString lastError READ lastError NOTIFY changed)
+    // The background service is on while desktop sync is off: it only idles (the UI offers to turn it off).
+    Q_PROPERTY(bool serviceIdleOn READ serviceIdleOn NOTIFY changed)
     // setup check (read-only)
     Q_PROPERTY(bool setupAvailable READ setupAvailable NOTIFY changed)     // false: built without ALSA support
     Q_PROPERTY(bool cardFound READ cardFound NOTIFY changed)
@@ -44,6 +46,9 @@ public:
     QStringList configWarnings() const { return warnings_; }
     QString serviceState() const { return serviceState_; }
     QString lastError() const { return lastError_; }
+    bool serviceIdleOn() const {
+        return !desktopSync() && (serviceState_ == "enabled" || serviceState_ == "active");
+    }
     bool setupAvailable() const { return setupAvailable_; }
     bool cardFound() const { return cardFound_; }
     bool mixerLoads() const { return mixerLoads_; }
@@ -59,8 +64,11 @@ public:
     // Device-writing options: only with explicit confirmation from the UI dialog.
     Q_INVOKABLE void setVendorFallback(bool on, bool confirmed);
     Q_INVOKABLE void setOutputControl(bool on, bool confirmed);
-    Q_INVOKABLE void setBackgroundService(bool on);    // systemctl --user enable --now / disable --now
-    Q_INVOKABLE void resetToDefaults();                // defaults in the file + background service off
+    // systemctl --user enable --now / disable --now; turning it off is always allowed, turning it on
+    // needs desktop sync. Returns whether the resulting service state is the requested one.
+    Q_INVOKABLE bool setBackgroundService(bool on);
+    // Defaults in the file, then the background service off. Partial failure is reported in lastError.
+    Q_INVOKABLE bool resetToDefaults();
     Q_INVOKABLE void copyQuirkInstructions();
 
 signals:

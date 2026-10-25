@@ -81,3 +81,42 @@ TEST(UserConfig, SaveIsAtomicPrivateAndLoadable) {
     EXPECT_EQ(loadUserConfig(path).config, UserConfig{});
     fs::remove_all(root);
 }
+
+TEST(UserConfig, InvalidValueAfterAValidOneFallsBackToTheSafeDefault) {
+    auto p = parseUserConfig("desktop_volume_sync = off\ndesktop_volume_sync = mirror\ndesktop_volume_sync = bogus\n");
+    EXPECT_EQ(p.config.desktopVolumeSync, DesktopVolumeSync::Off);      // never mirror after the warning says off
+    auto q = parseUserConfig("vendor_fallback = true\nvendor_fallback = maybe\n");
+    EXPECT_FALSE(q.config.vendorFallback);
+}
+
+TEST(UserConfig, DuplicatedKeysAreAmbiguousAndFailSafe) {
+    for (const char* text : {"vendor_fallback = true\nvendor_fallback = true\n",
+                             "vendor_fallback = false\nvendor_fallback = true\n",
+                             "output_control = true\n# later\noutput_control = true\n",
+                             "desktop_volume_sync = mirror\ndesktop_volume_sync = mirror\n"}) {
+        auto p = parseUserConfig(text);
+        EXPECT_FALSE(p.config.vendorFallback) << text;
+        EXPECT_FALSE(p.config.outputControl) << text;
+        EXPECT_EQ(p.config.desktopVolumeSync, DesktopVolumeSync::Off) << text;
+        bool warned = false;
+        for (const auto& w : p.warnings) warned |= w.find("more than once") != std::string::npos;
+        EXPECT_TRUE(warned) << text;
+    }
+    // a duplicate of one key does not disable the others
+    auto p = parseUserConfig("desktop_volume_sync = mirror\noutput_control = true\noutput_control = true\n");
+    EXPECT_EQ(p.config.desktopVolumeSync, DesktopVolumeSync::Mirror);
+    EXPECT_FALSE(p.config.outputControl);
+}
+
+TEST(UserConfig, MalformedFilesNeverEnableDeviceWrites) {
+    for (const char* text : {"vendor_fallback true\n", "vendor_fallback: true\n", "= true\n", "vendor_fallback =\n",
+                             "VENDOR_FALLBACK = true\n", "vendor_fallback = true # = false\noutput_control==true\n",
+                             "\x01\x02garbage\n", "[other]\noutput_control = yes please\n"}) {
+        auto p = parseUserConfig(text);
+        EXPECT_FALSE(p.config.outputControl) << text;
+        if (std::string(text).rfind("vendor_fallback = true # = false", 0) != 0) EXPECT_FALSE(p.config.vendorFallback) << text;
+        EXPECT_FALSE(p.warnings.empty()) << text;
+    }
+    // comment handling: "true # = false" is the value true (documented '#' comment rule), clearly visible
+    EXPECT_TRUE(parseUserConfig("vendor_fallback = true # = false\n").config.vendorFallback);
+}

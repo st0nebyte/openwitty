@@ -1,5 +1,6 @@
 #include "core/UserConfig.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -25,31 +26,52 @@ int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
 }  // namespace
 
 ParsedUserConfig parseUserConfig(const std::string& text) {
+    // Fail-safe rules: an invalid value sets its key to the safe default (even after a valid one), and a
+    // key given more than once is ambiguous, so it also falls back to the safe default. Nothing that can
+    // enable device writes is ever "repaired" into an enabled state.
     ParsedUserConfig r;
     std::istringstream in(text);
     std::string raw;
     int lineNo = 0;
+    std::vector<std::string> seen;
+    std::vector<std::string> duplicated;
     while (std::getline(in, raw)) {
         ++lineNo;
         std::string line = trim(raw.substr(0, raw.find('#')));
         if (line.empty() || line == "[openwitty]") continue;
         const auto eq = line.find('=');
         if (eq == std::string::npos) {
-            r.warnings.push_back("line " + std::to_string(lineNo) + ": expected 'key = value'");
+            r.warnings.push_back("line " + std::to_string(lineNo) + ": expected 'key = value', ignored");
             continue;
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
+        const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control";
+        if (!known) {
+            r.warnings.push_back("unknown key '" + key + "' ignored");
+            continue;
+        }
+        if (std::find(seen.begin(), seen.end(), key) != seen.end()) {
+            if (std::find(duplicated.begin(), duplicated.end(), key) == duplicated.end()) duplicated.push_back(key);
+        } else {
+            seen.push_back(key);
+        }
         if (key == "desktop_volume_sync") {
-            if (value == "off") r.config.desktopVolumeSync = DesktopVolumeSync::Off;
-            else if (value == "mirror") r.config.desktopVolumeSync = DesktopVolumeSync::Mirror;
-            else r.warnings.push_back("desktop_volume_sync: '" + value + "' is not off|mirror, using off");
-        } else if (key == "vendor_fallback" || key == "output_control") {
+            if (value == "mirror") r.config.desktopVolumeSync = DesktopVolumeSync::Mirror;
+            else {
+                r.config.desktopVolumeSync = DesktopVolumeSync::Off;
+                if (value != "off") r.warnings.push_back("desktop_volume_sync: '" + value + "' is not off|mirror, using off");
+            }
+        } else {
             const int b = parseBool(value);
             if (b < 0) r.warnings.push_back(key + ": '" + value + "' is not true|false, using false");
             (key == "vendor_fallback" ? r.config.vendorFallback : r.config.outputControl) = b == 1;
-        } else {
-            r.warnings.push_back("unknown key '" + key + "' ignored");
         }
+    }
+    for (const auto& key : duplicated) {
+        r.warnings.push_back("'" + key + "' is set more than once: ambiguous, using the safe default");
+        if (key == "desktop_volume_sync") r.config.desktopVolumeSync = DesktopVolumeSync::Off;
+        else if (key == "vendor_fallback") r.config.vendorFallback = false;
+        else r.config.outputControl = false;
     }
     return r;
 }

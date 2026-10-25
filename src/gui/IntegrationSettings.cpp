@@ -125,21 +125,64 @@ void IntegrationSettings::setOutputControl(bool on, bool confirmed) {
     save(next);
 }
 
-void IntegrationSettings::setBackgroundService(bool on) {
-    if (serviceState_ == "not-installed") {
-        lastError_ = "The background service is not installed (openwitty-volumed.service).";
-        emit changed();
-        return;
-    }
-    const int rc = run("systemctl", {"--user", on ? "enable" : "disable", "--now", kUnit});
-    lastError_ = rc == 0 ? QString() : QString("systemctl --user %1 failed").arg(on ? "enable" : "disable");
+bool IntegrationSettings::setBackgroundService(bool on) {
     refreshService();
+    if (serviceState_ == "not-installed") {
+        lastError_ = on ? "The background service is not installed (openwitty-volumed.service)." : QString();
+        emit changed();
+        return !on;
+    }
+    const bool isOn = serviceState_ == "enabled" || serviceState_ == "active";
+    if (on && !desktopSync()) {
+        lastError_ = "Turn on \"Show knob and Mute button in desktop volume\" first: with desktop sync off the "
+                     "background service would only idle.";
+        emit changed();
+        return false;
+    }
+    if (on == isOn && serviceState_ != "unknown") {   // nothing to do
+        lastError_.clear();
+        emit changed();
+        return true;
+    }
+    const QString verb = on ? "enable" : "disable";
+    const int rc = run("systemctl", {"--user", verb, "--now", kUnit});
+    refreshService();
+    const bool nowOn = serviceState_ == "enabled" || serviceState_ == "active";
+    const bool ok = rc == 0 && (on ? serviceState_ == "active" : !nowOn);
+    if (ok) {
+        lastError_.clear();
+    } else {
+        lastError_ = QString("Could not %1 the background service (systemctl --user %1 --now %2: %3; state now: %4).")
+                         .arg(verb, kUnit, rc == 0 ? QString("no effect") : QString("exit %1").arg(rc), serviceState_);
+    }
     emit changed();
+    return ok;
 }
 
-void IntegrationSettings::resetToDefaults() {
-    if (serviceState_ == "enabled" || serviceState_ == "active") setBackgroundService(false);
-    save(UserConfig{});
+bool IntegrationSettings::resetToDefaults() {
+    // Settings first: even if the service cannot be disabled, it goes idle because desktop sync is off.
+    const bool saved = save(UserConfig{});
+    const QString saveError = saved ? QString() : lastError_;
+    refreshService();
+    bool serviceOk = true;
+    if (serviceState_ == "enabled" || serviceState_ == "active" || serviceState_ == "unknown")
+        serviceOk = serviceState_ == "unknown" ? false : setBackgroundService(false);
+    QStringList problems;
+    if (!saved) problems << "the settings could not be saved (" + saveError + ")";
+    if (!serviceOk)
+        problems << (serviceState_ == "unknown"
+                         ? QString("the background service state could not be checked")
+                         : QString("the background service could not be disabled (%1)").arg(lastError_));
+    if (problems.isEmpty()) {
+        lastError_.clear();
+    } else {
+        lastError_ = "Reset incomplete: " + problems.join("; ") +
+                     (saved ? ". Desktop sync is off, so a running background service only idles; disable it with "
+                              "\"systemctl --user disable --now openwitty-volumed.service\"."
+                            : ".");
+    }
+    emit changed();
+    return problems.isEmpty();
 }
 
 QString IntegrationSettings::quirkInstructions() const {

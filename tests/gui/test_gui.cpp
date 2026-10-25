@@ -950,15 +950,30 @@ namespace {
 struct Calls {
     QStringList log;
     QString show = "LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\n";
+    int enableRc{0}, disableRc{0};
+    bool noEffect{false};                 // systemctl "succeeds" but nothing changes
+    bool showFails{false};
 };
 std::unique_ptr<IntegrationSettings> makeSettings(Calls& calls, std::optional<lewitt::AudioSetupStatus> st = std::nullopt) {
     return std::make_unique<IntegrationSettings>(
         nullptr,
         [&calls](const QString& prog, const QStringList& args, QString* out) {
             calls.log << prog + " " + args.join(' ');
-            if (args.contains("show") && out) *out = calls.show;
-            if (args.contains("enable")) calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
-            if (args.contains("disable")) calls.show = "LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\n";
+            if (args.contains("show")) {
+                if (calls.showFails) return 1;
+                if (out) *out = calls.show;
+                return 0;
+            }
+            if (args.contains("enable")) {
+                if (calls.enableRc == 0 && !calls.noEffect)
+                    calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
+                return calls.enableRc;
+            }
+            if (args.contains("disable")) {
+                if (calls.disableRc == 0 && !calls.noEffect)
+                    calls.show = "LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\n";
+                return calls.disableRc;
+            }
             return 0;
         },
         [st] { return st; });
@@ -1063,6 +1078,79 @@ TEST(Integration, InvalidFileValuesAreShownAndFallBackToOff) {
     EXPECT_FALSE(s->vendorFallback());
     EXPECT_EQ(s->configWarnings().size(), 1);
     ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
+}
+
+TEST(Integration, AnEnabledServiceCanAlwaysBeTurnedOffButOnlyStartedWithSync) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());      // desktop sync off
+    Calls calls;
+    calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
+    auto s = makeSettings(calls);
+    EXPECT_TRUE(s->serviceIdleOn());                                            // UI shows the hint
+    EXPECT_TRUE(s->setBackgroundService(false));                                // allowed with sync off
+    EXPECT_TRUE(calls.log.contains("systemctl --user disable --now openwitty-volumed.service"));
+    EXPECT_EQ(s->serviceState(), "disabled");
+    EXPECT_FALSE(s->serviceIdleOn());
+    EXPECT_FALSE(s->setBackgroundService(true));                                // refused: would only idle
+    EXPECT_TRUE(s->lastError().contains("first"));
+    for (const auto& c : calls.log) EXPECT_FALSE(c.contains(" enable ")) << c.toStdString();
+}
+
+TEST(Integration, FailingOrIneffectiveSystemctlIsReported) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, false, false}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    calls.enableRc = 1;
+    auto s = makeSettings(calls);
+    EXPECT_FALSE(s->setBackgroundService(true));
+    EXPECT_TRUE(s->lastError().contains("exit 1"));
+    EXPECT_EQ(s->serviceState(), "disabled");
+    calls.enableRc = 0;
+    calls.noEffect = true;                                                      // rc 0, nothing happened
+    EXPECT_FALSE(s->setBackgroundService(true));
+    EXPECT_TRUE(s->lastError().contains("no effect"));
+}
+
+TEST(Integration, ResetWithAServiceThatCannotBeDisabledIsReportedAsIncomplete) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, true, true}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
+    calls.disableRc = 1;
+    auto s = makeSettings(calls);
+    EXPECT_FALSE(s->resetToDefaults());
+    EXPECT_EQ(onDisk(), lewitt::UserConfig{});                                  // settings ARE reset (service idles)
+    EXPECT_TRUE(s->lastError().startsWith("Reset incomplete"));
+    EXPECT_TRUE(s->lastError().contains("could not be disabled"));
+    EXPECT_TRUE(s->lastError().contains("only idles"));
+    EXPECT_EQ(s->serviceState(), "active");
+    // the error survives: the save inside the reset must not have cleared it
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(s->lastError().isEmpty());
+}
+
+TEST(Integration, ResetWhenTheServiceStateCannotBeCheckedIsNotClaimedComplete) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, false, false}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    calls.showFails = true;
+    auto s = makeSettings(calls);
+    EXPECT_EQ(s->serviceState(), "unknown");
+    EXPECT_FALSE(s->resetToDefaults());
+    EXPECT_EQ(onDisk(), lewitt::UserConfig{});
+    EXPECT_TRUE(s->lastError().contains("could not be checked"));
+}
+
+TEST(Integration, SuccessfulResetClearsEverything) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, true, false}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
+    auto s = makeSettings(calls);
+    EXPECT_TRUE(s->resetToDefaults());
+    EXPECT_TRUE(s->lastError().isEmpty());
+    EXPECT_EQ(s->serviceState(), "disabled");
+    EXPECT_EQ(onDisk(), lewitt::UserConfig{});
 }
 
 TEST(Qml, DesktopIntegrationPageLoadsWithoutErrors) {

@@ -160,8 +160,6 @@ Rectangle {
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "The desktop slider works without this. OpenWitty only sets the desktop's volume control to the "
                        + "level the device already has (re-read first, never unmuted)." }
-            Text { visible: integration.lastError.length > 0; width: 330; wrapMode: Text.WordWrap
-                   color: Theme.danger; font.pixelSize: 10; text: integration.lastError }
         }
     }
 
@@ -175,7 +173,9 @@ Rectangle {
             width: 310; spacing: 6
             Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background" }
             ToggleSwitch { width: 310; label: "Keep it running when OpenWitty is closed"
-                           enabled: integration.desktopSync && integration.serviceState !== "not-installed"
+                           // switching an enabled service OFF is always possible; switching it ON needs desktop sync
+                           enabled: integration.serviceState !== "not-installed" && integration.serviceState !== "unknown"
+                                    && (integration.desktopSync || checked)
                            checked: integration.serviceState === "enabled" || integration.serviceState === "active"
                            tip: "Starts the openwitty-volumed user service with your desktop session (systemctl --user)."
                            onToggled: (b) => integration.setBackgroundService(b) }
@@ -184,6 +184,8 @@ Rectangle {
                          "enabled": "on (not running right now)", "active": "on and running",
                          "unknown": "state unknown"})[integration.serviceState]
                          + ". While this window is open it takes over." }
+            Text { visible: integration.serviceIdleOn; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                   text: "Desktop sync is off, so the background service only idles. You can turn it off here." }
             Rectangle { width: 310; height: 1; color: "#333" }
             Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Options that write the device" }
             ToggleSwitch { width: 310; label: "Vendor fallback (writes the device)"
@@ -205,6 +207,8 @@ Rectangle {
 
             Rectangle { width: 310; height: 1; color: "#333" }
             ToggleButton { width: 170; height: 22; text: "Reset desktop integration"; onClicked: confirmReset.visible = true }
+            Text { visible: integration.lastError.length > 0; width: 310; wrapMode: Text.WordWrap
+                   color: Theme.danger; font.pixelSize: 10; text: integration.lastError }
             Text { width: 310; wrapMode: Text.WrapAnywhere; color: Theme.textDim; font.pixelSize: 9
                    text: "Settings file: " + integration.configPath }
             Repeater { model: integration.configWarnings

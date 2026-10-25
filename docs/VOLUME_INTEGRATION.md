@@ -100,9 +100,60 @@ daemon takes it back. Explicit command-line modes (`--mirror`, `--vendor-fallbac
 variables, `--dry-run`, `--check`) override the file for diagnostics.
 
 ## Packaging
-`cmake --install` installs `openwitty`, `openwitty-cli`, `openwitty-volumed`, the udev rule and the user unit
-(`lib/systemd/user`, **never enabled**), plus the quirk file only as a documentation example. Distribution packages should
-keep the unit disabled and the quirk opt-in, and show the `--check` hint in their post-install message.
+`cmake --install` installs `openwitty`, `openwitty-cli`, `openwitty-volumed`, the udev rule (optional), the docs and the
+systemd user unit, plus the quirk file only as a documentation example. The unit is **never enabled** by the build or
+the install.
+* **Unit location:** `<prefix>/share/systemd/user` by default (`LEWITT_SYSTEMD_USER_UNIT_DIR`, relative to the prefix or
+  absolute). That is on systemd's user unit search path for `~/.local` (as `$XDG_DATA_HOME/systemd/user`), `/usr/local`
+  and `/usr`; distribution packages may set it to `pkg-config --variable=systemduserunitdir systemd` instead. Build trees
+  that cached the old `lib/systemd/user` default are migrated automatically.
+* **ExecStart / Documentation** are generated at install time from the *effective* prefix
+  (`packaging/systemd/InstallUserUnit.cmake`), so `cmake --install --prefix …` and `DESTDIR=… cmake --install` both
+  produce the path the executable will really have; the unit is recorded in `install_manifest.txt`.
+* CTest `install_staging_user_unit` checks both cases in a disposable directory (user-local prefix override; `DESTDIR`
+  package staging with `--prefix /usr`), including `systemd-analyze --user verify`.
+* Distribution packages should keep the unit disabled and the quirk opt-in, and point to `openwitty-volumed --check`.
+
+## Local installation (user-local, reversible)
+Into `~/.local` (no root; the udev rule is already installed system-wide on the development machine):
+```
+cmake -S . -B build-local -DCMAKE_INSTALL_PREFIX="$HOME/.local" -DLEWITT_INSTALL_UDEV_RULES=OFF
+cmake --build build-local -j"$(nproc)" && ctest --test-dir build-local
+cmake --install build-local                       # binaries, docs, ~/.local/share/systemd/user/openwitty-volumed.service
+systemctl --user daemon-reload
+systemctl --user status openwitty-volumed.service # expect: loaded, disabled, inactive
+```
+Rollback:
+```
+systemctl --user disable --now openwitty-volumed.service   # only if it was enabled
+xargs -d '\n' rm -f < build-local/install_manifest.txt
+systemctl --user daemon-reload
+rm -f ~/.config/openwitty/openwitty.conf                   # optional: forget the settings
+```
+
+## First real-device validation of the settings (proposal)
+Scope: the Settings page, mirror on/off from the page, the background-service switch, the GUI ↔ daemon hand-over.
+**Vendor fallback and Speaker/headphone control stay off throughout.** Nothing changes the speaker level except the owner's
+knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or audio-service restart.
+1. Install as above; `systemctl --user status` shows the unit loaded and disabled. Settings file absent (defaults).
+2. Start `openwitty`, open Settings → Desktop integration: expect "Desktop hardware volume: available", quirk active, all
+   switches off, background service "off".
+3. Turn on "Show knob and Mute button in desktop volume". Check the settings file (`desktop_volume_sync = mirror`, both
+   device-writing keys `false`). Owner turns the speaker volume knob a little: the KDE volume follows (GUI-hosted mirror).
+4. Turn "Keep it running when OpenWitty is closed" on: `systemctl --user status` shows active; `journalctl --user -u
+   openwitty-volumed` shows "waiting: device handed over" / "device in use by another OpenWitty client" while the window is open.
+5. Close the window: the service log shows "device connected" and a read-only start. Owner turns the knob: KDE follows
+   (service-hosted mirror). One small desktop decrease (`wpctl set-volume @DEFAULT_AUDIO_SINK@ <current−0.02>`): the device
+   follows through the kernel, no "did not follow" notice.
+6. Reopen the window: the service releases the device ("another OpenWitty client asked for the device"), the window connects
+   and mirrors; close it again: the service takes the device back.
+7. In the page, turn desktop sync off with the service still enabled: the service log says "idle"; the page shows the
+   "only idles" hint and the service switch can be turned off. Turn it off: unit disabled and inactive.
+8. "Reset desktop integration": settings file back to defaults, service disabled; independent vendor GET and ALSA/PipeWire
+   agree. Uninstall with the rollback above if wanted.
+Evidence: service journal (journald timestamps), the settings file, `systemctl --user status`, vendor GET
+(`openwitty-cli read settings --method interface --interface 3`, only while no other OpenWitty process holds the device),
+`amixer -c <card> sget PCM`, `wpctl get-volume`.
 
 ## Prepared hardware checkpoints (optional, each needs the owner's go-ahead)
 1. **Reproduce the ordinary-boot result.** Owner reboots normally; nothing OpenWitty-related runs before the test; then
