@@ -13,6 +13,8 @@ Window {
     // simulated | real-readonly | real-writable | connecting | error | connection-lost
     readonly property string uiState: device.values["ui.state"] || "disconnected"
     readonly property string uiError: (device.values["ui.error"] || "").split("\n")[0]
+    // transport name for display ("usb" -> "USB")
+    readonly property string backendLabel: device.backend === "usb" ? "USB" : device.backend
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
     readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
@@ -76,12 +78,12 @@ Window {
             DeviceStatusIndicator { objectName: "headerConnectionIndicator"; x: 262; anchors.verticalCenter: parent.verticalCenter
                 // the presented state: a hand-over from the background service reads "Connecting", not "Error"
                 state: win.uiState === "connecting" ? "Connecting" : device.connection
-                detail: win.uiState === "connecting" ? device.backend
+                detail: win.uiState === "connecting" ? win.backendLabel
                       : win.uiState === "simulated" ? "simulated"
                       : win.uiState === "real-readonly" ? "read-only"
                       : win.uiState === "real-writable" ? "real device"
                       : win.uiState === "connection-lost" ? "connection lost"
-                      : device.backend }
+                      : win.backendLabel }
             Text { objectName: "sampleRateLabel"; x: 461; anchors.verticalCenter: parent.verticalCenter; color: Theme.textDim; font.pixelSize: 11
                    text: "Sample rate:" }
             Rectangle {   // sample-rate dropdown (simulation only; real rate comes from the audio stack)

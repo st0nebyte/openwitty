@@ -1234,5 +1234,6 @@ TEST(Qml, HeaderIndicatorShowsConnectingDuringTheServiceHandOver) {
     auto* header = root->findChild<QObject*>("headerConnectionIndicator");
     ASSERT_TRUE(header);
     EXPECT_EQ(header->property("state").toString(), "Connecting");
+    EXPECT_EQ(header->property("detail").toString(), "USB");
     EXPECT_NE(c.connection(), "Connecting");   // the raw transport state differs; the presented one counts
 }
