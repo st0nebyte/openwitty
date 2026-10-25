@@ -9,7 +9,10 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 |---|---|
 | The speaker volume/mute of the vendor settings message (interface 3) is honoured in every device state seen | Phase 8C/8D, verified by read-back |
 | Feature Unit 2 **GET_CUR is broken**: it returns the current level and never changes, so the kernel cannot read the level back and never learns about hardware-knob changes | every boot since 8A; kernel `broken mixer GET_CUR` / `sticky mixer values` |
-| Feature Unit 2 **SET_CUR is honoured after an ordinary boot** – desktop volume reaches the speaker through the kernel | *observed once* (Phase 8E) |
+| Feature Unit 2 **SET_CUR is honoured after an ordinary boot** – desktop volume reaches the speaker through the kernel | observed on two ordinary boots (Phase 8E probe; Phase 8H volume keys after a reboot) |
+| The device reports a level the kernel set **with a delay**: the vendor GET shows it about 0.4–0.7 s after the ALSA control changed | Phase 8H, fast volume-key presses |
+| The **Mute button** is reported to the kernel (audio-control interrupt endpoint EP 3 IN): the ALSA `PCM Playback Switch` follows it in both directions **without OpenWitty**, and a desktop mute reaches the device through the kernel | Phase 8H: switch events recorded with no OpenWitty process running; KDE mute/unmute seen on the device by vendor GET |
+| For a few seconds after power-up the device answers no control requests: the kernel logs `usb_set_interface failed (-110)` on every boot, with or without OpenWitty | kernel log of five consecutive boots (Phase 8H) |
 | SET_CUR is **ignored** directly after a software re-enumeration of a running device (`authorized` toggle, `USBDEVFS_RESET`) | Phase 8C, measured twice |
 | On Linux 7.3 the always-broken microphone control (unit 5, channels 3/4) makes every ALSA mixer load fail with ENXIO → WirePlumber "Unable to load mixer" → no hardware-volume route at all | Phase 8C; fixed by the quirk below, confirmed across a real boot (Phase 8E) |
 
@@ -36,10 +39,11 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 | Behaviour | Status |
 |---|---|
 | Ordinary boot: quirk active, mixer loads, hardware-volume route present, FU2 SET reaches the device | observed once (Phase 8E, 2026-10-25) |
-| Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); the owner turned the speaker volume knob up (−36 → −27 dB), mirrored to the desktop step by step; the speaker output was already selected on the CONNECT 2, and the owner pressed the Mute button (short presses) several times, deliberately more often than planned; the speaker mute was mirrored to the desktop, and after a physical unmute the desktop was left muted with the notice, as designed; no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
+| Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); the owner turned the speaker volume knob up (−36 → −27 dB), mirrored to the desktop step by step; the speaker output was already selected on the CONNECT 2, and the owner pressed the Mute button (short presses) several times, deliberately more often than planned; the speaker mute was mirrored to the desktop, and after a physical unmute the desktop was reported as left muted with the notice (not reconstructable, see below; Phase 8H later showed the kernel itself follows the Mute button); no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
 | The exact mute/unmute sequence of that test | not reconstructable (extra button presses, log without timestamps); the final unmuted desktop state is not attributed to the kernel, WirePlumber or OpenWitty. Logging fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level) |
 | Settings page + installed background service (Phase 8G, 2026-10-25, same boot, user-local install): all 8 steps below, see "Settings validation" | passed |
-| Vendor fallback in the "SET ignored" state; suspend/resume; second ordinary boot | not yet tested on the device |
+| Mute button with the background service owning the device; start at boot/login with the service enabled (Phase 8H) | passed, see "Background service and login" |
+| Vendor fallback in the "SET ignored" state; suspend/resume; a logout/login without reboot | not yet tested on the device |
 
 ## Kernel compatibility quirk
 `options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error` (example: `packaging/modprobe/openwitty-connect2.conf`).
@@ -170,17 +174,43 @@ Evidence: service journal (journald timestamps), the settings file, `systemctl -
 | 8 | Reset: file back to defaults, service disabled; window closed; vendor GET speaker −39.50 dB unmuted (headphone −32.40 dB muted, unchanged since the baseline), ALSA −39.50 dB on, sink 0.22 – consistent |
 
 Not covered by this run: the vendor fallback, the speaker/headphone control, the Mute button through the service, a second
-boot, suspend/resume, login with the service already enabled.
+boot, suspend/resume, login with the service already enabled (the last three: Phase 8H below).
 
 **Why the desktop shows 10 % at the knob's minimum.** The CONNECT 2's speaker range ends at −60 dB, which is quiet but not
 silent. PipeWire/KDE display volume on a cubic scale, and −60 dB is exactly 10 % there (∛10⁻³). The mirror therefore shows
 10 %, the truth about the device. Dragging the desktop slider below 10 % sets the device to −60 dB and PipeWire attenuates the
 rest in software, which the knob cannot do. Silence from the device itself is the Mute button (mirrored as desktop mute).
 
+## Background service and login (Phase 8H, 2026-10-25)
+Settings via the page: `desktop_volume_sync = mirror`, `vendor_fallback = false`, `output_control = false`; service enabled.
+Vendor fallback and speaker/headphone control off throughout.
+
+**Mute button, service owns the device (window closed).** Two short presses (speaker selected): device, ALSA switch and KDE
+went muted → unmuted, one journal line each, level unchanged (−19.50 dB), no loop. With the service *stopped*, an ALSA event
+monitor recorded the same two `PCM Playback Switch` changes: the kernel follows the Mute button by itself (the device
+reports it on its interrupt endpoint). The service's "mirrored to the desktop" then finds the desktop already in step;
+OpenWitty never unmuted anything. A KDE mute/unmute reached the device through the kernel (service journal: device
+speaker muted / unmuted, read by vendor GET). Only the volume knob depends on OpenWitty, because the volume read-back is broken.
+
+**Start at boot/login.** The owner rebooted (instead of a logout). systemd started the service with the user session, about
+10 s after boot, no manual start (`NRestarts=0`). Quirk active, no "Unable to load mixer", output route with
+`route.hw-volume`/`route.hw-mute`. The first seconds coincide with the device's power-up stall: two vendor-read timeouts,
+one bounded reconnect after 6 s, read-only start again; the kernel's `usb_set_interface failed (-110)` occurs on every boot
+without OpenWitty as well. The knob turned after login was mirrored by that same process (device −17.14 dB, ALSA −17.50 dB,
+KDE 0.51). The PipeWire node ids changed after the reboot (sink 65 → 64): always select the sink by name.
+
+**Defect found and fixed: false "did not follow" during fast volume-key presses.** In native mode the verdict was taken on
+the single device read that follows a desktop event; because the device reports a kernel-set level with a delay, a burst of
+key presses produced a "did not follow" notice although the device followed (it cleared itself 0.7 s later). The verdict
+now waits for a grace period per target (`LinkOptions::followGrace`, 1.5 s; a newer desktop change starts a new one); a
+change still not followed afterwards is reported as before. The vendor fallback path is unchanged. Re-tested on the device:
+three steps up and three down, device followed each with ≈0.7 s delay, no notice, final state consistent (−17.50 dB).
+
 ## Prepared hardware checkpoints (optional, each needs the owner's go-ahead)
-1. **Reproduce the ordinary-boot result.** Owner reboots normally; nothing OpenWitty-related runs before the test; then
+1. **Reproduce the ordinary-boot result.** Done informally in Phase 8H (volume keys reached the device after a reboot). For a
+   formal record: owner reboots normally, then
    `tools/diagnostics/fu2_recovery_probe.py run --cli build-release/openwitty-cli --confirm-audio-safe` – stops after P0 if FU2
-   is honoured (≈1 s, speaker −1 dB). Two consistent boots are the minimum before calling the kernel path "the" behaviour.
+   is honoured (≈1 s, speaker −1 dB).
 2. **Suspend/resume.** Owner suspends and resumes the machine once; then the same tool run. `FU2_HEALTHY_AT_BOOT` (P0 followed)
    means suspend/resume keeps the kernel path working; anything else is the first evidence that ordinary users can reach the
    "SET ignored" state, which would justify offering the vendor fallback more prominently.

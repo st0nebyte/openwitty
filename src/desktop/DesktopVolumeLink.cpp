@@ -62,6 +62,7 @@ void DesktopVolumeLink::onPollTick(Clock::time_point now) {
     if (auto hw = readHardware()) apply(sync_.onHardware(*hw, now), now);
     else return;
     apply(sync_.tick(now), now);
+    checkFollow(now);
     endStep();
 }
 
@@ -70,7 +71,16 @@ void DesktopVolumeLink::onHardwareSample(const OutputLevel& hw, Clock::time_poin
     beginStep();
     apply(sync_.onHardware(hw, now), now);
     apply(sync_.tick(now), now);
+    checkFollow(now);
     endStep();
+}
+
+// Native mode: once the grace period of a desktop change has passed and the device (read just before)
+// still is not at the desktop level, judge the desktop again; writeDevice() then reports it.
+void DesktopVolumeLink::checkFollow(Clock::time_point now) {
+    if (!followCheck_ || now < followCheck_->deadline || sync_.phase() != SyncPhase::Synced) return;
+    if (auto d = mixer_.read()) apply(sync_.onDesktop(*d, now), now);
+    else followCheck_.reset();
 }
 
 void DesktopVolumeLink::beginStep() {
@@ -80,8 +90,10 @@ void DesktopVolumeLink::beginStep() {
 void DesktopVolumeLink::endStep() {
     const auto& d = sync_.desktop();
     const auto& h = sync_.hardware();
-    if (notFollowed_ && d && h && d->muted == h->muted && std::fabs(d->db - h->db) <= sync_.config().toleranceDb)
+    if (d && h && d->muted == h->muted && std::fabs(d->db - h->db) <= sync_.config().toleranceDb) {
         notFollowed_ = false;                 // back in step (device followed later, or desktop moved back)
+        followCheck_.reset();
+    }
     if (rejectedForPending_)
         notice_ = "A desktop volume change was not applied because another OpenWitty change is still "
                   "unconfirmed (retry or discard it). The desktop shows the speaker level again.";
@@ -157,12 +169,21 @@ void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point
         return;
     }
     if (opt_.deviceWrites == DeviceWriteMode::Native) {
-        // The fresh read before this decision showed the device did NOT follow the kernel's request.
-        // Native mode never corrects that by itself; it says so once.
+        // The fresh read before this decision showed the device not (yet) at the desktop level. The
+        // device applies the kernel's request with a short delay, so the verdict waits for the grace
+        // period of this target (a newer desktop change starts a new one). Native mode never corrects
+        // the device by itself; a change still not followed afterwards is reported once.
+        sync_.abandonWrite();
+        const bool sameTarget = followCheck_ && followCheck_->target.muted == target.muted &&
+                                std::fabs(followCheck_->target.db - target.db) <= sync_.config().toleranceDb;
+        if (!sameTarget) {
+            followCheck_ = FollowCheck{target, now + opt_.followGrace};
+            return;
+        }
+        if (now < followCheck_->deadline) return;
         if (!notFollowed_) log(fmt("the device did not follow the desktop change (wanted %.2f dB %s); "
                                    "no vendor write in native mode", target.db, target.muted));
         notFollowed_ = true;
-        sync_.abandonWrite();
         return;
     }
     if (session_.pendingSettings()) {        // another client's unconfirmed edit: never piggyback on it

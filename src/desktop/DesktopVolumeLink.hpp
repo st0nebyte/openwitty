@@ -11,7 +11,9 @@
 //   * while the session holds another client's unconfirmed edit (the GUI keeps failed edits pending
 //     for the user to retry or discard) the link never stages on top of it: it writes nothing.
 #pragma once
+#include <chrono>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "core/DeviceSession.hpp"
@@ -34,6 +36,10 @@ struct LinkOptions {
     DeviceWriteMode deviceWrites{DeviceWriteMode::None};
     bool desktopWrites{true};     // mirror the device level to the ALSA control (knob changes); off in dry run
     PollPolicy verify{};
+    // Native mode: how long the device may take to apply a desktop change the kernel forwarded before it
+    // counts as "did not follow". The CONNECT 2 reports the new level slightly after the ALSA control
+    // changes; judging a single immediate read produced false notices during fast volume-key presses.
+    std::chrono::milliseconds followGrace{1500};
 };
 
 class DesktopVolumeLink {
@@ -85,6 +91,12 @@ private:
     bool healthy_{true};
     bool rejectedForPending_{false};
     bool notFollowed_{false};          // Native mode: a desktop change the device did not follow
+    struct FollowCheck {
+        OutputLevel target;
+        Clock::time_point deadline;
+    };
+    std::optional<FollowCheck> followCheck_;   // Native mode: waiting for the device to apply a desktop change
+    void checkFollow(Clock::time_point now);
     int alignDepth_{0};
     std::string notice_;
 };

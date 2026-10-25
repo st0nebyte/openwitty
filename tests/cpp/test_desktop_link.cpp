@@ -330,6 +330,10 @@ TEST(DesktopLinkNative, ADesktopChangeTheDeviceIgnoresIsReportedNeverWritten) {
     ASSERT_TRUE(r.link->start(r.t0));
     r.mixer.level = {-40.0, false};                             // device ignores FU2: stays at -30
     r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_TRUE(r.link->notice().empty());                      // not judged before the grace period
+    r.link->onPollTick(r.t0 + 7s);
+    EXPECT_TRUE(r.link->notice().empty());
+    r.link->onPollTick(r.t0 + 7600ms);                          // grace (1.5 s) passed, still not followed
     EXPECT_EQ(r.hw->writeCalls, 0);
     EXPECT_DOUBLE_EQ(r.mixer.level.db, -40);                    // the user's desktop value is not overwritten
     EXPECT_NE(r.link->notice().find("did not follow"), std::string::npos);
@@ -360,4 +364,69 @@ TEST(DesktopLinkNative, LargeDesktopIncreaseIsTheUsersChoiceAndNotCorrected) {
     r.link->onDesktopEvent(r.t0 + 6s);
     EXPECT_EQ(r.hw->writeCalls, 0);
     EXPECT_DOUBLE_EQ(r.mixer.level.db, -5);                     // no clamp fight with the native path
+}
+
+// Phase 8H (observed on the device): the CONNECT 2 reports a level the kernel forwarded slightly after the
+// ALSA control changed. During fast volume-key presses a single immediate read showed the previous step.
+TEST(DesktopLinkNative, DeviceThatFollowsLateIsNotReported) {
+    Rig r(DeviceWriteMode::Native, true, -23.5, false);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-20.0, false};                             // volume key up; the device still shows -23.5
+    r.link->onDesktopEvent(r.t0 + 60s);
+    r.setDevice(-20.0, false);                                  // ...and applies it a moment later
+    r.link->onPollTick(r.t0 + 60s + 400ms);
+    r.link->onPollTick(r.t0 + 63s);
+    EXPECT_TRUE(r.link->notice().empty());
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    for (auto& l : r.log) EXPECT_EQ(l.find("did not follow"), std::string::npos) << l;
+}
+
+TEST(DesktopLinkNative, FastKeyPressesWithALaggingDeviceGiveNoFalseNotice) {
+    Rig r(DeviceWriteMode::Native, true, -23.5, false);
+    ASSERT_TRUE(r.link->start(r.t0));
+    const auto t = r.t0 + 60s;
+    // the sequence of the observed incident: up, up, down, down; the device is always one step behind
+    r.mixer.level = {-20.0, false};
+    r.link->onDesktopEvent(t);
+    r.setDevice(-20.0, false);
+    r.mixer.level = {-17.5, false};
+    r.link->onDesktopEvent(t + 160ms);
+    r.setDevice(-17.5, false);
+    r.mixer.level = {-20.0, false};
+    r.link->onDesktopEvent(t + 500ms);
+    r.setDevice(-20.0, false);
+    r.mixer.level = {-23.0, false};
+    r.link->onDesktopEvent(t + 700ms);
+    r.setDevice(-23.0, false);
+    for (int i = 1; i <= 4; ++i) r.link->onPollTick(t + 700ms + std::chrono::seconds(i));
+    EXPECT_TRUE(r.link->notice().empty());
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -23);
+    for (auto& l : r.log) EXPECT_EQ(l.find("did not follow"), std::string::npos) << l;
+}
+
+TEST(DesktopLinkNative, ANewerDesktopChangeRestartsTheGracePeriod) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-34.0, false};
+    r.link->onDesktopEvent(r.t0 + 6s);
+    r.mixer.level = {-38.0, false};                             // next key press 1.2 s later
+    r.link->onDesktopEvent(r.t0 + 7200ms);
+    r.link->onPollTick(r.t0 + 7800ms);                          // 1.8 s after the first, 0.6 s after the second
+    EXPECT_TRUE(r.link->notice().empty());
+    r.link->onPollTick(r.t0 + 8800ms);                          // the device never followed
+    EXPECT_NE(r.link->notice().find("did not follow"), std::string::npos);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLinkNative, IgnoredMuteIsReportedAfterTheGracePeriod) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    r.mixer.level = {-30.0, true};                              // KDE mute; the device stays unmuted
+    r.link->onDesktopEvent(r.t0 + 6s);
+    EXPECT_EQ(r.link->notice().find("did not follow"), std::string::npos);   // (the mute difference is explained)
+    r.link->onHardwareSample(OutputLevel{-30.0, false}, r.t0 + 8s);
+    EXPECT_NE(r.link->notice().find("did not follow"), std::string::npos);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_FALSE(r.device().muted);
 }
