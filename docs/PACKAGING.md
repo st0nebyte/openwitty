@@ -7,8 +7,8 @@ root and nothing is installed on the build host.
 
 | Format | Source | Validation performed |
 | ------ | ------ | ------ |
-| Arch / CachyOS | `packaging/arch/PKGBUILD` + `make-source-tarball.sh` | **Real rootless `makepkg` on CachyOS** (2026-10-25, Phase 9A; makepkg with the host's toolchain, build/package/source directories in a temporary location): `build()`, `check()` (281/281 CTests; `packaging_staging` excluded by design) and `package()` succeeded. Package inspected: all files `root:root`, binaries stripped without RPATH or development paths, every linked library owned by a declared dependency or a base package (`qt6-svg` is a declared run-time plugin), user unit at `/usr/lib/systemd/user` with `ExecStart=/usr/bin/openwitty-volumed` and not enabled, udev rule at `/usr/lib/udev/rules.d`, licences in `/usr/share/licenses/openwitty`, desktop entry and AppStream valid. **`namcap` was not run** (not installed; not installed for this audit). Not built in a clean chroot |
-| `.deb` (Debian / Ubuntu) | `packaging/CPackConfig.cmake` (`cpack -G DEB`) | Earlier (Phase 5, Ubuntu 24.04 host, before the desktop integration): `lintian --pedantic`, `dpkg-deb -I/-c`, rootless install/upgrade/remove/purge simulation (`tools/packaging/check_deb_lifecycle.sh`). **Phase 9A, on CachyOS without Debian tools:** only a CPack build with `CPACK_DEBIAN_PACKAGE_SHLIBDEPS=OFF` to inspect the contents (control file, maintainer scripts, all files `root:root`, unit and udev rule locations, `ExecStart`). Shared-library dependencies, `lintian` and the lifecycle simulation have **not** been re-run since the desktop integration was added |
+| Arch / CachyOS | `packaging/arch/PKGBUILD` + `make-source-tarball.sh` | **Real rootless `makepkg` on CachyOS** (Phase 9A–9D; temporary build/package/source directories): `build()`, `check()` (292/292; `packaging_staging` excluded by design), `package()`. **`namcap`** 3.6.0 (Phase 9D): PKGBUILD clean; package only `Dependency included, but may not be needed ('qt6-svg')` — a false positive, Qt's SVG image plugin is loaded at run time (Lucide icons). Package inspected: `root:root`, stripped, no RPATH/dev paths, unit at `/usr/lib/systemd/user` (disabled), udev rule, licences, examples only. Not built in a clean chroot |
+| `.deb` (Debian / Ubuntu) | `packaging/CPackConfig.cmake` (`cpack -G DEB`) | **Disposable Debian 13.7 (trixie) container** (Phase 9D: `debootstrap` + `systemd-nspawn`, no USB devices inside, built and tested as an unprivileged user): 292/292 CTests (Qt 6.8.2); `cpack` with `dpkg-shlibdeps`; `lintian --pedantic`: only `initial-upload-closes-no-bugs` (archive uploads only); `check_deb_lifecycle.sh`: PASS; real `apt install` → binaries, GUI `--mock --screenshot`, tray without a tray host, `systemd-analyze --user verify` clean, unit disabled, no autostart/modprobe/WirePlumber file outside the examples → `apt remove` + `purge`: nothing left. A package built on Debian 13 needs Qt ≥ 6.8 (shlibdeps); build per target distribution. **Ubuntu 24.04 / Debian 12 not tested** |
 | AppImage | – | **Not built**, see decision below |
 
 ## Design rules
@@ -18,8 +18,11 @@ root and nothing is installed on the build host.
   from `src/version.hpp.in`). `.sysroot/`, `.tools/`, `.venv/` and `research/` are
   development-only, git-ignored and never packaged.
 * The `.deb` Depends come from `dpkg-shlibdeps` (Qt, libusb, alsa-lib) plus `qml6-module-qtquick`,
-  `qml6-module-qtquick-window`, `qml6-module-qtquick-shapes`, `qt6-qpa-plugins` and `libqt6svg6` (QML modules and
-  the SVG image plugin are loaded at run time, so shlibdeps cannot see them).
+  `qml6-module-qtquick-window`, `qml6-module-qtquick-shapes`, `qt6-qpa-plugins` and
+  `qt6-svg-plugins | libqt6svg6 (<< 6.5~)` (QML modules and the SVG image plugin are loaded at run time, so
+  shlibdeps cannot see them). The SVG plugin moved to `qt6-svg-plugins` with Qt 6.8 (Debian 13; without it the
+  GUI's icons fail to load — seen in the container); Debian 12 and Ubuntu 24.04 (Qt 6.4.2) ship it in `libqt6svg6`.
+* The upstream changelog is installed as `share/doc/openwitty/changelog.gz` (Debian/FHS name).
 * Run-time dependencies on Arch: `qt6-base qt6-declarative qt6-svg libusb alsa-lib hicolor-icon-theme` (`qt6-base`
   also provides Qt Widgets, Network and D-Bus for the tray icon and the single-instance channel).
 * `openwitty-tray` is installed but never autostarted by a package: there is no `/etc/xdg/autostart` entry; the
@@ -84,9 +87,7 @@ properties (uaccess, vendor-scoped, no 0666).
 ## Open items for the project owner
 
 * Maintainer/contact e-mail in the packages is the GitHub no-reply placeholder; replace if desired.
-* Run `namcap` on the Arch package (and ideally build it in a clean chroot, `extra-x86_64-build`).
-* Rebuild the `.deb` on Debian/Ubuntu with `dpkg-shlibdeps` and `lintian`, re-run
-  `tools/packaging/check_deb_lifecycle.sh`, and confirm `libqt6svg6` is the right package for the SVG plugin
-  on each targeted release.
+* Optionally build the Arch package in a clean chroot (`extra-x86_64-build`).
+* Build and install-test the `.deb` on Ubuntu 24.04 and Debian 12 (only Debian 13 was tested).
 * Install and smoke-test both packages in a clean VM/container (nothing was installed on the development host;
   only the user-local install was used on the device).

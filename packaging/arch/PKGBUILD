@@ -17,7 +17,9 @@ pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNE
 arch=('x86_64')
 url='https://github.com/st0nebyte/openwitty'
 license=('MIT' 'ISC')
-depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'libusb' 'alsa-lib' 'hicolor-icon-theme')
+# qt6-svg: loaded at run time as Qt's SVG image plugin (Lucide UI icons) - not linked, so namcap reports it as
+# "may not be needed"; without it the icons are missing.
+depends=('glibc' 'libgcc' 'libstdc++' 'qt6-base' 'qt6-declarative' 'qt6-svg' 'libusb' 'alsa-lib' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'gtest')
 optdepends=('usbutils: lsusb for manual diagnostics'
             'alsa-utils: aplay/amixer for manual diagnostics'

@@ -364,7 +364,7 @@ endforeach()
 install(FILES packaging/linux/io.github.st0nebyte.openwitty.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/linux/io.github.st0nebyte.openwitty.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 # User-facing documentation only (developer and hardware-test notes stay in the source tree).
-install(FILES README.md CHANGELOG.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
+install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
               docs/THIRD_PARTY.md docs/VOLUME_INTEGRATION.md
               PROTOCOL.md FEATURES.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
@@ -378,9 +378,12 @@ find_program(LEWITT_GZIP gzip)
 if(LEWITT_GZIP)
     set(_gzdir ${CMAKE_BINARY_DIR}/packaging-gz)
     file(MAKE_DIRECTORY ${_gzdir})
-    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1 man/openwitty-volumed.1 man/openwitty-tray.1)
+    # ../CHANGELOG.md is the upstream changelog: installed as changelog.gz (the Debian/FHS doc name).
+    foreach(_f debian/changelog ../CHANGELOG.md man/openwitty-cli.1 man/openwitty.1 man/openwitty-volumed.1 man/openwitty-tray.1)
         get_filename_component(_n ${_f} NAME)
-        if(_n STREQUAL "changelog")
+        if(_n STREQUAL "CHANGELOG.md")
+            set(_out ${_gzdir}/changelog.gz)
+        elseif(_n STREQUAL "changelog")
             set(_out ${_gzdir}/changelog.Debian.gz)
         else()
             set(_out ${_gzdir}/${_n}.gz)
@@ -392,7 +395,7 @@ if(LEWITT_GZIP)
         endif()
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/packaging/${_f})
     endforeach()
-    install(FILES ${_gzdir}/changelog.Debian.gz DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    install(FILES ${_gzdir}/changelog.Debian.gz ${_gzdir}/changelog.gz DESTINATION ${CMAKE_INSTALL_DOCDIR})
     install(FILES ${_gzdir}/openwitty-cli.1.gz ${_gzdir}/openwitty.1.gz
             DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
     if(TARGET openwitty-volumed)

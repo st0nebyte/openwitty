@@ -25,11 +25,12 @@ set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_RELEASE "1")
 # Shared-library dependencies are computed from the binaries (dpkg-shlibdeps); the QML modules,
 # the Qt platform plugins and the Qt SVG image plugin (Lucide icons) are loaded at run time and must be
-# declared by hand. Debian/Ubuntu builds should also pass
+# declared by hand. The SVG plugin is in qt6-svg-plugins from Qt 6.8 on (Debian 13); Debian 12 and Ubuntu 24.04
+# (Qt 6.4.2) still ship it inside libqt6svg6 - hence the alternative (checked in a Debian 13 container, Phase 9D). Debian/Ubuntu builds should also pass
 #   -DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user   (the distribution's user unit directory).
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-shapes, qt6-qpa-plugins, libqt6svg6")
+    "qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-shapes, qt6-qpa-plugins, qt6-svg-plugins | libqt6svg6 (<< 6.5~)")
 set(CPACK_DEBIAN_PACKAGE_SUGGESTS "usbutils, alsa-utils, pipewire")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${CMAKE_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_SOURCE_DIR}/packaging/debian/postrm")

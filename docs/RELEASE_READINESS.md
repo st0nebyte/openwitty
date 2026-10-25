@@ -22,9 +22,9 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 
 | # | Check | Result |
 |---|---|---|
-| 1 | Release build, all CTests | PASS — 292/292 |
+| 1 | Release build, all CTests | PASS — 293/293 |
 | 2 | GUI tests (offscreen) / tray tests / single-instance race tests | PASS — 57/57, 17/17, 7/7 (race and tray also under ASan/UBSan) |
-| 3 | ASan/UBSan suite (`-DLEWITT_BUILD_GUI=OFF`) | PASS — 272/272 |
+| 3 | ASan/UBSan suite (`-DLEWITT_BUILD_GUI=OFF`) | PASS — 273/273 |
 | 4 | USB call-site audit (incl. tray/desktop-UI and single-instance rules) | PASS |
 | 5 | End-to-end single-instance script (second starts, two trays, unanswering owner) | PASS |
 
@@ -33,12 +33,12 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | # | Check | Result |
 |---|---|---|
 | 6 | Packaging staging check (service, tray, man pages, licences, no `modprobe.d`, no autostart entry, unit not enabled) | PASS |
-| 7 | Real rootless `makepkg` incl. `check()` | PASS — 291/291 (`packaging_staging` excluded by design) |
+| 7 | Real rootless `makepkg` incl. `check()` | PASS — 292/292 (`packaging_staging` excluded by design) |
 | 8 | Package contents: `root:root`, stripped, no RPATH/development paths, licences, udev rule, unit disabled, quirk and login-screen rule only as examples | PASS (Arch package inspected; `.deb` contents inspected in Phase 9A) |
 | 9 | Desktop entry, AppStream, man pages validators | PASS |
 | 10 | Uninstall: manifest complete; packages remove their files; user settings and tray entry documented | PASS |
-| 11 | `namcap` | **NOT RUN** — not installed |
-| 12 | Debian `lintian`, `dpkg-shlibdeps`, install/remove lifecycle since the desktop integration | **NOT RUN** — no Debian tooling on the host |
+| 11 | `namcap` | PASS — PKGBUILD clean; package: only the documented `qt6-svg` run-time plugin false positive (Phase 9D) |
+| 12 | Debian: build + 292 tests, `dpkg-shlibdeps`, `lintian --pedantic`, lifecycle, real install/use/remove/purge | PASS on Debian 13 (disposable container, Phase 9D); Ubuntu 24.04 / Debian 12 **not tested** |
 
 **Documentation and repository**
 
@@ -271,21 +271,17 @@ Set `git config user.email 133608037+st0nebyte@users.noreply.github.com` for new
 
 ### Arch
 
-`namcap` is not installed on the host (not installed for the audit). Outstanding: `namcap PKGBUILD` and
-`namcap openwitty-*.pkg.tar.zst`; ideally a clean-chroot build (`extra-x86_64-build`, devtools).
+Done in Phase 9D: `namcap` (installed for this: `namcap` + 3 Python libraries, no upgrades) — see the checklist.
+Optional: a clean-chroot build (`extra-x86_64-build`, devtools).
 
-### Debian / Ubuntu (outstanding, no suitable disposable environment on the host)
+### Debian / Ubuntu
 
-No `dpkg`, `lintian` or existing container image here (`systemd-nspawn` exists, but no Debian root and no
-downloads were made). Exact remaining work, in a disposable Debian 13 / Ubuntu 24.04 container or VM:
-1. `apt install` the build dependencies from `docs/INSTALLATION.md`; build with
-   `-DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user`; `ctest`.
-2. `cpack -G DEB` with `dpkg-shlibdeps` active; `dpkg-deb -I/-c`; check Depends (Qt Widgets/Network/DBus,
-   `libqt6svg6`, `libasound2`/`libasound2t64`, libusb).
-3. `lintian --pedantic` on the `.deb`.
-4. `tools/packaging/check_deb_lifecycle.sh <deb>` (install/upgrade/remove/purge in a private root), then a real
-   `apt install ./…deb` and `apt remove`/`purge` in the container; `openwitty --mock --screenshot`,
-   `openwitty-tray --wait-for-tray-seconds 0`, `systemd-analyze --user verify` of the installed unit.
+Done in Phase 9D for **Debian 13.7** in a disposable `debootstrap` root under `/var/tmp/openwitty-debian-test`
+(tools installed on the host: `debootstrap`, `debian-archive-keyring`, `distro-info`, `distro-info-data`; no
+upgrades; `debootstrap` needed a private copy of its data directory with an `arch` file because CachyOS's
+`pacman-conf` reports several architectures). Found and fixed: the SVG image plugin dependency
+(`qt6-svg-plugins | libqt6svg6 (<< 6.5~)`) and the upstream changelog name (`changelog.gz`). Outstanding: Ubuntu
+24.04 and Debian 12 (Qt 6.4.2) build and install test.
 
 ### Clean installation and removal test plan (both package formats)
 
