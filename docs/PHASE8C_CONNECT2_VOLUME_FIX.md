@@ -21,7 +21,7 @@ The Python bridge below is the reference implementation; the maintained integrat
 ### 2. Feature Unit 2 (speaker volume) ignores UAC SET_CUR unless the device is power-cycled and probed at once (WORKED AROUND)
 | Sequence | FU2 after probe |
 |---|---|
-| normal boot (autoload ≈9 s after enumeration) | broken GET_CUR, -110, SET ignored |
+| normal boot (autoload ≈9 s after enumeration) | broken GET_CUR, -110; "SET ignored" was **inferred, not measured** here – Phase 8E measured an ordinary boot: SET **followed** |
 | late load 317 s after boot (8A.24) / unbound replug + load 120 s later (8A.25) | broken |
 | physical replug with driver loaded (8A.21, 8A.26, 8A.26B, 8C) – probe within 0.3 s of power-up | **healthy, SET followed** |
 | software re-enumeration via `authorized` 0→1 (no reset, no power cycle) | broken |

@@ -86,3 +86,38 @@ cached value, so when ALSA already sits 1 dB down the target is half a step lowe
 * Supported → evaluate a minimal guarded device-initialization step (one vendor settings SET with an LED-only intended edit, read-back checked, when the
   CONNECT 2 appears) that leaves KDE/PipeWire in charge, keeping the native bridge as fallback until reproduced.
 * Not supported → keep the native bridge (`openwitty-volumed`) and validate its vendor write path in the FU2-broken state.
+
+## Result (2026-10-25, ordinary boot `064c941b…`, kernel 7.3.0-5-cachyos, quirk active from boot)
+Owner confirmed the audio safety before the reboot step and the active test. Boot 07:32:00; kernel at 07:32:10:
+`2:0: broken mixer GET_CUR (-15360/0/128 => -8448)` (−33.0 dB), separate unit-5 warning, `usb_set_interface failed (-110)` at
+07:32:17. WirePlumber logged **no** "Unable to load mixer"; the CONNECT 2 had `analog-output` with `route.hw-volume=true`.
+No OpenWitty process or usbfs access before the run.
+
+| Time | Step | ALSA | Device (vendor GET, full 128 bytes) |
+|---|---|---|---|
+| 07:33:56 | start (checks passed, worst case −36 dB) | −33.0 dB unmuted | −33.0 dB unmuted, LED 100 |
+| 07:33:57 | P0: ALSA → −34.0 dB | −34.0 dB | **−34.0 dB – followed**, no other byte changed |
+
+**Verdict: `FU2_HEALTHY_AT_BOOT`.** The run stopped after P0 as designed: no vendor write, LED untouched, no failure
+manufactured. Afterwards PipeWire showed the new level (sink 0.27), kernel log quiet apart from the CLI's usbfs notices.
+
+### What this shows (one ordinary boot)
+* "broken mixer GET_CUR" means exactly that: the device's FU2 **read-back** is constant (it reports the current level, so
+  the kernel's sanity test sees no change). It did **not** mean that FU2 ignores SET_CUR: on this ordinary boot the
+  kernel/ALSA volume path reached the device directly.
+* The state in which the device ignored FU2 SETs was observed in this project only right after software re-enumeration of
+  an already-running device (`authorized` toggle, `USBDEVFS_RESET`, Phase 8C). The Phase 8C table's "normal boot: SET
+  ignored" had been an inference and is corrected.
+* With the per-device quirk (`ignore_ctl_error`) the complete standard path worked after a real boot: mixer loads,
+  PipeWire hardware-volume route, KDE/ALSA volume reaches the speaker.
+* Because GET_CUR is broken, the kernel never learns about knob changes: the desktop shows a stale level after the knob is
+  turned (the Phase 8D live test showed `openwitty-volumed` mirroring the knob to KDE).
+* The vendor-SET hypothesis was **not** tested (FU2 was already healthy) and is not needed for the ordinary boot path.
+
+### Consequences
+1. The kernel quirk is the primary fix for desktop volume after boot (to be reproduced on at least one more ordinary boot,
+   and ideally on another machine, before it is presented as such).
+2. `openwitty-volumed` remains useful for knob → desktop mirroring (read-only towards the device, ALSA alignment under the
+   Phase 8D safety rules) and as the vendor-write fallback for a device that ignores FU2.
+3. Open question for ordinary users: can suspend/resume (USB reset-resume) produce the FU2-ignored state? Test once, with
+   the owner performing the suspend, reading the result with one ALSA probe (decrease) + vendor GET.

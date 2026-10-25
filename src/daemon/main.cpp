@@ -1,8 +1,10 @@
 // openwitty-volumed: keeps the CONNECT 2 speaker output in step with the desktop volume.
 //
 // The KDE/PipeWire volume of the CONNECT 2 sink ends up in the card's ALSA "PCM Playback" control.
-// After a normal boot the device ignores the UAC Feature Unit requests that control produces, but it
-// honours the vendor settings message on interface 3. This daemon applies desktop volume/mute
+// The kernel cannot read the device's speaker level back (broken GET_CUR), so knob changes never reach
+// the desktop, and in some device states (seen after software re-enumeration) the device ignores the
+// UAC Feature Unit requests that control produces. It always honours the vendor settings message on
+// interface 3. This daemon applies desktop volume/mute
 // changes to the device through that message and mirrors hardware-knob changes back to the desktop.
 // Policy: core/VolumeSync.hpp (startup is read-only, bounded increases, no retries of unverified
 // writes, knob changes win over older desktop requests).

@@ -7,7 +7,7 @@ reappearance it pushes the current ALSA level to the device (it can raise the ph
 login), it does not track the hardware knob, it has no bounded-increase limit, and its per-write CLI
 calls collide with the GUI's control lease.
 
-Why: after a normal boot the CONNECT 2's Feature Unit 2 (speaker volume) accepts UAC SET_CUR requests but ignores them
+Why (Phase 8C assumption, later corrected by Phase 8E): in some device states the CONNECT 2's Feature Unit 2 accepts UAC SET_CUR requests but ignores them
 ("broken mixer GET_CUR", usb_set_interface -110). PipeWire/KDE then move the ALSA `PCM Playback Volume` control while the
 physical speaker level stays where it was. The vendor settings message on interface 3 is honoured in every state, so this
 bridge mirrors the ALSA control to the device:
