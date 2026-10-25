@@ -56,7 +56,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
 | 18 | Speaker level unchanged across logout/login | **FAIL (limitation)** — the login screen's own audio service sets its default level; see "Speaker level at the login screen (Phase 9C)" |
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
-| 20 | GUI *Speaker/headphone control* on hardware | **NOT DONE** |
+| 20 | GUI *Speaker/headphone control* on hardware | **NOT DONE** — no GUI control has written to the real device yet; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20a | GUI permissions match the write policy (Phase 10A: per-control capabilities; triggers need their own authorization) | PASS (offline tests) |
 
 **Open decisions**
 

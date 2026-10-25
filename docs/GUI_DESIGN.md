@@ -44,8 +44,9 @@ fader cap white, rail `#8f8d8d`; active MUTE red.
 | Pictograms: mic, guitar, loop, speakers, headphones, shuffle, low-cut, clipguard, autogain, laptop | `GlyphIcon.qml` | own drawings |
 
 ## Behaviour rules
-* Controls are interactive only when `device.writable`; simulation announced in
-  a banner; restricted features show a hint (96 kHz).
+* Each control is interactive only when its own capability `can.<key>` is true (Phase 10A,
+  `core/ControlCapabilities`): everything in simulation, on real hardware exactly what the write policy authorizes
+  (the banner lists it); simulation announced in a banner; restricted features show a hint (96 kHz).
 * 48 V, high-volume speaker mode and device-mode changes need confirmation.
 * Unsent edits are shown on top of device state, flagged (dot + footer
   "Change not sent — Retry / Discard"), never silently dropped; device-side

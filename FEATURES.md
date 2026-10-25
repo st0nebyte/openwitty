@@ -16,7 +16,10 @@ Summary of the hardware evidence:
 
 "RE" = what reverse engineering still has to establish.
 Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML control (on real hardware:
-display only, except the confirmed speaker/headphone control).
+display only, except the confirmed speaker/headphone control). Since Phase 10A every GUI control is enabled by its
+own capability (`can.<key>`, `core/ControlCapabilities`), and no trigger is authorized on real hardware.
+**No GUI control has written to the real device yet**; per-control status and the validation plan:
+`docs/FEATURE_COMPLETION_ROADMAP.md`.
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|

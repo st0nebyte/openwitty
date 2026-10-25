@@ -1289,6 +1289,11 @@ TEST(GuiPermissions, SpeakerHeadphoneControlEnablesOnlyTheFourOutputControls) {
     QQmlEngine engine;
     auto root = loadMain(*r.c, engine);
     ASSERT_TRUE(root);
+    auto* banner = root->findChild<QObject*>("connectionBannerText");
+    ASSERT_TRUE(banner);
+    EXPECT_EQ(banner->property("text").toString(),
+              "REAL DEVICE — can change: speaker volume, speaker mute, headphone volume, headphone mute. "
+              "All other controls are display-only.");
     EXPECT_TRUE(enabledOf(root.get(), "fader_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "mute_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "fader_hp"));

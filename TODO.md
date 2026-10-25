@@ -1,5 +1,9 @@
 # TODO
 
+> **Current plan (Phase 10A, 2026-10-25):** `docs/FEATURE_COMPLETION_ROADMAP.md` — feature matrix, GUI permission
+> fixes, hardware-validation roadmap and work packages. The numbered items below are the historical log; where they
+> disagree with the roadmap (e.g. "Next" items), the roadmap is current. Release status: `docs/RELEASE_READINESS.md`.
+
 ## Needs the device (do in this order, read-only first)
 1. ✔ done 2026-10-14: `openwitty-cli list`/`devices`; descriptors recorded (`docs/HARDWARE_TEST_RESULTS.md`).
 2. ✔ done 2026-10-14: `probe --execute` — **access method decided: interface 3** (unbound,

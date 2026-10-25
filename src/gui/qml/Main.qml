@@ -17,6 +17,18 @@ Window {
     readonly property string backendLabel: device.backend === "usb" ? "USB" : device.backend
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
+    // Phase 10A: plain-language list of what the session may change on the real device (from can.<key>).
+    function authorizedSummary() {
+        var groups = [["speaker volume", "spk.volume"], ["speaker mute", "spk.mute"], ["headphone volume", "hp.volume"],
+                      ["headphone mute", "hp.mute"], ["LED brightness", "set.ledBrightness"]];
+        var out = [];
+        for (var i = 0; i < groups.length; ++i) if (device.values["can." + groups[i][1]] === true) out.push(groups[i][0]);
+        var other = 0;
+        for (var k in device.values)
+            if (k.indexOf("can.") === 0 && device.values[k] === true) other++;
+        if (other > out.length) out.push("other authorized controls");
+        return out.length ? out.join(", ") : "nothing";
+    }
     readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
     readonly property bool panicMuted: win.live && device.values["mute.allFour"] === true
     readonly property string settingsFreshness: device.values["fresh.settings"] || "unavailable"
@@ -189,7 +201,7 @@ Window {
                      ? "CONTROL LINK, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")
                        + ". Audio and front-panel readiness not verified."
                      : win.uiState === "real-writable"
-                     ? "REAL DEVICE — individually authorized controls enabled."
+                     ? "REAL DEVICE — can change: " + win.authorizedSummary() + ". All other controls are display-only."
                      : win.uiState === "connecting"
                      ? (device.values["ui.detail"] === "Taking over from the OpenWitty background service"
                         ? "Connecting — taking over the CONNECT 2 from the OpenWitty background service…"
