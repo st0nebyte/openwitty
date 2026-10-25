@@ -1239,3 +1239,117 @@ TEST(Qml, HeaderIndicatorShowsConnectingDuringTheServiceHandOver) {
     EXPECT_EQ(header->property("detail").toString(), "USB");
     EXPECT_NE(c.connection(), "Connecting");   // the raw transport state differs; the presented one counts
 }
+
+// ---- Phase 10A: per-control permissions on real hardware -----------------------------------------------------
+#include "../cpp/FakeHardware.hpp"
+#include "core/ControlCapabilities.hpp"
+#include "core/OutputControl.hpp"
+#include <QRegularExpression>
+
+namespace {
+// A controller connected to a simulated device that claims to be real hardware, with the given policy.
+struct RealLike {
+    lewitt::MockTransport mock;
+    lewitt::testing::FakeHardware* hw{nullptr};
+    std::unique_ptr<DeviceController> c;
+    explicit RealLike(lewitt::WritePolicy p) {
+        c = std::make_unique<DeviceController>();
+        auto t = std::make_unique<lewitt::testing::FakeHardware>(&mock);
+        hw = t.get();
+        c->connectTransportForTesting(std::move(t), std::move(p));
+        c->flush();
+        EXPECT_TRUE(waitFor([&] { return c->connection() == "Connected" && c->values().contains("can.spk.mute"); }));
+    }
+    bool can(const char* k) const { return c->values().value(QString("can.") + k).toBool(); }
+};
+std::unique_ptr<QObject> loadMain(DeviceController& c, QQmlEngine& engine) {
+    engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
+    std::unique_ptr<QObject> root(comp.create());
+    QCoreApplication::processEvents();
+    return root;
+}
+bool enabledOf(QObject* root, const char* name) {
+    QObject* o = root->findChild<QObject*>(name);
+    EXPECT_TRUE(o) << name;
+    return o && o->property("enabled").toBool();
+}
+}  // namespace
+
+TEST(GuiPermissions, SpeakerHeadphoneControlEnablesOnlyTheFourOutputControls) {
+    app();
+    RealLike r(lewitt::outputWritePolicy(true, true));
+    for (const char* k : {"spk.volume", "spk.mute", "hp.volume", "hp.mute"}) EXPECT_TRUE(r.can(k)) << k;
+    for (const char* k : {"in1.gain", "in1.mute", "in1.phantom", "in1.highPass", "in2.preamp", "in1.denoise",
+                          "loop.mute", "mon.mix", "mon.mic", "out.dim", "out.mono", "set.ledBrightness",
+                          "set.customButton", "set.highVolume", "set.led.icons", "autogain1", "autosetup"})
+        EXPECT_FALSE(r.can(k)) << k;
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    EXPECT_TRUE(enabledOf(root.get(), "fader_spk"));
+    EXPECT_TRUE(enabledOf(root.get(), "mute_spk"));
+    EXPECT_TRUE(enabledOf(root.get(), "fader_hp"));
+    EXPECT_TRUE(enabledOf(root.get(), "mute_hp"));
+    for (const char* n : {"mute_loop", "gainKnob1", "gainKnob2", "phantomButton1", "autogainButton1", "inputMute1",
+                          "dimButton", "monitorMixKnob", "autosetupButton", "gainLockSwitch", "ledBrightnessFader"})
+        EXPECT_FALSE(enabledOf(root.get(), n)) << n;
+}
+
+TEST(GuiPermissions, ARefusedChangeIsNotShownAsAppliedAndNothingIsSent) {
+    app();
+    RealLike r(lewitt::outputWritePolicy(true, true));
+    const int writes = r.hw->writeCalls;
+    r.c->setValue("in1.phantom", true);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return !r.c->lastError().isEmpty(); }));
+    EXPECT_TRUE(r.c->lastError().contains("not available on the real device")) << r.c->lastError().toStdString();
+    EXPECT_FALSE(r.c->values().value("in1.phantom").toBool());                 // still the device's value
+    EXPECT_FALSE(r.c->values().value("pending.in1.phantom").toBool());         // nothing staged
+    EXPECT_EQ(r.hw->writeCalls, writes);
+    r.c->trigger("autogain1");
+    r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls, writes);                                       // no trigger reached the device
+    EXPECT_NE(r.c->values().value("auto.state").toString(), "running");
+}
+
+TEST(GuiPermissions, AnAuthorizedOutputChangeIsWrittenAndVerified) {
+    app();
+    RealLike r(lewitt::outputWritePolicy(true, true));
+    const bool before = r.c->values().value("spk.mute").toBool();
+    r.c->setValue("spk.mute", !before);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("spk.mute").toBool() != before; }));
+    EXPECT_GE(r.hw->writeCalls, 1);
+    EXPECT_FALSE(r.c->values().value("pending.spk.mute").toBool());
+}
+
+TEST(GuiPermissions, ReadOnlySessionEnablesNothingAndMockEnablesEverything) {
+    app();
+    RealLike ro{lewitt::WritePolicy{}};
+    for (const auto& k : lewitt::controlKeys()) EXPECT_FALSE(ro.can(k.c_str())) << k;
+    DeviceController mock;
+    mock.connectMock();
+    ASSERT_TRUE(waitFor([&] { return mock.connection() == "Connected" && mock.values().contains("can.in1.phantom"); }));
+    for (const auto& k : lewitt::controlKeys())
+        EXPECT_TRUE(mock.values().value(QString("can.") + QString::fromStdString(k)).toBool()) << k;
+}
+
+// Every literal key the QML writes must have a capability entry (dynamic keys are listed explicitly).
+TEST(GuiPermissions, EveryQmlControlKeyHasACapabilityEntry) {
+    QStringList keys{"in1.gain", "in2.gain", "in1.mute", "in2.mute", "in1.highPass", "in2.highPass", "in1.clipguard",
+                     "in2.clipguard", "in1.preamp", "in2.preamp", "in1.denoise", "in2.denoise", "in1.compress",
+                     "in2.compress", "in1.phantom", "loop.mute", "spk.volume", "spk.mute", "hp.volume", "hp.mute",
+                     "autogain1", "autogain2", "autogainBoth", "set.led.icons", "set.led.mute", "set.led.parameter",
+                     "set.led.metering", "set.led.gainReduction", "autosetup", "set.macosStreaming"};
+    const QRegularExpression lit(QString::fromLatin1(R"re(device\.(?:setValue|trigger)\("([A-Za-z0-9.]+)"\s*[,)])re"));
+    for (const QString& f : QDir(QStringLiteral(LEWITT_QML_DIR)).entryList({"*.qml"})) {
+        QFile file(QStringLiteral(LEWITT_QML_DIR) + "/" + f);
+        ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+        auto it = lit.globalMatch(QString::fromUtf8(file.readAll()));
+        while (it.hasNext()) keys << it.next().captured(1);
+    }
+    for (const QString& k : keys) EXPECT_NE(lewitt::controlFootprint(k.toStdString()), nullptr) << k.toStdString();
+}

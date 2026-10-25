@@ -123,6 +123,20 @@ if grep -q 'InstanceChannel::Role::Failed' src/gui/main.cpp && grep -q 'Instance
    && [ "$(grep -n 'claimOrForward' src/gui/main.cpp | head -1 | cut -d: -f1)" -lt "$(grep -n 'DeviceController controller' src/gui/main.cpp | cut -d: -f1)" ]; then
     echo "ok   window/tray single-instance claim handled, before any device code"
 else echo "FAIL single-instance claim must be handled (Failed) and precede DeviceController"; fail=1; fi
+# Phase 10A: no production code authorizes a trigger on real hardware (WritePolicy::hardwareTriggers stays empty).
+if grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp' | grep -v 'std::vector<Trigger> hardwareTriggers;' >/dev/null; then
+    echo "FAIL production code authorizes hardware triggers:"; grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp'; fail=1
+else echo "ok   no hardware trigger is authorized in production code"; fi
+# Phase 10A: GUI controls are enabled per capability (can.<key>), never by the global writable flag alone, and
+# the test-only transport injection is not used by the application.
+if grep -nE 'enabled:[[:space:]]*root\.interactive([[:space:]]*[;}]|[[:space:]]*$)' src/gui/qml/InputStrip.qml src/gui/qml/OutputStrip.qml \
+       src/gui/qml/MonitorSection.qml src/gui/qml/SettingsView.qml >/dev/null; then
+    echo "FAIL a QML device control is enabled by the global writable flag:"; grep -nE 'enabled:[[:space:]]*root\.interactive([[:space:]]*[;}]|[[:space:]]*$)' src/gui/qml/*.qml; fail=1
+else echo "ok   QML device controls are enabled per capability"; fi
+if grep -rn 'connectTransportForTesting' src --include='*.cpp' --include='*.qml' | grep -vE '^src/gui/DeviceController\.cpp' >/dev/null \
+   || grep -n 'connectTransportForTesting' src/gui/qml/*.qml >/dev/null; then
+    echo "FAIL connectTransportForTesting used outside tests"; fail=1
+else echo "ok   test-only transport injection unused by the application"; fi
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "core/Authorization.hpp"
+#include "core/ControlCapabilities.hpp"
 #include "core/OutputControl.hpp"
 #include "core/UserConfig.hpp"
 #include "core/RetryPolicy.hpp"
@@ -276,6 +277,17 @@ void DeviceWorker::connectUsb() {
     else armRescan();                    // absent / not openable: keep looking, cheaply
     publish();
     publishMeterSample();
+}
+
+// Tests only (not reachable from QML): a caller-provided transport and policy, e.g. a simulated device that
+// claims to be real hardware, so per-control permissions can be checked offline. Never used by the application.
+void DeviceWorker::connectTransportForTesting(std::unique_ptr<IDeviceTransport> t, WritePolicy p) {
+    usbMode_ = false;
+    adoptSession(std::move(t), std::move(p));
+    auto s = session_->connect();
+    if (!s) report(s);
+    markInitialReads();
+    publish();
 }
 
 void DeviceWorker::armRescan() {
@@ -692,6 +704,14 @@ void DeviceWorker::publish() {
         v["set.macosStreaming"] = mode == DeviceMode::MacOSStreaming;
     }
     v["dsp.available"] = dspAvailable(static_cast<std::uint32_t>(sampleRate_));
+    // Phase 10A: per-control write capability ("can.<key>"), derived from the session's write policy. QML enables
+    // a control only if its flag is true; on real hardware that is exactly what the policy authorizes.
+    {
+        const bool connected = session_ && cs == ConnectionState::Connected;
+        for (const auto& k : controlKeys())
+            v["can." + QString::fromStdString(k)] =
+                connected && session_->writesEnabled() && controlWritable(k, session_->policy(), session_->isSimulated());
+    }
     if (session_ && session_->effectiveSettings()) {
         const auto s = *session_->effectiveSettings();   // user's unconfirmed edits shown on top
         for (int i = 0; i < 2; ++i) {
@@ -777,8 +797,19 @@ void DeviceWorker::publish() {
     if (!changed.isEmpty()) emit stateChanged(changed);
 }
 
+// Phase 10A: an operation the session's policy does not authorize is refused before anything is staged or
+// sent, so the GUI never shows an unapplied value as if it were the device's.
+bool DeviceWorker::refuseUnauthorized(const QString& key) {
+    if (!session_ || controlWritable(key.toStdString(), session_->policy(), session_->isSimulated())) return false;
+    emit errorOccurred(QString("%1 is not available on the real device in this build (not authorized); nothing was sent")
+                           .arg(key));
+    publish();
+    return true;
+}
+
 void DeviceWorker::trigger(const QString& name) {
     if (!session_) return;
+    if (refuseUnauthorized(name)) return;
     static const QMap<QString, Trigger> map{
         {"autogain1", Trigger::AutoGainMicrophone}, {"autogain2", Trigger::AutoGainInstrument},
         {"autogainBoth", Trigger::AutoGainBoth}};
@@ -795,6 +826,7 @@ void DeviceWorker::trigger(const QString& name) {
 
 void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     if (!session_) return;
+    if (refuseUnauthorized(key)) return;
     // Real hardware: one volume change may raise an output by at most kMaxOutputIncreaseDb (same rule
     // as openwitty-volumed); a far slider jump is applied in bounded steps. Non-finite values pass
     // through unchanged so the setter rejects them. Simulation is unrestricted.
@@ -957,6 +989,12 @@ void DeviceController::setSampleRate(int hz) { QMetaObject::invokeMethod(worker_
 void DeviceController::applyUserConfig() { QMetaObject::invokeMethod(worker_, "applyUserConfig", Qt::QueuedConnection); }
 
 void DeviceController::flush() { QMetaObject::invokeMethod(worker_, "poll", Qt::BlockingQueuedConnection); }
+void DeviceController::connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p) {
+    auto* raw = t.release();
+    QMetaObject::invokeMethod(worker_, [this, raw, p] {
+        worker_->connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport>(raw), p);
+    }, Qt::BlockingQueuedConnection);
+}
 void DeviceController::setDeviceMode(bool m) { QMetaObject::invokeMethod(worker_, "setDeviceMode", Q_ARG(bool, m)); }
 void DeviceController::retryPending() { QMetaObject::invokeMethod(worker_, "retryPending"); }
 void DeviceController::discardPending() { QMetaObject::invokeMethod(worker_, "discardPending"); }

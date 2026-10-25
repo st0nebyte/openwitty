@@ -317,9 +317,14 @@ Status DeviceSession::sendTrigger(Trigger t) {
     if (!writesEnabled())
         return makeError(Errc::WritesDisabled, "hardware writes are disabled until the protocol is verified");
     auto b = TriggerMessage(t).bytes();
+    // The guard first (factory reset never, mode switches never on hardware, LED reset only as a persistent
+    // change), then the per-trigger hardware authorization.
     if (auto g = checkWriteAllowed(MessageId::Triggers, b, WriteGuardContext{transport_->isSimulated(),
                                                                               policy_.allowPersistentChanges}); !g)
         return g;
+    if (!transport_->isSimulated() &&
+        std::find(policy_.hardwareTriggers.begin(), policy_.hardwareTriggers.end(), t) == policy_.hardwareTriggers.end())
+        return makeError(Errc::WritesDisabled, "this device action is not authorized on real hardware");
     if (auto s = transport_->write(MessageId::Triggers, b); !s) { auto st = fail(s.error()); noteResult(st); return st; }
     failures_ = 0;
     return okStatus();

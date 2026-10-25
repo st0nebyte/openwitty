@@ -127,7 +127,7 @@ Window {
                font.bold: true; text: "Outputs" }
         Text { x: 565; width: 155; y: 56; horizontalAlignment: Text.AlignHCenter; color: "#f2f2f2"; font.pixelSize: 11
                font.bold: true; text: "Monitoring" }
-        ToggleButton { x: 17; y: 55; width: 69; height: 19; text: "Autosetup"; enabled: win.interactive
+        ToggleButton { objectName: "autosetupButton"; x: 17; y: 55; width: 69; height: 19; text: "Autosetup"; enabled: win.interactive && device.values["can.autosetup"] === true
                        tip: "Automatically find the perfect settings for your inputs"; onClicked: win.showWizard = true }
         // vertical dividers
         Rectangle { x: 155; y: 78; width: 1; height: 267; color: "#1b1b1b" }
@@ -159,7 +159,8 @@ Window {
         OnboardingOverlay { visible: win.showOnboarding; x: 0; y: 0; width: parent.width; height: parent.height; z: 12
                             onFinished: win.showOnboarding = false }
         AutosetupWizard { visible: win.showWizard; x: 0; y: 0; width: parent.width; height: parent.height; z: 11
-                          interactive: win.interactive; onCloseRequested: win.showWizard = false }
+                          interactive: win.interactive && device.values["can.autosetup"] === true
+                          onCloseRequested: win.showWizard = false }
     }
 
     // simulation banner + development controls (outside the design space)

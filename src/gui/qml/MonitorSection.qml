@@ -5,6 +5,8 @@ Item {
     id: root
     property bool interactive: false
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
+    // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
+    function can(k) { return root.interactive && device.values["can." + k] === true; }
     width: 155; height: 267
     GlyphIcon { x: 77 - 15; y: 8; width: 30; height: 30; kind: "shuffle"; color: "#f0f0f0" }
     Text { anchors.horizontalCenter: parent.horizontalCenter; y: 47; color: Theme.textDim
@@ -12,7 +14,7 @@ Item {
     GainKnob {
         objectName: "monitorMixKnob"
         x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
-        enabled: root.interactive; showValue: false; warnFrom: 1
+        enabled: root.can("mon.mix"); showValue: false; warnFrom: 1
         tip: "Hear your input signal and computer"
         // Physical CONNECT 2 reads observed in Phase 7C span -100..0. Keep the established
         // simulated -1..1 control unchanged; real hardware remains display-only.
@@ -28,21 +30,21 @@ Item {
            font.pixelSize: 9; text: "Computer\naudio" }
     Row {
         x: 21; y: 210; spacing: 3
-        ToggleButton { width: 23; height: 21; icon: "mic"; enabled: root.interactive
+        ToggleButton { width: 23; height: 21; icon: "mic"; enabled: root.can("mon.mic")
                        active: root.v("mon.mic", false)
                        tip: "Activate to listen to the direct input signal"
                        onClicked: device.setValue("mon.mic", !active) }
-        ToggleButton { width: 23; height: 21; icon: "guitar"; enabled: root.interactive
+        ToggleButton { width: 23; height: 21; icon: "guitar"; enabled: root.can("mon.inst")
                        active: root.v("mon.inst", false)
                        tip: "Activate to listen to the direct input signal"
                        onClicked: device.setValue("mon.inst", !active) }
     }
     GlyphIcon { x: 101; y: 207; width: 32; height: 26; kind: "laptop"; color: "#f0f0f0" }
-    ToggleButton { x: 22; y: 241; width: 49; height: 23; text: "Dim"; enabled: root.interactive
+    ToggleButton { objectName: "dimButton"; x: 22; y: 241; width: 49; height: 23; text: "Dim"; enabled: root.can("out.dim")
                    active: root.v("out.dim", false)
                    tip: "Lower the speaker and headphone output volume"
                    onClicked: device.setValue("out.dim", !active) }
-    ToggleButton { x: 78; y: 241; width: 50; height: 23; text: "Mono"; enabled: root.interactive
+    ToggleButton { x: 78; y: 241; width: 50; height: 23; text: "Mono"; enabled: root.can("out.mono")
                    active: root.v("out.mono", false)
                    tip: "Listen to your signals in mono"
                    onClicked: device.setValue("out.mono", !active) }

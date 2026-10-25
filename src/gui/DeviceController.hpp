@@ -57,10 +57,12 @@ signals:
 public:
     // Thread-safe, non-blocking: abort the in-flight transport request (used on shutdown).
     void cancelAll();
+    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p);
 private:
     void publish();
     void publishMeterSample();
     void armRescan();
+    bool refuseUnauthorized(const QString& key);
     void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy policy = {});
     lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
     void report(const lewitt::Status& s);
@@ -178,6 +180,8 @@ public:
     Q_INVOKABLE void applyUserConfig();
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
+    // Tests only, never from QML: see DeviceWorker::connectTransportForTesting().
+    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p);
     Q_INVOKABLE void traceQmlObserved();  // opt-in measurement marker; never touches hardware
     void traceFrameSwapped();
 signals:

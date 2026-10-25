@@ -30,6 +30,11 @@ struct WritePolicy {
     // experiment names exactly the offsets it was approved for (LED brightness: {37};
     // instrument mute: {12}). Simulated transports ignore this list.
     std::vector<std::size_t> hardwareWriteOffsets;
+    // Phase 10A: on real hardware a trigger message (autogain, denoise measurement, measurement session,
+    // LED colour reset) may only be sent if that exact trigger is listed here. hardwareWriteOffsets
+    // authorizes settings bytes only and never implies a trigger. Empty (the default, and every policy in this
+    // build) = no trigger reaches real hardware. Simulated transports ignore this list.
+    std::vector<Trigger> hardwareTriggers;
 };
 // What the handshake established about the device.
 struct DeviceCapabilities {
@@ -60,6 +65,7 @@ public:
     DeviceInfo info() const { return transport_->info(); }
     bool isSimulated() const { return transport_->isSimulated(); }
     bool writesEnabled() const { return transport_->isSimulated() || policy_.allowHardwareWrites; }
+    const WritePolicy& policy() const { return policy_; }
 
     Status connect();          // open + initial sync (read-only)
     void disconnect();

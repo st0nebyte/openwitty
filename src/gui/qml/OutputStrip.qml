@@ -8,6 +8,8 @@ Item {
     property bool physicalSelected: false
     property real stageScale: 1
     function v(k, d) { var x = device.values[root.group + "." + k]; return x === undefined ? d : x; }
+    // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
+    function can(k) { return root.interactive && device.values["can." + k] === true; }
     readonly property bool hasFader: group !== "loop"
     readonly property bool pending: device.values["pending." + root.group + ".volume"] === true
                                     || device.values["pending." + root.group + ".mute"] === true
@@ -26,11 +28,11 @@ Item {
                  meterR: device.meters.channel(root.group === "loop" ? 3 : root.group === "spk" ? 5 : 7)
                  sourceFreshness: device.meters.freshness
                  levelL: root.v("levelL", -60); levelR: root.v("levelR", -60) }
-    Fader { visible: root.hasFader; x: 55; y: 44; height: 187; enabled: root.interactive
+    Fader { objectName: "fader_" + root.group; visible: root.hasFader; x: 55; y: 44; height: 187; enabled: root.can(root.group + ".volume")
             tip: root.group === "spk" ? "Adjust the loudspeaker volume" : "Adjust the headphone volume"
             value: root.v("volume", 0)
             onMoved: (nv) => device.setValue(root.group + ".volume", nv) }
-    ToggleButton { x: 18; y: 240; width: 50; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
-                   enabled: root.interactive; active: root.v("mute", false)
+    ToggleButton { objectName: "mute_" + root.group; x: 18; y: 240; width: 50; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
+                   enabled: root.can(root.group + ".mute"); active: root.v("mute", false)
                    onClicked: device.setValue(root.group + ".mute", !active) }
 }

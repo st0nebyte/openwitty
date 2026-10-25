@@ -10,6 +10,8 @@ Rectangle {
     signal onboardingRequested()
     color: "#1e1e1e"
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
+    // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
+    function can(k) { return root.interactive && device.values["can." + k] === true; }
     property string open: "audio"
 
     Text { x: 16; y: 12; text: "Settings"; color: Theme.text; font.pixelSize: 15 }
@@ -36,23 +38,23 @@ Rectangle {
     Column {
         visible: root.open === "audio"
         x: 16; y: 190; width: 330; spacing: 6
-        ToggleSwitch { width: 330; label: "Gain lock (block external gain changes)"; enabled: root.interactive
+        ToggleSwitch { objectName: "gainLockSwitch"; width: 330; label: "Gain lock (block external gain changes)"; enabled: root.can("set.gainLock")
                        checked: root.v("set.gainLock", false)
                        onToggled: (b) => device.setValue("set.gainLock", b) }
-        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: root.interactive
+        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: root.can("set.mixToSpeakers")
                        checked: root.v("set.mixToSpeakers", false)
                        onToggled: (b) => device.setValue("set.mixToSpeakers", b) }
-        ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.interactive
+        ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.can("set.highImpedance")
                        checked: root.v("set.highImpedance", false)
                        onToggled: (b) => device.setValue("set.highImpedance", b) }
-        ToggleSwitch { width: 330; label: "High volume speaker mode"; enabled: root.interactive
+        ToggleSwitch { width: 330; label: "High volume speaker mode"; enabled: root.can("set.highVolume")
                        checked: root.v("set.highVolume", false)
                        onToggled: (b) => confirmLoud.ask(b) }
         ToggleSwitch { width: 330; label: "Mobile streaming mode (routing change)"; enabled: false
                        checked: root.v("set.mobileStreaming", false) }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                text: "Streaming modes change USB channel routing and (macOS mode) restart the device. They are not enabled in this build." }
-        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: device.simulated && root.interactive
+        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: root.can("set.macosStreaming")
                        checked: root.v("set.macosStreaming", false)
                        tip: device.simulated ? "Simulated: restarts the (simulated) device" : "Not enabled on real hardware"
                        onToggled: (b) => confirmMode.ask(b) }
@@ -61,7 +63,7 @@ Rectangle {
         visible: root.open === "leds"
         x: 16; y: 190; width: 330; spacing: 10
         Text { color: Theme.text; font.pixelSize: 12; text: "Brightness: " + root.v("set.ledBrightness", 0) + " %" }
-        Fader_h { width: 330; enabled: root.interactive; value: root.v("set.ledBrightness", 0)
+        Fader_h { objectName: "ledBrightnessFader"; width: 330; enabled: root.can("set.ledBrightness"); value: root.v("set.ledBrightness", 0)
                   onMoved: (nv) => device.setValue("set.ledBrightness", nv) }
         Repeater {
             model: [{k: "icons", t: "Icons"}, {k: "mute", t: "Mute"}, {k: "parameter", t: "Parameter"},
@@ -78,11 +80,11 @@ Rectangle {
                         id: sw
                         property string key: "set.led." + ledRow.elem.k
                         width: 22; height: 18; radius: 3; color: modelData
-                        opacity: root.interactive ? 1 : 0.4
+                        opacity: root.can(sw.key) ? 1 : 0.4
                         property bool sel: root.v(sw.key, "") === modelData
                         border.width: sel ? 2 : 1
                         border.color: sel ? Theme.text : Theme.line
-                        MouseArea { anchors.fill: parent; enabled: root.interactive
+                        MouseArea { anchors.fill: parent; enabled: root.can(sw.key)
                                     onClicked: device.setValue(sw.key, sw.color.toString()) }
                     }
                 }
@@ -103,14 +105,14 @@ Rectangle {
                 id: opt
                 property var o: modelData
                 width: 330; height: 22; color: "transparent"
-                opacity: root.interactive ? 1 : 0.55
+                opacity: root.can("set.customButton") ? 1 : 0.55
                 Rectangle { id: dot; width: 14; height: 14; radius: 7; color: "transparent"
                             border.color: Theme.textDim; anchors.verticalCenter: parent.verticalCenter
                             Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent
                                         visible: root.v("set.customButton", -1) === opt.o.v } }
                 Text { x: 24; anchors.verticalCenter: parent.verticalCenter; color: Theme.text
                        font.pixelSize: 11; text: opt.o.t }
-                MouseArea { anchors.fill: parent; enabled: root.interactive
+                MouseArea { anchors.fill: parent; enabled: root.can("set.customButton")
                             onClicked: device.setValue("set.customButton", opt.o.v) }
             }
         }

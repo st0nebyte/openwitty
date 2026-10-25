@@ -11,6 +11,8 @@ Item {
     readonly property string p: "in" + index + "."
     readonly property bool mic: index === 1
     function v(k, d) { var x = device.values[p + k]; return x === undefined ? d : x; }
+    // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
+    function can(k) { return root.interactive && device.values["can." + k] === true; }
     readonly property bool dsp: device.values["dsp.available"] !== false
     readonly property bool pending: device.values["pending." + p + "gain"] === true
     width: 152; height: 267
@@ -29,20 +31,21 @@ Item {
     Row {   // LC / 48V / Clipguard (instrument has no 48V)
         x: root.mic ? 45 : 60; y: 45; spacing: 4
         ToggleButton { width: 27; height: 19; icon: "lowcut"; tip: "Remove low frequency rumble"
-                       enabled: root.interactive; active: root.v("highPass", false)
+                       enabled: root.can(root.p + "highPass"); active: root.v("highPass", false)
                        onClicked: device.setValue(root.p + "highPass", !active) }
-        ToggleButton { width: 27; height: 19; visible: root.mic; text: "48V"; fontSize: 9
+        ToggleButton { objectName: "phantomButton" + root.index; width: 27; height: 19; visible: root.mic; text: "48V"; fontSize: 9
                        tip: "Provide power for your condenser microphone"
-                       enabled: root.interactive; active: root.v("phantom", false)
+                       enabled: root.can(root.p + "phantom"); active: root.v("phantom", false)
                        onClicked: phantom.ask(!active) }
         ToggleButton { width: 27; height: 19; icon: "clipguard"; tip: "Activate Clipguard to prevent your input from distorting"
-                       enabled: root.interactive; active: root.v("clipguard", false)
+                       enabled: root.can(root.p + "clipguard"); active: root.v("clipguard", false)
                        onClicked: device.setValue(root.p + "clipguard", !active) }
     }
 
     GainKnob {
+        objectName: "gainKnob" + root.index
         x: 90 - width / 2; y: 78
-        enabled: root.interactive
+        enabled: root.can(root.p + "gain")
         tip: "Adjust the input gain"
         value: root.v("gain", 0); from: 0; to: root.v("gainMax", root.mic ? 72 : 60)
         minLabel: "0 dB"; maxLabel: to + " dB"
@@ -51,32 +54,32 @@ Item {
     // pending-edit marker: a small dot while a write is in flight / unconfirmed
     Rectangle { visible: root.pending; x: 128; y: 84; width: 6; height: 6; radius: 3; color: Theme.warn }
 
-    ToggleButton { x: 29; y: 147; width: 24; height: 24; text: "A"; fontSize: 15; flat: true
+    ToggleButton { objectName: "autogainButton" + root.index; x: 29; y: 147; width: 24; height: 24; text: "A"; fontSize: 15; flat: true
                    tip: "Automatically set up your input gain"
-                   enabled: root.interactive; onClicked: device.trigger("autogain" + root.index) }
+                   enabled: root.can("autogain" + root.index); onClicked: device.trigger("autogain" + root.index) }
 
     Row {
         x: 32; y: 180; spacing: 1
         Repeater {
             model: ["Clean", "Warm", "Vivid"]
-            ToggleButton { width: 39; height: 20; text: modelData; enabled: root.interactive; tip: "Choose a sound for your preamp"
+            ToggleButton { width: 39; height: 20; text: modelData; enabled: root.can(root.p + "preamp"); tip: "Choose a sound for your preamp"
                            active: root.v("preamp", 0) === index
                            onClicked: device.setValue(root.p + "preamp", index) }
         }
     }
     Row {
         x: 31; y: 211; spacing: 4
-        ToggleButton { width: 57; height: 20; text: "Denoise"; enabled: root.interactive; unavailable: !root.dsp
+        ToggleButton { width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
                        tip: root.dsp ? "Good for live streaming" : "Choose lower sample rate to enable this function"
                        active: root.v("denoise", false)
                        onClicked: device.setValue(root.p + "denoise", !active) }
-        ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.interactive; unavailable: !root.dsp
+        ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.can(root.p + "compress"); unavailable: !root.dsp
                        tip: root.dsp ? "Consistent level, louder signal, finished sound" : "Choose lower sample rate to enable this function"
                        active: root.v("compress", false)
                        onClicked: device.setValue(root.p + "compress", !active) }
     }
-    ToggleButton { x: 58; y: 240; width: 64; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
-                   enabled: root.interactive; active: root.v("mute", false)
+    ToggleButton { objectName: "inputMute" + root.index; x: 58; y: 240; width: 64; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
+                   enabled: root.can(root.p + "mute"); active: root.v("mute", false)
                    onClicked: device.setValue(root.p + "mute", !active) }
 
     Rectangle {   // 48 V safety confirmation (always before enabling)

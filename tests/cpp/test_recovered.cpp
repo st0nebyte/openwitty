@@ -130,13 +130,23 @@ TEST(Triggers, FactoryResetNeverSentLedResetNeedsPolicy) {
         ASSERT_TRUE(hwOnly.connect().ok());
         EXPECT_EQ(hwOnly.sendTrigger(Trigger::ResetLedColors).error().code, Errc::WritesDisabled);
         EXPECT_EQ(raw->writes, 0);
-        EXPECT_TRUE(hwOnly.sendTrigger(Trigger::AutoGainBoth).ok());   // non-persistent trigger passes
+        // Phase 10A: hardware writes alone no longer authorize any trigger
+        EXPECT_EQ(hwOnly.sendTrigger(Trigger::AutoGainBoth).error().code, Errc::WritesDisabled);
+        EXPECT_EQ(raw->writes, 0);
+    }
+    {
+        auto [raw, sim] = mk(false);
+        DeviceSession listed{std::unique_ptr<IDeviceTransport>(raw),
+                             WritePolicy{.allowHardwareWrites = true, .hardwareTriggers = {Trigger::AutoGainBoth}}};
+        ASSERT_TRUE(listed.connect().ok());
+        EXPECT_TRUE(listed.sendTrigger(Trigger::AutoGainBoth).ok());   // explicitly listed trigger passes
         EXPECT_EQ(raw->writes, 1);
     }
     {
         auto [raw, sim] = mk(false);
         DeviceSession both{std::unique_ptr<IDeviceTransport>(raw),
-                           WritePolicy{.allowPersistentChanges = true, .allowHardwareWrites = true}};
+                           WritePolicy{.allowPersistentChanges = true, .allowHardwareWrites = true,
+                                       .hardwareTriggers = {Trigger::ResetLedColors, Trigger::FactoryReset}}};
         ASSERT_TRUE(both.connect().ok());
         EXPECT_TRUE(both.sendTrigger(Trigger::ResetLedColors).ok());
         EXPECT_EQ(both.sendTrigger(Trigger::FactoryReset).error().code, Errc::NotSupported);  // always
