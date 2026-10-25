@@ -28,7 +28,7 @@ enum class DeviceWriteMode {
     Native,    // default: the kernel/ALSA path is authoritative (it reaches the device when Feature Unit 2
                // honours SET_CUR, verified on an ordinary boot); the link never writes the device and
                // only reports a desktop change the device did not follow
-    Fallback,  // additionally apply such a change through the vendor settings message (for the verified
+    Fallback,  // additionally apply such a change (once its follow grace has passed) through the vendor settings message (for the verified
                // exceptional state in which the device ignores Feature Unit 2)
 };
 
@@ -36,9 +36,10 @@ struct LinkOptions {
     DeviceWriteMode deviceWrites{DeviceWriteMode::None};
     bool desktopWrites{true};     // mirror the device level to the ALSA control (knob changes); off in dry run
     PollPolicy verify{};
-    // Native mode: how long the device may take to apply a desktop change the kernel forwarded before it
-    // counts as "did not follow". The CONNECT 2 reports the new level slightly after the ALSA control
-    // changes; judging a single immediate read produced false notices during fast volume-key presses.
+    // How long the device may take to report a desktop change the kernel forwarded before it counts as
+    // "did not follow" (Native: notice; Fallback: only then the vendor write). The CONNECT 2 reports the
+    // new level 0.4-0.7 s after the ALSA control changes; judging a single immediate read produced false
+    // notices (Native) and needless vendor writes (Fallback) during fast volume-key presses.
     std::chrono::milliseconds followGrace{1500};
 };
 
@@ -95,7 +96,7 @@ private:
         OutputLevel target;
         Clock::time_point deadline;
     };
-    std::optional<FollowCheck> followCheck_;   // Native mode: waiting for the device to apply a desktop change
+    std::optional<FollowCheck> followCheck_;   // waiting for the device to report a desktop change
     void checkFollow(Clock::time_point now);
     int alignDepth_{0};
     std::string notice_;

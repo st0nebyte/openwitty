@@ -17,10 +17,16 @@
 //   write outcome unknown (timeout /     no retry. The state becomes Uncertain; nothing is written
 //   ambiguous / failed)                  until the next hardware read re-establishes the truth.
 //   echo of our own desktop update       ignored (prevents feedback loops).
+//   delayed intermediate hardware report not a hardware change: during a burst of desktop changes the
+//   (a level the desktop itself requested   device reports each kernel-applied level with a delay, so a
+//    within desktopFollowWindow, while a     report of an older request must not be mirrored back over
+//    newer request is still pending)         the newer one (it would undo the user's latest request).
+//                                        A knob change to any other level is still mirrored at once.
 #pragma once
 #include <chrono>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "core/OutputControl.hpp"
 #include "core/WriteVerification.hpp"
@@ -39,6 +45,7 @@ struct VolumeSyncConfig {
     std::chrono::milliseconds startupHold{5000};        // after start(): desktop is not authoritative
     std::chrono::milliseconds minWriteInterval{150};    // rate limit; newer requests replace queued ones
     std::chrono::milliseconds echoWindow{2000};         // how long our own desktop update may echo back
+    std::chrono::milliseconds desktopFollowWindow{1500}; // how late the device may report a desktop change
     bool mirrorHardwareToDesktop{true};                 // show knob changes in KDE
 };
 
@@ -91,6 +98,8 @@ private:
     bool isEcho(const DesktopLevel& d, TimePoint now) const;
     SyncAction alignDesktop(TimePoint now, std::string why);
     SyncAction evaluate(const DesktopLevel& d, TimePoint now);
+    void noteRequest(const DesktopLevel& d, TimePoint now);
+    bool isIntermediate(const OutputLevel& hw, TimePoint now);
 
     VolumeSyncConfig cfg_;
     SyncPhase phase_{SyncPhase::Unknown};
@@ -102,6 +111,11 @@ private:
     TimePoint echoUntil_{};
     TimePoint holdUntil_{};
     std::optional<TimePoint> lastWrite_;
+    struct Request {
+        DesktopLevel level;
+        TimePoint until;
+    };
+    std::vector<Request> recent_;   // desktop requests of the last desktopFollowWindow (oldest first)
 };
 
 }  // namespace lewitt

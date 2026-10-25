@@ -28,8 +28,25 @@ SyncAction VolumeSync::alignDesktop(TimePoint now, std::string why) {
     return a;
 }
 
+void VolumeSync::noteRequest(const DesktopLevel& d, TimePoint now) {
+    std::erase_if(recent_, [&](const Request& r) { return r.until < now; });
+    if (recent_.size() >= 8) recent_.erase(recent_.begin());
+    recent_.push_back({d, now + cfg_.desktopFollowWindow});
+}
+
+// A hardware report that equals an earlier, still recent desktop request while the desktop already asks
+// for something else: the device is catching up with the burst, not being turned by hand.
+bool VolumeSync::isIntermediate(const OutputLevel& hw, TimePoint now) {
+    std::erase_if(recent_, [&](const Request& r) { return r.until < now; });
+    if (!desk_ || desktopMatchesHardware(*desk_, hw)) return false;
+    for (const auto& r : recent_)
+        if (desktopMatchesHardware(r.level, hw)) return true;
+    return false;
+}
+
 SyncAction VolumeSync::start(OutputLevel hardware, std::optional<DesktopLevel> desktop, TimePoint now) {
     phase_ = SyncPhase::Synced;
+    recent_.clear();
     hw_ = hardware;
     desk_ = desktop;
     inFlight_.reset();
@@ -103,6 +120,7 @@ SyncAction VolumeSync::onDesktop(DesktopLevel d, TimePoint now) {
         a.note = "desktop: already matches hardware";
         return a;
     }
+    noteRequest(d, now);
     if (phase_ == SyncPhase::Writing ||
         (lastWrite_ && now < *lastWrite_ + cfg_.minWriteInterval)) {
         queued_ = d;                                   // newest request replaces an older one
@@ -142,6 +160,13 @@ SyncAction VolumeSync::onHardware(OutputLevel hw, TimePoint now) {
     }
     if (hw_ && hw.muted == hw_->muted && sameLevel(hw.db, hw_->db)) return a;
     hw_ = hw;
+    if (isIntermediate(hw, now)) {                     // keeps the newer desktop request (and any queued one)
+        char lvl[64];
+        std::snprintf(lvl, sizeof lvl, "%.2f dB %s", hw.db, hw.muted ? "muted" : "unmuted");
+        a.note = std::string("hardware: device speaker now ") + lvl +
+                 ", an earlier step of the desktop change; desktop kept at the newer level";
+        return a;
+    }
     queued_.reset();                                   // the device changed after the queued request
     // The source cannot be told apart from the device side: the speaker knob or Mute button, another
     // tool, or a desktop change that the kernel applied to the device.
@@ -199,6 +224,7 @@ void VolumeSync::noteDesktopUnchanged(std::optional<DesktopLevel> actual) {
 
 void VolumeSync::reset() {
     phase_ = SyncPhase::Unknown;
+    recent_.clear();
     hw_.reset();
     desk_.reset();
     inFlight_.reset();

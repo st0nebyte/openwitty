@@ -25,7 +25,7 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
   the device first, writes only the level the device already has, rounds down to the control grid and never unmutes. A
   desktop change the device does not follow is reported, never corrected.
 * **Vendor fallback (explicit opt-in).** `--vendor-fallback` additionally applies a desktop change that the device did not
-  follow through the vendor settings message: speaker bytes only, fresh snapshot, one SET, read-back verification, no retries,
+  follow within the follow grace (1.5 s) through the vendor settings message: speaker bytes only, fresh snapshot, one SET, read-back verification, no retries,
   increases limited to 10 dB per step, never at startup. Intended for the verified "SET ignored" state.
 * **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker/headphone controls write the device only with the
   confirmed *Speaker/headphone control* setting (scoped policy). While the GUI owns the device it hosts the same mirror when
@@ -75,7 +75,7 @@ systemctl --user disable --now openwitty-volumed.service    # undo
 
 | Setting | Default | What it does | Writes the device? |
 |---|---|---|---|
-| Show knob and Mute button in desktop volume | off | mirror mode: the desktop (KDE/PipeWire) volume of the CONNECT 2 follows the speaker volume knob and Mute button; while OpenWitty is open the window does it, otherwise the background service | no (the desktop control is updated to the level the device already has; the kernel forwards that update) |
+| Show the volume knob in the desktop volume | off | mirror mode: the desktop (KDE/PipeWire) volume of the CONNECT 2 follows the speaker volume knob, which the kernel cannot see (broken volume read-back); while OpenWitty is open the window does it, otherwise the background service. The Mute button and the desktop slider/mute need no OpenWitty: the kernel handles them (validated on the development system, Phase 8H) | no (the desktop control is updated to the level the device already has; the kernel forwards that update) |
 | Keep it running when OpenWitty is closed | off | `systemctl --user enable --now` / `disable --now` of `openwitty-volumed.service`, only when you flip it; shows "not installed / off / on / running" | no |
 | Vendor fallback | off; needs desktop sync | if the device does not follow a desktop volume change, the background service applies it through the vendor protocol (speaker volume/mute only, ≤ 10 dB louder per step, read-back verified, never at start-up). Enabling shows an explanation that must be confirmed | **yes** |
 | Speaker/headphone control | off | OpenWitty's own speaker and headphone faders may change the device (scoped to those bytes, ≤ 10 dB louder per step, read-back verified); confirmation required; applied at once by reconnecting the session | **yes** |
@@ -143,7 +143,7 @@ knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or
 1. Install as above; `systemctl --user status` shows the unit loaded and disabled. Settings file absent (defaults).
 2. Start `openwitty`, open Settings → Desktop integration: expect "Desktop hardware volume: available", quirk active, all
    switches off, background service "off".
-3. Turn on "Show knob and Mute button in desktop volume". Check the settings file (`desktop_volume_sync = mirror`, both
+3. Turn on "Show the volume knob in the desktop volume" (called "Show knob and Mute button in desktop volume" until Phase 8H). Check the settings file (`desktop_volume_sync = mirror`, both
    device-writing keys `false`). Owner turns the speaker volume knob a little: the KDE volume follows (GUI-hosted mirror).
 4. Turn "Keep it running when OpenWitty is closed" on: `systemctl --user status` shows active; `journalctl --user -u
    openwitty-volumed` shows "waiting: device handed over" / "device in use by another OpenWitty client" while the window is open.
@@ -205,6 +205,40 @@ key presses produced a "did not follow" notice although the device followed (it 
 now waits for a grace period per target (`LinkOptions::followGrace`, 1.5 s; a newer desktop change starts a new one); a
 change still not followed afterwards is reported as before. The vendor fallback path is unchanged. Re-tested on the device:
 three steps up and three down, device followed each with ≈0.7 s delay, no notice, final state consistent (−17.50 dB).
+
+### Follow-up review (offline, after Phase 8H)
+Both findings below were **reproduced by deterministic tests** against the code of `87af0f7` (they failed before the fix);
+neither was observed on the device. Fixed without changing the architecture, the fresh read before every decision, the
+no-retry rule or the never-unmute rule.
+
+1. **Stale intermediate hardware report overwrote the latest desktop request.** Desktop asks for A, then B; the device
+   reports A late. The link treated A as a knob change and mirrored it to the ALSA control, which the kernel forwards to
+   the device: the user's B would be undone (louder than requested when pressing *down*). Now a hardware report that equals
+   a desktop level requested within the follow window (1.5 s) while the desktop already asks for something else is an
+   intermediate step: adopted as the device state, not mirrored, any newer queued request kept. A knob change to any other
+   level, or to a level requested longer ago, is mirrored at once as before
+   (`StaleIntermediateReportDoesNotOverwriteTheLatestDesktopRequest`, `KnobTurnedDuringAPendingDesktopRequestIsStillMirrored`,
+   `AnOldRequestNoLongerMasksAKnobChange`).
+2. **Vendor fallback wrote before a healthy kernel change became visible.** The fallback acted on the first read after the
+   desktop event, i.e. within the device's 0.4–0.7 s reporting delay, so a working kernel path got a needless vendor SET.
+   The fallback now waits for the same per-target grace period as the native verdict and writes only if the device still
+   has not followed, once, for the latest target, read back, never retried; the 10 dB increase limit still applies
+   (`HealthyButLaggingKernelPathGetsNoVendorWrite`, `BurstWithAnIgnoringDeviceWritesOnlyTheLatestTargetOnce`,
+   `StaleIntermediateReportOfALaggingKernelPathCausesNoWrite`, `IncreaseLimitStillAppliesAfterTheGracePeriod`). As a
+   consequence a desktop change in the "SET ignored" state reaches the device 1.5–2.5 s late (daemon poll: 1 s).
+
+**Residual risks, not confirmed by tests or on the device:**
+* The mirror only knows desktop levels it read. If ALSA events of a fast burst are coalesced so that an intermediate level
+  is never read, a late report of that level still looks like a knob change. Not observed (the Phase 8H burst was read step
+  by step); not reproducible without a model of WirePlumber's event timing.
+* A genuine knob turn that lands exactly on a level the desktop requested within the last 1.5 s, while a different desktop
+  request is pending, is not mirrored; native mode then reports "did not follow", the fallback would apply the desktop's
+  latest level. Requires knob and volume keys within 1.5 s of each other.
+* The fallback grace is based on reporting delays measured on one machine (0.4–0.7 s); the fallback itself remains
+  unvalidated on hardware.
+
+**Settings wording.** The switch is now "Show the volume knob in the desktop volume" and explains that Linux cannot see the
+knob, while the desktop slider and the Mute button work without OpenWitty.
 
 ## Prepared hardware checkpoints (optional, each needs the owner's go-ahead)
 1. **Reproduce the ordinary-boot result.** Done informally in Phase 8H (volume keys reached the device after a reboot). For a

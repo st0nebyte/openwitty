@@ -134,7 +134,7 @@ bool IntegrationSettings::setBackgroundService(bool on) {
     }
     const bool isOn = serviceState_ == "enabled" || serviceState_ == "active";
     if (on && !desktopSync()) {
-        lastError_ = "Turn on \"Show knob and Mute button in desktop volume\" first: with desktop sync off the "
+        lastError_ = "Turn on \"Show the volume knob in the desktop volume\" first: with desktop sync off the "
                      "background service would only idle.";
         emit changed();
         return false;

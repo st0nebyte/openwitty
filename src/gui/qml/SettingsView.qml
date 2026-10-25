@@ -153,13 +153,14 @@ Rectangle {
                 ToggleButton { width: 120; height: 22; text: "Copy option line"; onClicked: integration.copyQuirkInstructions() } }
 
             Rectangle { width: 330; height: 1; color: "#333" }
-            ToggleSwitch { width: 330; label: "Show knob and Mute button in desktop volume"
+            ToggleSwitch { width: 330; label: "Show the volume knob in the desktop volume"
                            checked: integration.desktopSync
-                           tip: "Mirrors the CONNECT 2's speaker knob and Mute button to the KDE/PipeWire volume. Never writes the device."
+                           tip: "Keeps the KDE/PipeWire volume in step with the CONNECT 2's speaker volume knob. Never writes the device."
                            onToggled: (b) => integration.setDesktopSync(b) }
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "The desktop slider works without this. OpenWitty only sets the desktop's volume control to the "
-                       + "level the device already has (re-read first, never unmuted)." }
+                   text: "Linux cannot see when you turn the speaker volume knob, so OpenWitty passes it on to the "
+                       + "desktop volume. The desktop slider and the Mute button already work without this. OpenWitty "
+                       + "only sets the desktop volume to the level the device already has, and never unmutes." }
         }
     }
 

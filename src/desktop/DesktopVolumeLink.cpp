@@ -13,9 +13,17 @@ std::string fmt(const char* f, double a, bool b) {
 }
 }  // namespace
 
+namespace {
+VolumeSyncConfig withFollowWindow(VolumeSyncConfig c, std::chrono::milliseconds w) {
+    c.desktopFollowWindow = w;
+    return c;
+}
+}  // namespace
+
 DesktopVolumeLink::DesktopVolumeLink(DeviceSession& session, IDesktopMixer& mixer, VolumeSyncConfig cfg,
                                      LinkOptions opt, Logger log)
-    : session_(session), mixer_(mixer), sync_(cfg), opt_(std::move(opt)), log_(std::move(log)) {}
+    : session_(session), mixer_(mixer), sync_(withFollowWindow(cfg, opt.followGrace)), opt_(std::move(opt)),
+      log_(std::move(log)) {}
 
 std::optional<OutputLevel> DesktopVolumeLink::readHardware() {
     if (auto s = session_.refreshSettings(); !s || !session_.settings()) {
@@ -168,24 +176,29 @@ void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point
         sync_.abandonWrite();
         return;
     }
-    if (opt_.deviceWrites == DeviceWriteMode::Native) {
-        // The fresh read before this decision showed the device not (yet) at the desktop level. The
-        // device applies the kernel's request with a short delay, so the verdict waits for the grace
-        // period of this target (a newer desktop change starts a new one). Native mode never corrects
-        // the device by itself; a change still not followed afterwards is reported once.
+    // The fresh read before this decision showed the device not (yet) at the desktop level. With a
+    // working kernel path the device reports the kernel's request with a delay, so both modes first give
+    // it the grace period of this target (a newer desktop change starts a new one).
+    const bool sameTarget = followCheck_ && followCheck_->target.muted == target.muted &&
+                            std::fabs(followCheck_->target.db - target.db) <= sync_.config().toleranceDb;
+    if (!sameTarget) {
+        followCheck_ = FollowCheck{target, now + opt_.followGrace};
         sync_.abandonWrite();
-        const bool sameTarget = followCheck_ && followCheck_->target.muted == target.muted &&
-                                std::fabs(followCheck_->target.db - target.db) <= sync_.config().toleranceDb;
-        if (!sameTarget) {
-            followCheck_ = FollowCheck{target, now + opt_.followGrace};
-            return;
-        }
-        if (now < followCheck_->deadline) return;
+        return;
+    }
+    if (now < followCheck_->deadline) {
+        sync_.abandonWrite();
+        return;
+    }
+    if (opt_.deviceWrites == DeviceWriteMode::Native) {
+        // Native mode never corrects the device by itself; a change still not followed is reported once.
         if (!notFollowed_) log(fmt("the device did not follow the desktop change (wanted %.2f dB %s); "
                                    "no vendor write in native mode", target.db, target.muted));
         notFollowed_ = true;
+        sync_.abandonWrite();
         return;
     }
+    followCheck_.reset();                    // Fallback: one write for this target, whatever its outcome
     if (session_.pendingSettings()) {        // another client's unconfirmed edit: never piggyback on it
         log("desktop change rejected: another unconfirmed edit is pending in this session");
         sync_.abandonWrite();
