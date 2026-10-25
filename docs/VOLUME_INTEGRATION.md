@@ -43,7 +43,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 | The exact mute/unmute sequence of that test | not reconstructable (extra button presses, log without timestamps); the final unmuted desktop state is not attributed to the kernel, WirePlumber or OpenWitty. Logging fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level) |
 | Settings page + installed background service (Phase 8G, 2026-10-25, same boot, user-local install): all 8 steps below, see "Settings validation" | passed |
 | Mute button with the background service owning the device; start at boot/login with the service enabled (Phase 8H) | passed, see "Background service and login" |
-| Vendor fallback in the "SET ignored" state; suspend/resume; a logout/login without reboot | not yet tested on the device |
+| Suspend to RAM (S3) and resume with the service running (Phase 8I) | passed, see "Suspend/resume" |
+| Vendor fallback in the "SET ignored" state; a logout/login without reboot | not yet tested on the device |
 
 ## Kernel compatibility quirk
 `options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error` (example: `packaging/modprobe/openwitty-connect2.conf`).
@@ -240,12 +241,33 @@ no-retry rule or the never-unmute rule.
 **Settings wording.** The switch is now "Show the volume knob in the desktop volume" and explains that Linux cannot see the
 knob, while the desktop slider and the Mute button work without OpenWitty.
 
+## Suspend/resume (Phase 8I, 2026-10-25, installed `07220fb`)
+Service enabled in mirror mode (fallback and speaker/headphone control off). Before: service PID unchanged since start,
+0 restarts; device −20.00 dB unmuted (service's vendor GET), ALSA −20.00 dB on, sink 0.46; quirk active; output route
+with `route.hw-volume`/`route.hw-mute`; `mem_sleep` = deep, USB `power/control` = on, `persist` = 1.
+
+The owner suspended through KDE. The kernel log shows one S3 cycle of ≈14 s and two short follow-up cycles (the last one
+s2idle) requested by KDE's lock screen (`kscreenlocker_greet`) after waking to the lock screen without unlocking – KDE
+power management, unrelated to OpenWitty. After resume:
+* the same service process kept running (no restart, `NRestarts=0`), no read errors, timeouts, reconnects or ownership
+  conflicts in its journal;
+* the CONNECT 2 was not re-enumerated (no kernel message for the device at all); WirePlumber/PipeWire logged nothing;
+  the sink, re-identified by name, kept its id; ALSA control and hardware-volume route unchanged; levels as before;
+* speaker volume knob turned up to 0 dB: mirrored step by step (−18.8 → 0.00 dB), ALSA 0.00 dB, sink 1.00;
+* one desktop decrease (1.00 → 0.98): the device followed through the kernel within milliseconds (service read −0.50 dB),
+  no vendor SET, no "did not follow"; ALSA −0.50 dB.
+
+Result: both directions survive suspend/resume on this system; Feature Unit 2 SET stays honoured (the "SET ignored" state
+was not reached). No recovery behaviour was exercised or needed. Not covered: a resume after which the device is
+re-enumerated (e.g. USB power lost during sleep), longer sleep, s2idle as the configured default.
+
 ## Prepared hardware checkpoints (optional, each needs the owner's go-ahead)
 1. **Reproduce the ordinary-boot result.** Done informally in Phase 8H (volume keys reached the device after a reboot). For a
    formal record: owner reboots normally, then
    `tools/diagnostics/fu2_recovery_probe.py run --cli build-release/openwitty-cli --confirm-audio-safe` – stops after P0 if FU2
    is honoured (≈1 s, speaker −1 dB).
-2. **Suspend/resume.** Owner suspends and resumes the machine once; then the same tool run. `FU2_HEALTHY_AT_BOOT` (P0 followed)
+2. **Suspend/resume.** Done in Phase 8I with the service running (kernel path honoured after resume). Formal probe: owner
+   suspends and resumes the machine once; then the same tool run. `FU2_HEALTHY_AT_BOOT` (P0 followed)
    means suspend/resume keeps the kernel path working; anything else is the first evidence that ordinary users can reach the
    "SET ignored" state, which would justify offering the vendor fallback more prominently.
 Neither checkpoint involves reboots, resets, reloads or replugs by OpenWitty.
