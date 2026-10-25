@@ -68,6 +68,8 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "openwitty: not starting a second window: %s\n", qPrintable(instance->lastError()));
                 return 3;
             case InstanceChannel::Role::Primary:
+                if (!instance->listening())
+                    std::fprintf(stderr, "openwitty: %s\n", qPrintable(instance->lastError()));
                 break;
         }
     }

@@ -28,9 +28,13 @@ public:
     static QString lockPath(const QString& name);
 
     // Take ownership: lock, then (still holding it) remove a stale socket and listen. `afterLock` runs
-    // between taking the lock and listening (tests use it to widen that window).
+    // between taking the lock and listening (tests use it to widen that window). Ownership is the lock: if
+    // the socket cannot be created (e.g. a runtime path longer than a Unix socket path may be), this is still
+    // the owner - other starts then find no answer and give up instead of starting a second instance -
+    // and lastError() says why activation requests cannot be received.
     Acquire acquire(const std::function<void()>& afterLock = {});
-    bool owner() const { return lockFd_ >= 0 && server_.isListening(); }
+    bool owner() const { return lockFd_ >= 0; }
+    bool listening() const { return server_.isListening(); }
     QString lastError() const { return error_; }
 
     // The startup decision. Try to hand `message` to the owner; if there is no owner, become it. While

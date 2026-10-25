@@ -345,3 +345,26 @@ TEST(IntegrationSettingsTray, MissingTrayProgramIsReportedAndNothingIsWritten) {
     EXPECT_EQ(launched, 0);
     EXPECT_TRUE(s.lastError().contains("not installed"));
 }
+
+// Found by a real makepkg run: a runtime directory so deep that the socket path exceeds the Unix limit.
+// The lock still makes this process the one owner (it must start); others give up instead of duplicating.
+TEST(InstanceChannel, OwnerWithoutASocketStillOwnsAndOthersDoNotDuplicate) {
+    app();
+    QTemporaryDir base;
+    QString deep = base.path();
+    while (deep.size() < 140) deep += "/very-long-directory-name";
+    ASSERT_TRUE(QDir().mkpath(deep));
+    const QByteArray prev = qgetenv("XDG_RUNTIME_DIR");
+    qputenv("XDG_RUNTIME_DIR", deep.toUtf8());
+    {
+        InstanceChannel first("t-deep");
+        EXPECT_EQ(first.acquire(), InstanceChannel::Acquire::Owner);
+        EXPECT_TRUE(first.owner());
+        EXPECT_FALSE(first.listening());
+        EXPECT_TRUE(first.lastError().contains("cannot listen")) << first.lastError().toStdString();
+        InstanceChannel second("t-deep");
+        EXPECT_EQ(second.claimOrForward("activate\n", 400), InstanceChannel::Role::Failed);
+        EXPECT_FALSE(second.owner());
+    }
+    qputenv("XDG_RUNTIME_DIR", prev);
+}

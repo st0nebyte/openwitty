@@ -55,6 +55,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "openwitty-tray: not starting a second tray icon: %s\n", qPrintable(channel.lastError()));
             return 1;
         case InstanceChannel::Role::Primary:
+            if (!channel.listening()) std::fprintf(stderr, "openwitty-tray: %s\n", qPrintable(channel.lastError()));
             break;
     }
 

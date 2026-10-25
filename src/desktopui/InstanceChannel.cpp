@@ -82,11 +82,9 @@ InstanceChannel::Acquire InstanceChannel::acquire(const std::function<void()>& a
     if (afterLock) afterLock();
     const QString sock = socketPath(name_);
     QLocalServer::removeServer(sock);   // safe: we hold the lock, so whatever is there belongs to a dead owner
-    if (!server_.listen(sock)) {
-        error_ = QString("cannot listen on %1: %2").arg(sock, server_.errorString());
-        release();
-        return Acquire::Error;
-    }
+    if (!server_.listen(sock))
+        error_ = QString("cannot listen on %1: %2 (other starts cannot bring this window to the front)")
+                     .arg(sock, server_.errorString());
     return Acquire::Owner;
 }
 
