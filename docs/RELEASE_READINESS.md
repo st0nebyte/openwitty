@@ -215,7 +215,15 @@ the rule and repeat once without it; −23.5 dB there and the knob level with th
 the user's session; login problems or a login screen that does not start; unexpected USB/kernel messages for the
 device; repeated service restarts. Then roll back and report; no further cycles.
 
+**Installed state (Phase 9D, 2026-10-25, owner-approved):** the rule is installed for the login screen only —
+`/var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf`
+(`plasmalogin:plasmalogin`, 0644; the two `wireplumber` directories created as `plasmalogin`; identical to the
+repository copy; `spa-json-dump` parses it). The user's own WirePlumber configuration was not touched (no
+`~/.config/wireplumber`, no `/etc/wireplumber`). Takes effect at the next login screen; **not yet live-validated**.
+
 *Rollback:* `sudo rm /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf`
+(optionally also `sudo -u plasmalogin rmdir /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d
+/var/lib/plasmalogin/.config/wireplumber`)
 (effective at the next login screen). If the CONNECT 2 were missing in the user's own session, check that the rule
 was not placed in `~/.config/wireplumber` or `/etc/wireplumber` and remove it there. The speaker level is restored by
 the owner with the knob, never by OpenWitty.
@@ -256,18 +264,11 @@ dated 2026-10-14 that never happened. Recommendation for the first public alpha:
 
 ### Git author identity
 
-The history (`git log --format='%an <%ae>'`) contains 26 commits authored as a personal Gmail address (18 as
-`st0nebyte`, 8 as `st0nebyte`) and 13 with the first name "st0nebyte"; the rest use the GitHub no-reply address.
-Options (none applied; rewriting is never done without explicit approval):
-
-| Option | Effect | Cost |
-|---|---|---|
-| Publish the history as is | e-mail and first name become public | none |
-| Rewrite authors with a mailmap (`git filter-repo --mailmap`) to the no-reply identity | history clean | new commit hashes for everything; force-push of the development branch; every clone must re-clone; hashes quoted in docs (e.g. `8608ef2`, `72a71f7`) become stale |
-| Publish a fresh repository with a squashed initial commit | clean, simple | loses the detailed history (it remains in the private repo) |
-| `.mailmap` only | display names/addresses mapped in `git log` | the original addresses remain in the objects — not a privacy fix |
-
-Set `git config user.email 133608037+st0nebyte@users.noreply.github.com` for new commits in any case.
+Phase 9D: the owner approved sanitizing the history. Before the rewrite, 26 commits carried a personal e-mail
+address and 13 a first name in the author/committer fields, and a few old file revisions contained the handle or
+the name (an early `LICENSE`, the first Debian `changelog`/`copyright`, `docs/AUDIT_PHASE5E.md`, two ACL examples in
+the hardware docs). Procedure and results: "History rewrite (Phase 9D)" below. New commits use the GitHub no-reply
+address (`git config user.email`).
 
 ### Arch
 
