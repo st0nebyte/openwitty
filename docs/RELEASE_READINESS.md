@@ -37,7 +37,8 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 | 17 | GUI *Speaker/headphone control* exercised on hardware | **NOT DONE** — documented as not exercised |
 | 18 | Version and release metadata decided | **OPEN** — see "Versioning" |
 | 19 | Tray icon and single window (Phase 9B): offscreen tests (tray unavailable, service disabled/running/idle/not installed, repeated opens, quit leaves the service alone, autostart on/off/reset), end-to-end single-instance script, no USB/ALSA linkage | PASS (offline) |
-| 20 | Tray icon and window activation live on KDE Plasma (Wayland) | **PENDING** — short user acceptance test, see below |
+| 20 | Tray icon and window activation live on KDE Plasma (Wayland) | PASS except login autostart — see "KDE Plasma acceptance (Phase 9B)" |
+| 21 | Single-instance ownership race-free (flock), explicit failure | PASS — 7 barrier-synchronised race tests (also under ASan/UBSan), end-to-end script |
 
 ## Known limitations and experimental features
 
@@ -57,20 +58,38 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 * Not supported: CONNECT 6; firmware update and factory reset (deliberately not implemented); presets.
 * Not a replacement for LEWITT CONTROL CENTER.
 
-## Pending live check: tray icon and window activation (KDE Plasma, Wayland)
+## KDE Plasma acceptance (Phase 9B, 2026-10-25)
 
-Offline tests cannot show a real Status Notifier tray or Wayland focus. A short acceptance test on the
-development system (no device writes, no service changes beyond what the user switches):
+System: CachyOS, Linux 7.3.0, KDE Plasma 6.8 on Wayland; user-local install of `230b7dd` (window, tray) with the
+background service process started earlier from `07220fb` (left running; its code is functionally unchanged
+since, CMake replaces installed files without disturbing a running process). Vendor fallback and
+speaker/headphone control off throughout.
 
-1. Settings → Desktop integration → "Show OpenWitty in the system tray": the icon appears; tooltip and menu show
-   the knob-display and service state as on the page.
-2. Close the window; left-click the icon: OpenWitty opens. Click it again (window open): the same window comes
-   to the front — check that KWin actually focuses it (without an activation token it may only highlight it).
-3. "Desktop integration settings…" opens that page; launcher action of the same name likewise.
-4. Turn the knob display off in the window: the tray status follows within a few seconds; the service line says idle.
-5. "Quit tray icon": the icon goes away; `systemctl --user is-active openwitty-volumed` is unchanged.
-6. Log out and in with the tray setting on: the icon comes back. Turn the setting off: icon and
-   `~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop` are gone.
+**Offline (before installing):** CTest 285/285, GUI 57/57, tray 16/16, race 7/7 (5 repeats, also ASan/UBSan),
+end-to-end single-instance script, ASan/UBSan 265/265, USB audit, packaging staging, privacy grep.
+
+**Observed on the real desktop:**
+
+| Check | Observation |
+|---|---|
+| Tray icon appears after "Show OpenWitty in the system tray" | yes, one icon, OpenWitty artwork; one `openwitty-tray` process |
+| Tooltip | "OpenWitty / Volume knob in desktop volume: on / Background service: running" — matches the real state |
+| Menu | two greyed-out status lines, Open OpenWitty, Desktop integration settings…, Quit tray icon |
+| Window closed → left click on the icon | OpenWitty opens and connects (hand-over from the service, see defects) |
+| Window open → tray click, launcher start, tray "Desktop integration settings…", launcher action | owner: all four bring the existing window to the front **with keyboard focus**; logs: the requests reached the running window, a launcher start printed "already open"; never two windows |
+| Window closed | the GUI's socket disappears; the service takes the device back (journal "device connected", read-only start); the tray stays |
+| Knob after closing the window and after "Quit tray icon" | still mirrored by the service (e.g. −18.9 → −9.1 dB) |
+| "Quit tray icon" | icon gone; service same PID, `NRestarts=0`, enabled; settings unchanged; autostart entry kept |
+| Tray switch off / on / off / on (monitored) | entry removed and icon stopped / entry written and icon started, each within ~1 s |
+
+**Defects found and fixed during the acceptance test:** opening the window while the service held the device
+showed a red "already in use by another OpenWitty process" for 1–2 s (the normal hand-over) — now presented as
+"Connecting — taking over the CONNECT 2 from the OpenWitty background service…" with 300 ms lease retries
+(`8eda3b1`); the header indicator still said "Error" (`7fc6015`); "usb" shown as "USB" (`230b7dd`).
+
+**Not performed live:** the icon coming back automatically after a logout/login (autostart entry verified, the
+login itself not yet); the tray status following a knob-display change made in the window (offline only); the
+tray on a desktop without a Status Notifier host (offline only: exits quietly).
 
 ## Installation and rollback
 
