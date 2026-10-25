@@ -74,8 +74,10 @@ Window {
             GlyphIcon { x: 14; y: 13; width: 24; height: 24; kind: "headphones"; color: Theme.accent
                         visible: false }
             DeviceStatusIndicator { objectName: "headerConnectionIndicator"; x: 262; anchors.verticalCenter: parent.verticalCenter
-                state: device.connection
-                detail: win.uiState === "simulated" ? "simulated"
+                // the presented state: a hand-over from the background service reads "Connecting", not "Error"
+                state: win.uiState === "connecting" ? "Connecting" : device.connection
+                detail: win.uiState === "connecting" ? device.backend
+                      : win.uiState === "simulated" ? "simulated"
                       : win.uiState === "real-readonly" ? "read-only"
                       : win.uiState === "real-writable" ? "real device"
                       : win.uiState === "connection-lost" ? "connection lost"

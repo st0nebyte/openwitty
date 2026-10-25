@@ -1214,3 +1214,25 @@ TEST(GuiState, ALeaseThatStaysTakenIsReportedAfterTheHandOverGrace) {
     EXPECT_FALSE(c.values().value("ui.error").toString().isEmpty());
     EXPECT_FALSE(c.writable());
 }
+
+TEST(Qml, HeaderIndicatorShowsConnectingDuringTheServiceHandOver) {
+    app();
+    BlockRealUsb block;
+    ASSERT_TRUE(block.ready());
+    HandoverGrace grace(std::chrono::seconds(8));
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root != nullptr);
+    c.connectUsb();
+    ASSERT_TRUE(waitFor([&] { return c.values().value("ui.state").toString() == "connecting"; }));
+    QCoreApplication::processEvents();
+    auto* header = root->findChild<QObject*>("headerConnectionIndicator");
+    ASSERT_TRUE(header);
+    EXPECT_EQ(header->property("state").toString(), "Connecting");
+    EXPECT_NE(c.connection(), "Connecting");   // the raw transport state differs; the presented one counts
+}
