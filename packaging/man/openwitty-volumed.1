@@ -1,0 +1,58 @@
+.TH OPENWITTY-VOLUMED 1 "October 2026" "openwitty 0.1.0" "User Commands"
+.SH NAME
+openwitty-volumed \- keep the desktop volume in step with the LEWITT CONNECT 2 speaker knob
+.SH SYNOPSIS
+.B openwitty-volumed
+.RB [ \-\-mirror " | " \-\-vendor\-fallback " [" \-\-max\-increase\-db " n] | " \-\-dry\-run " | " \-\-check ]
+.RB [ \-\-poll\-ms " 250..5000]"
+.SH DESCRIPTION
+The Linux kernel cannot read back the CONNECT 2's speaker volume, so turning the speaker volume
+knob does not move the desktop (KDE/PipeWire) volume.
+.B openwitty-volumed
+reads the device (read-only) and updates the desktop's ALSA volume control to the level the
+device already has: re-read first, rounded down, never unmuting. The Mute button and desktop
+volume changes reach each other through the kernel without this program.
+.PP
+Normally it runs as the systemd user service \fBopenwitty-volumed.service\fR, switched on in
+OpenWitty under Settings \(-> Desktop integration. Without a mode flag it follows the settings file:
+idle while desktop sync is off, mirror mode when it is on. While the OpenWitty window is open it
+hands the device to the window and takes it back afterwards. Unofficial; not affiliated with
+LEWITT.
+.SH OPTIONS
+.TP
+.B \-\-mirror
+Mirror mode regardless of the settings file (device read-only).
+.TP
+.B \-\-vendor\-fallback
+Experimental and not validated on hardware: additionally apply a desktop change that the device
+did not follow (after a 1.5 s grace period) through the vendor protocol \- speaker volume and
+mute only, one SET, read back, never retried, at most \fB\-\-max\-increase\-db\fR (default 10)
+louder per step. Requires \fBLEWITT_ALLOW_HARDWARE_WRITE=1\fR and
+\fBLEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1\fR.
+.TP
+.B \-\-dry\-run
+Report decisions only; write nothing anywhere.
+.TP
+.B \-\-check
+Diagnose the audio setup (sound card, hardware volume, kernel quirk) and exit. No OpenWitty
+vendor USB access; opening the ALSA mixer can make the kernel read the device.
+.TP
+.BI \-\-poll\-ms " ms"
+Device poll interval (default 1000).
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/openwitty/openwitty.conf
+Settings shared with
+.BR openwitty (1)
+(keys \fBdesktop_volume_sync\fR, \fBvendor_fallback\fR, \fBoutput_control\fR; all off by default).
+.SH EXAMPLES
+.nf
+openwitty-volumed \-\-check
+systemctl \-\-user status openwitty-volumed.service
+journalctl \-\-user \-u openwitty-volumed
+systemctl \-\-user disable \-\-now openwitty-volumed.service
+.fi
+.SH SEE ALSO
+.BR openwitty (1),
+.BR openwitty-cli (1),
+/usr/share/doc/openwitty/VOLUME_INTEGRATION.md

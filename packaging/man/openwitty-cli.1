@@ -1,15 +1,16 @@
-.TH LEWITT-CLI 1 "October 2026" "openwitty 0.1.0" "User Commands"
+.TH OPENWITTY-CLI 1 "October 2026" "openwitty 0.1.0" "User Commands"
 .SH NAME
-openwitty-cli \- read-only diagnostic tool for the LEWITT CONNECT 2 (unofficial, experimental)
+openwitty-cli \- diagnostic tool for the LEWITT CONNECT 2 (unofficial, experimental)
 .SH SYNOPSIS
 .B openwitty-cli
 .RB { devices | diagnose | list | probe " [" \-\-execute "] | read"
-.IR what " [" options "] | \-\-version }"
+.IR what " [" options "] | write"
+.IR field " " value " [" options "] | \-\-version }"
 .SH DESCRIPTION
 .B openwitty-cli
-inspects LEWITT USB devices (vendor id 0x29c2) and performs single read-only control
-transfers. It has no command that writes to the device. This software is not affiliated with
-LEWITT, and its protocol knowledge has not been validated on real hardware.
+inspects LEWITT USB devices (vendor id 0x29c2) and performs single control transfers. It is
+read-only by default; four experimental write commands each change exactly one setting and
+need explicit opt-in. This software is not affiliated with LEWITT.
 .SH COMMANDS
 .TP
 .B devices
@@ -27,16 +28,34 @@ Dry run (default) or execution of a small matrix of GET-only experiments.
 .TP
 .BR read " " api | version | status | settings
 Read one message. Options:
-.BR \-\-mock " (simulated device), " \-\-method " interface|device-recipient|detach,"
+.BR \-\-mock " (simulated device), " \-\-interface " N|auto, " \-\-method " interface|device-recipient|detach,"
 .BR \-\-request " uac2|uac1."
+.TP
+.BR write " " led-brightness " 0-100 | " instrument-mute " on|off | " speaker-volume " -60..0 | " speaker-mute " on|off"
+Change one setting. Without \fB\-\-execute\fR only a dry-run proposal is printed and nothing is
+sent. With \fB\-\-execute\fR on real hardware: a fresh settings snapshot, one SET limited to the
+bytes of that setting, read-back verification, never retried.
 .SH EXIT STATUS
 0 success; 3 permission denied (EACCES); 4 interface busy (EBUSY); 5 stall (EPIPE); 6 timeout;
 7 device absent; 8 unsupported; 9 bad response; 64 usage error.
 .SH ENVIRONMENT
 .TP
+.B LEWITT_ALLOW_HARDWARE_WRITE
+Must be exactly \fB1\fR for any \fBwrite \-\-execute\fR on real hardware.
+.TP
+.BR LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE ", " LEWITT_ALLOW_WRITE_SPEAKER_VOLUME
+Additionally required (exactly \fB1\fR) for instrument-mute, resp. speaker-volume and speaker-mute.
+.TP
 .B LEWITT_ALLOW_DISRUPTIVE
 Must be set, in addition to \fB\-\-method detach\fR, to allow detaching the kernel audio driver
 (this removes the sound card while it runs). Never set by default.
+.SH NOTES
+Only one OpenWitty process uses the device at a time. While
+.BR openwitty (1)
+or
+.BR openwitty-volumed (1)
+holds it, device commands report that the control is in use.
 .SH SEE ALSO
 .BR openwitty (1),
+.BR openwitty-volumed (1),
 /usr/share/doc/openwitty/USB_PERMISSIONS.md

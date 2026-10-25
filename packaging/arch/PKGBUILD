@@ -1,26 +1,27 @@
 # Maintainer: st0nebyte <https://github.com/st0nebyte>
 #
-# Local-source PKGBUILD for the OpenWitty (unofficial LEWITT CONNECT 2 control application; experimental,
-# not validated on hardware). It builds from a tarball of THIS repository, never from the
-# network and never from proprietary files:
+# Local-source PKGBUILD for OpenWitty (unofficial, experimental Linux control application for the
+# LEWITT CONNECT 2; not affiliated with LEWITT). It builds from a tarball of THIS repository, never
+# from the network and never from proprietary files:
 #
 #   packaging/arch/make-source-tarball.sh        # writes packaging/arch/<pkgname>-<pkgver>.tar.gz
 #   cd packaging/arch && makepkg -s              # run as a normal user, never as root
 #
-# On the Ubuntu development host the genuine makepkg script was run rootless with --nodeps
-# (tools/packaging/run_makepkg_rootless.sh); namcap could not be run there (needs libalpm).
-# A run on an Arch/CachyOS system with `makepkg -s` and `namcap` is still outstanding.
+# Validated with a real rootless `makepkg` on CachyOS (see docs/PACKAGING.md); namcap has not been run.
+# The package installs the udev rule and a systemd *user* unit (openwitty-volumed.service); it never
+# enables the unit and never installs the kernel compatibility quirk (only an example in the docs).
 pkgname=openwitty
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2 (not hardware-validated)'
+pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2'
 arch=('x86_64')
 url='https://github.com/st0nebyte/openwitty'
 license=('MIT' 'ISC')
-depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'libusb' 'hicolor-icon-theme')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'libusb' 'alsa-lib' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'gtest')
 optdepends=('usbutils: lsusb for manual diagnostics'
-            'alsa-utils: aplay/amixer for manual diagnostics')
+            'alsa-utils: aplay/amixer for manual diagnostics'
+            'pipewire: the desktop volume integration was validated with PipeWire/WirePlumber (KDE Plasma)')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')   # local tarball produced from the working tree
 
@@ -31,6 +32,7 @@ build() {
         -DLEWITT_BUILD_TESTS=ON \
         -DLEWITT_INSTALL_UDEV_RULES=ON \
         -DLEWITT_REPRODUCIBLE=ON \
+        -DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user \
         -Wno-dev
     cmake --build "$srcdir/build"
 }
@@ -46,5 +48,7 @@ check() {
 package() {
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
     install -Dm644 "$srcdir/$pkgname-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 "$srcdir/$pkgname-$pkgver/assets/icons/lucide/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-LUCIDE"
     # Arch uses /usr/lib/udev/rules.d (already the default prefix-relative location).
 }

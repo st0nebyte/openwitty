@@ -6,7 +6,7 @@ set(CPACK_PACKAGE_VENDOR "unofficial community project")
 set(CPACK_PACKAGE_CONTACT "st0nebyte <noreply@users.noreply.github.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Unofficial, experimental control application for the LEWITT CONNECT 2")
 set(CPACK_PACKAGE_DESCRIPTION
-    "Independent Linux control application and diagnostic tool for the\nLEWITT CONNECT 2 USB audio interface.\nNot affiliated with LEWITT. The control protocol was derived by static\nanalysis and has not been validated on real hardware; hardware writes are\ndisabled and a simulated device is included.")
+    "Independent Linux control application and diagnostic tool for the\nLEWITT CONNECT 2 USB audio interface (experimental alpha, tested with one\ndevice on one system). Shows the live device state read-only, keeps the\ndesktop volume in step with the speaker volume knob (optional user service),\nand includes a simulated device. Not affiliated with LEWITT.")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/st0nebyte/openwitty")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES ON)
@@ -23,12 +23,14 @@ set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_RELEASE "1")
-# Shared-library dependencies are computed from the binaries (dpkg-shlibdeps); the QML modules
-# and the Qt platform plugins are loaded at run time and must be declared by hand.
+# Shared-library dependencies are computed from the binaries (dpkg-shlibdeps); the QML modules,
+# the Qt platform plugins and the Qt SVG image plugin (Lucide icons) are loaded at run time and must be
+# declared by hand. Debian/Ubuntu builds should also pass
+#   -DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user   (the distribution's user unit directory).
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-shapes, qt6-qpa-plugins")
-set(CPACK_DEBIAN_PACKAGE_SUGGESTS "usbutils, alsa-utils")
+    "qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-shapes, qt6-qpa-plugins, libqt6svg6")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "usbutils, alsa-utils, pipewire")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${CMAKE_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_SOURCE_DIR}/packaging/debian/postrm")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)

@@ -2,7 +2,9 @@
 
 This documents the *permission* side of USB access. The driver-ownership side is in
 `docs/USB_ACCESS.md`. The application never uses `sudo`, never detaches kernel drivers, never
-unbinds interfaces and never resets the device on its own. Hardware writes are disabled.
+unbinds interfaces and never resets the device on its own. It normally uses the CONNECT 2's own vendor
+control interface, which no kernel driver claims, so audio keeps working. Device changes happen only through
+explicitly enabled, confirmed options (see `README.md`).
 
 ## Three different failures
 

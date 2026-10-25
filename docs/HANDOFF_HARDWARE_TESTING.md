@@ -1,5 +1,10 @@
 # Handoff: first real-hardware testing of OpenWitty (LEWITT CONNECT 2)
 
+> **Historical document (written before the first hardware session, 2026-10-14).** Its statements that the
+> software was never run on a CONNECT 2 or that all writes are disabled are outdated. Current status:
+> `README.md`, `FEATURES.md`, `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md`,
+> `docs/RELEASE_READINESS.md`.
+
 Written for a fresh Claude Code (or human) session with **no access to the conversation that
 produced this project**. Read this file, then `docs/CLAUDE_SESSION_START.md`.
 

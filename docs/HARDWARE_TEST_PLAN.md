@@ -1,5 +1,10 @@
 # Hardware validation plan (CONNECT 2)
 
+> **Historical document (written before the first hardware session, 2026-10-14).** Its statements that the
+> software was never run on a CONNECT 2 or that all writes are disabled are outdated. Current status:
+> `README.md`, `FEATURES.md`, `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md`,
+> `docs/RELEASE_READINESS.md`.
+
 Not executed — no device was available when this was written. Every step is **read-only
 until step 11**, and step 11 is only a *proposal*. Stop at the first unexpected result and
 send the output; do not improvise. No step needs sudo unless stated.

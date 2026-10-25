@@ -1,26 +1,52 @@
-.TH LEWITT-CONTROL-CENTER 1 "October 2026" "openwitty 0.1.0" "User Commands"
+.TH OPENWITTY 1 "October 2026" "openwitty 0.1.0" "User Commands"
 .SH NAME
 openwitty \- unofficial, experimental control application for the LEWITT CONNECT 2
 .SH SYNOPSIS
 .B openwitty
 .RB [ \-\-mock "] [" \-\-show " page] [" \-\-screenshot " file] [" \-\-size " WxH] [" \-\-version ]
 .SH DESCRIPTION
-A Qt 6 / QML control application. It is not affiliated with LEWITT. The control protocol was
-derived by static analysis and has \fBnot been validated on real hardware\fR; writes to real
-hardware are disabled, so a connected device is shown read-only. A simulated device is
+A Qt 6 / QML control application for the LEWITT CONNECT 2 USB audio interface. It is an
+independent project, not affiliated with or endorsed by LEWITT, and not a replacement for
+LEWITT CONTROL CENTER.
+.PP
+Connected to a real CONNECT 2 it shows the device state (inputs, outputs, meters, the selected
+channel) read-only. It changes the device only for the speaker and headphone volume and mute,
+and only after the user has turned on and confirmed \fISpeaker/headphone control\fR in
+Settings. Firmware update and factory reset are not implemented. A simulated device is
 included and always labelled as simulated.
+.PP
+Settings \(-> Desktop integration shows whether the desktop hardware volume is available, explains
+the optional kernel compatibility quirk, and can keep the desktop (KDE/PipeWire) volume in step
+with the speaker volume knob, also in the background through the
+.BR openwitty-volumed (1)
+user service.
 .SH OPTIONS
 .TP
 .B \-\-mock
 Start with the simulated device.
 .TP
 .BI \-\-show " page"
-Open settings, wizard or onboarding at start.
+Open settings, settings-desktop, wizard or onboarding at start.
 .TP
 .BI \-\-screenshot " file"
 Render one frame to a PNG and exit (offscreen use).
 .TP
 .BI \-\-size " WxH"
 Window size for screenshots.
+.TP
+.B \-\-diagnostic\-legacy\-polling
+Diagnostic: use the former 2 Hz settings / 4 Hz status polling.
+.TP
+.BI \-\-quit\-after\-seconds " n"
+Diagnostic: quit normally after n seconds.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/openwitty/openwitty.conf
+Desktop integration settings (default \fI~/.config/openwitty/openwitty.conf\fR), shared with
+.BR openwitty-volumed (1).
+Deleting it restores the defaults (everything off).
 .SH SEE ALSO
-.BR openwitty-cli (1)
+.BR openwitty-cli (1),
+.BR openwitty-volumed (1),
+/usr/share/doc/openwitty/INSTALLATION.md,
+/usr/share/doc/openwitty/VOLUME_INTEGRATION.md

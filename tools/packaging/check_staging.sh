@@ -50,9 +50,31 @@ if find "$stage" \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.pkg' -o -iname
 
 [ -L "$P/bin/lewitt-cli" ] && [ "$(readlink "$P/bin/lewitt-cli")" = openwitty-cli ] && ok "lewitt-cli compatibility alias" || bad "lewitt-cli alias missing"
 grep -q "^MIT License" "$P/share/doc/openwitty/LICENSE" && ok "MIT LICENSE installed" || bad "LICENSE not MIT"
+[ -e "$P/share/doc/openwitty/LICENSE-LUCIDE" ] && ok "Lucide icon licence installed" || bad "LICENSE-LUCIDE missing"
+for f in HARDWARE_TEST_PLAN.md HANDOFF_HARDWARE_TESTING.md; do
+    [ ! -e "$P/share/doc/openwitty/$f" ] && ok "developer doc $f not installed" || bad "developer doc $f installed"
+done
+
+# Desktop volume service (built with ALSA + USB): binary, man page, user unit installed but never enabled,
+# ExecStart pointing at the installed binary, the kernel quirk only as a documentation example.
+if [ -x "$build/openwitty-volumed" ]; then
+    echo "== desktop volume service"
+    [ -x "$P/bin/openwitty-volumed" ] && ok "bin/openwitty-volumed" || bad "openwitty-volumed missing"
+    [ -e "$P/share/man/man1/openwitty-volumed.1.gz" ] && ok "openwitty-volumed man page" || bad "openwitty-volumed man page missing"
+    unit=$(cd "$stage" && find . -path '*/systemd/user/openwitty-volumed.service' | head -1)
+    if [ -n "$unit" ]; then
+        ok "user unit at ${unit#.}"
+        grep -q '^ExecStart=/usr/bin/openwitty-volumed$' "$stage/$unit" && ok "ExecStart=/usr/bin/openwitty-volumed"             || bad "unexpected ExecStart: $(grep ExecStart "$stage/$unit")"
+    else bad "user unit missing"; fi
+    if (cd "$stage" && find . -path '*.wants/*' | grep -q .); then bad "a unit is enabled (.wants link installed)"
+    else ok "unit not enabled (no .wants links)"; fi
+    [ -e "$P/share/doc/openwitty/examples/openwitty-connect2.conf" ] && ok "quirk example in docs" || bad "quirk example missing"
+    if (cd "$stage" && find . -path '*modprobe.d*' | grep -q .); then bad "a modprobe.d file is installed"
+    else ok "no modprobe.d file installed (quirk is opt-in)"; fi
+fi
 
 echo "== runtime independence"
-for b in "$P/bin/openwitty-cli" "$P/bin/openwitty"; do
+for b in "$P/bin/openwitty-cli" "$P/bin/openwitty" $( [ -x "$P/bin/openwitty-volumed" ] && echo "$P/bin/openwitty-volumed" ); do
     n=$(basename "$b")
     if have readelf; then
         if readelf -d "$b" | grep -Eq 'RPATH|RUNPATH'; then bad "$n has RPATH/RUNPATH: $(readelf -d "$b" | grep -E 'RPATH|RUNPATH')"

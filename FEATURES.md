@@ -1,20 +1,22 @@
 # Feature inventory / parity matrix (CONNECT 2)
 
-Sources: official online guide (documented behaviour, screenshots), macOS and
-Windows Control Center 5.2.2 (protocol). **HW** column: see each row; most
-controls are still read-only or untested on hardware. A first hardware
-session (2026-10-14, `docs/HARDWARE_TEST_RESULTS.md`) confirmed the
-transport-level API handshake (message 0x0A) over a newly-discovered unbound
-vendor interface; follow-up sessions (2026-10-14/15, same doc §§10, 12, 13)
-physically confirmed several individual read controls and, as of 2026-10-15,
-the project's first real hardware **write** (LED brightness, via a single
-narrowly-scoped, explicitly-gated CLI command — see `src/cli/main.cpp`'s
-`cmdWriteLedBrightness`). This does not mean writes are broadly enabled:
-every other control remains read-only by design pending its own review.
-"RE" = what reverse engineering still has to
-establish.
-Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML
-control wired to the mock backend; writes to real hardware are disabled.
+Sources: official online guide (documented behaviour, screenshots), macOS and Windows Control Center 5.2.2
+(protocol), and hardware sessions with **one CONNECT 2 on one Linux system** (`docs/HARDWARE_TEST_RESULTS.md`,
+`docs/VOLUME_INTEGRATION.md`). The **HW** column gives the evidence per row.
+
+Summary of the hardware evidence:
+* Transport (unbound vendor interface 3, API handshake 0x0A) and the read-only messages: confirmed.
+* Many individual settings bytes confirmed by physical controls (gain, mutes, speaker/headphone volume,
+  channel selection, mix, Panic Mute); the live GUI follows them.
+* Vendor **writes** verified by read-back: LED brightness (CLI) and speaker volume/mute (CLI and the former
+  Python bridge, Phase 8C). Instrument-mute write prepared, never executed. The GUI's confirmed
+  *Speaker/headphone control* uses the same verified path but has not been exercised on hardware.
+* Desktop volume integration (row 46): validated (see below). Vendor fallback: not validated.
+* Everything else is implemented against the simulated device only.
+
+"RE" = what reverse engineering still has to establish.
+Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML control (on real hardware:
+display only, except the confirmed speaker/headphone control).
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|
@@ -66,6 +68,9 @@ Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.
 | 43 | GUI connection state | header/status area (`ui.state` is canonical; `ui.detail` is descriptive) | derived from `ConnectionState`/`isSimulated`/`writesEnabled`; write progress stays in `write.*` | QML consumes canonical state; no duplicate `ui.status` enum | pending verification remains synchronous/non-visible mid-flight | n/a |
 | 44 | Showcase mode (hidden icon sequence) | hardware only | device-side | not applicable | icon sequence not reproduced | n/a |
 | 45 | `mute.allFour` derived display state (purely computed, no protocol concept) | non-interactive “ALL MAIN CHANNELS MUTED” banner, hidden while disconnected | `s.mute(0) && s.mute(1) && s.speakerMute() && s.headphoneMute()` | GUI binding + mock/replay tests; owner-operated hold shown live on 2026-10-17; no trigger or automatic recovery | cannot distinguish a Panic Mute hold from four individual mutes (by design) | n/a — confirmed by evidence that real hardware has no dedicated flag (§16 of `docs/HARDWARE_TEST_RESULTS.md`) |
+| 46 | Desktop (KDE/PipeWire) volume follows the speaker volume knob | Settings ▸ Desktop integration; `openwitty-volumed` user service | settings GET → ALSA `PCM Playback` control (kernel forwards it) | core+desktop+daemon+GUI, tests | — | **yes** — window and service, hand-over both ways, boot/login, suspend/resume (Phases 8G–8I, `docs/VOLUME_INTEGRATION.md`); Mute button and desktop slider work through the kernel without OpenWitty |
+| 47 | Vendor fallback for a device that ignores the desktop volume | Settings ▸ Desktop integration (confirmed, off) | speaker bytes 20–22, verified SET | core+desktop+tests (incl. timing) | — | **no** — not exercised on hardware |
+| 48 | Kernel compatibility quirk check (Linux 7.3, `ignore_ctl_error`) | Settings ▸ Desktop integration, `openwitty-volumed --check` | sysfs/ALSA only | implemented, tested | upstream kernel fix | **yes** — needed on Linux 7.3.0 on the tested system; never installed by OpenWitty |
 
 ## Phase 7A additions (mock/unit-tested and subsequently read-only hardware-validated)
 

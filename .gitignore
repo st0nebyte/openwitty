@@ -13,3 +13,8 @@ build/
 build/
 .tools/
 build-*/
+# makepkg outputs when building in packaging/arch
+/packaging/arch/*.tar.gz
+/packaging/arch/*.pkg.tar.*
+/packaging/arch/src/
+/packaging/arch/pkg/

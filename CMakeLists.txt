@@ -322,9 +322,9 @@ foreach(sz 16 24 32 48 64 128 256 512)
 endforeach()
 install(FILES packaging/linux/io.github.st0nebyte.openwitty.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/linux/io.github.st0nebyte.openwitty.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
-install(FILES README.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
-              docs/HARDWARE_TEST_PLAN.md docs/HANDOFF_HARDWARE_TESTING.md docs/THIRD_PARTY.md
-              docs/VOLUME_INTEGRATION.md
+# User-facing documentation only (developer and hardware-test notes stay in the source tree).
+install(FILES README.md CHANGELOG.md docs/INSTALLATION.md docs/USB_PERMISSIONS.md docs/USB_ACCESS.md
+              docs/THIRD_PARTY.md docs/VOLUME_INTEGRATION.md
               PROTOCOL.md FEATURES.md
         DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES packaging/udev/70-openwitty.rules DESTINATION ${CMAKE_INSTALL_DOCDIR}/udev)
@@ -337,7 +337,7 @@ find_program(LEWITT_GZIP gzip)
 if(LEWITT_GZIP)
     set(_gzdir ${CMAKE_BINARY_DIR}/packaging-gz)
     file(MAKE_DIRECTORY ${_gzdir})
-    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1)
+    foreach(_f debian/changelog man/openwitty-cli.1 man/openwitty.1 man/openwitty-volumed.1)
         get_filename_component(_n ${_f} NAME)
         if(_n STREQUAL "changelog")
             set(_out ${_gzdir}/changelog.Debian.gz)
@@ -354,6 +354,9 @@ if(LEWITT_GZIP)
     install(FILES ${_gzdir}/changelog.Debian.gz DESTINATION ${CMAKE_INSTALL_DOCDIR})
     install(FILES ${_gzdir}/openwitty-cli.1.gz ${_gzdir}/openwitty.1.gz
             DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    if(TARGET openwitty-volumed)
+        install(FILES ${_gzdir}/openwitty-volumed.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    endif()
     install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink openwitty-cli.1.gz \
         \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz)
         list(APPEND CMAKE_INSTALL_MANIFEST_FILES \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1/lewitt-cli.1.gz\")")

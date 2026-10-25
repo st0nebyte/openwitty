@@ -9,7 +9,7 @@ Icon=openwitty
 Terminal=false
 StartupNotify=false
 StartupWMClass=openwitty
-Categories=AudioVideo;Audio;Mixer;Settings;HardwareSettings;
+Categories=AudioVideo;Audio;Mixer;
 Keywords=audio;interface;mixer;CONNECT 2;LEWITT;microphone;
 Actions=Simulated;
 

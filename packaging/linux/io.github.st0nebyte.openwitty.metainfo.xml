@@ -3,15 +3,22 @@
   <id>io.github.st0nebyte.openwitty</id>
   <name>OpenWitty</name>
   <summary>Experimental Linux control application for the LEWITT CONNECT 2</summary>
+  <developer id="io.github.st0nebyte">
+    <name>st0nebyte</name>
+  </developer>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <description>
     <p>OpenWitty is an independent, open-source Linux control application for LEWITT CONNECT audio
     interfaces (initially the CONNECT 2). It is not affiliated with, endorsed by or supported by LEWITT.</p>
-    <p>Status: experimental. The control protocol was derived from static analysis and has not been
-    validated on real hardware; hardware writes are disabled. A simulated device is included for
-    evaluation. Without administrator-installed USB permissions the application can only run in
-    simulation mode.</p>
+    <p>Status: experimental alpha, tested with one CONNECT 2 on one Linux system. It shows the live
+    device state read-only and can keep the desktop volume in step with the speaker volume knob, also
+    through an optional background user service. Most other controls work with the included simulated
+    device only. Device-changing options are off by default and need confirmation. Firmware update and
+    factory reset are not implemented, the CONNECT 6 is not supported, and it is not a replacement for
+    LEWITT CONTROL CENTER.</p>
+    <p>Access to the real device needs a USB permission rule installed by an administrator (included in
+    distribution packages).</p>
   </description>
   <launchable type="desktop-id">io.github.st0nebyte.openwitty.desktop</launchable>
   <provides>
@@ -25,4 +32,5 @@
   <releases><release version="0.1.0" date="2026-10-14"/></releases>
   <url type="homepage">https://github.com/st0nebyte/openwitty</url>
   <url type="bugtracker">https://github.com/st0nebyte/openwitty/issues</url>
+  <url type="vcs-browser">https://github.com/st0nebyte/openwitty</url>
 </component>

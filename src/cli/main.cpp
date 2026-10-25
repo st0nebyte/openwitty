@@ -525,11 +525,15 @@ int main(int argc, char** argv) {
                      "                       [--request uac2|uac1] [--interface N|auto] [--mock]\n"
                      "                  write led-brightness <0-100> [--execute] [--interface N] [--mock]\n"
                      "                  write instrument-mute <on|off> [--execute] [--interface N] [--mock]\n"
+                     "                  write speaker-volume <-60..0> [--execute] [--interface N] [--mock]\n"
+                     "                  write speaker-mute <on|off> [--execute] [--interface N] [--mock]\n"
                      "this tool is read-only by default. --method detach is disruptive and needs\n"
-                     "LEWITT_ALLOW_DISRUPTIVE=1. 'write led-brightness' is the ONE narrowly-scoped experimental\n"
-                     "write command (nothing else can be written); without --execute it only prints a dry-run\n"
-                     "proposal and sends no USB write; with --execute on real hardware it additionally needs\n"
-                     "LEWITT_ALLOW_HARDWARE_WRITE=1.\n");
+                     "LEWITT_ALLOW_DISRUPTIVE=1. The four experimental write commands each change exactly one\n"
+                     "setting (nothing else can be written). Without --execute they only print a dry-run\n"
+                     "proposal and send no USB write; with --execute on real hardware they need\n"
+                     "LEWITT_ALLOW_HARDWARE_WRITE=1, and every command except led-brightness its own variable\n"
+                     "(instrument-mute: LEWITT_ALLOW_WRITE_INSTRUMENT_MUTE=1; speaker-volume and speaker-mute:\n"
+                     "LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1).\n");
         return 64;
     }
     std::string cmd = argv[1];

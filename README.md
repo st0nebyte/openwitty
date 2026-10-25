@@ -22,33 +22,52 @@ This project is not about criticizing LEWITT or its software. It's about making 
 
 ## Project Status
 
-**CONNECT 2 read-only GUI validated on one physical device; broader control features remain under development.**
+**Experimental alpha for the LEWITT CONNECT 2.** Tested with one CONNECT 2 on one Linux system
+(CachyOS, Linux 7.3, KDE Plasma 6 on Wayland, PipeWire/WirePlumber). Treat everything else as untested.
 
-The initial target is the **LEWITT CONNECT 2**; **CONNECT 6** support is planned but not implemented.
+What works on real hardware (one device, one system):
 
-What exists today:
+- **Live device state, read-only:** input gain and mute, speaker and headphone volume and mute, the
+  monitoring mix, the selected channel, Panic Mute, and level meters (16 Hz settings / 48 Hz status
+  polling). Hot-plug and reconnect.
+- **Desktop volume integration:** the KDE/PipeWire volume of the CONNECT 2 follows the
+  **speaker volume knob**, which Linux cannot see by itself (the device's volume read-back is
+  broken). It is switched on in **Settings → Desktop integration**; the optional
+  `openwitty-volumed` user service keeps it working while the window is closed and starts with
+  the desktop session. Validated with the window open and closed, handing over between the two,
+  at boot/login and across suspend/resume. It never writes the device.
+- **Mute button and desktop slider work natively:** the kernel already passes the Mute button
+  and desktop volume/mute changes between the device and the desktop. OpenWitty is not involved.
+- **Kernel compatibility quirk (Linux 7.3):** on this kernel a broken microphone control of the
+  device makes the desktop lose its hardware volume for the CONNECT 2. An optional, device-specific
+  module option fixes that. OpenWitty explains and checks it, and never installs it.
 
-- A native **C++20** backend (protocol codecs, transports, device session, write policy) with no Qt dependency.
-- A **Qt 6 / QML** control application and a read-only diagnostic CLI (`openwitty-cli`).
-- A reconstructed **device-control protocol** for the CONNECT 2, derived from static analysis and cross-checked between the macOS and Windows control applications.
-- A **simulated device** (mock mode) that exercises every control in the GUI and is always labelled as simulated.
-- Automated protocol, session, hardening, GUI, QML, packaging, and sanitizer test suites, plus a documented USB security audit.
-- A hardware-validated, read-only CONNECT 2 GUI with **16 Hz settings / 48 Hz status** polling by default; meters render independently with a 60 FPS target.
-- **Ubuntu/Debian (`.deb`) and Arch/CachyOS (PKGBUILD) packaging**, desktop integration and a udev rule (documented, never installed automatically).
+Optional and limited:
 
-What does **not** exist yet:
+- **Speaker/headphone control** (Settings, off by default, needs confirmation): OpenWitty's own
+  faders then write the speaker and headphone volume and mute — only those bytes, at most 10 dB louder per
+  step, read back. The underlying vendor write path is verified on hardware (via the CLI);
+  the GUI option itself has not been exercised on hardware yet.
+- **CLI writes** (`openwitty-cli write …`, explicit opt-in variables): LED brightness and speaker
+  volume/mute were verified on hardware; instrument mute is prepared but never executed.
+- **Vendor fallback** for the desktop volume (off by default): only for a device state in which
+  the kernel's volume control is ignored. **Not validated on hardware.**
 
-- The real-device GUI remains read-only. Broad hardware writes remain disabled by design; the only
-  exercised write is the separately gated, narrowly scoped CLI LED-brightness validation.
-- Firmware update and factory reset are intentionally not implemented.
-- OpenWitty is **not yet a functional replacement** for CONTROL CENTER.
+Not implemented or not validated:
+
+- Most other controls (low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom button, autogain/
+  autosetup, sample-rate selection) work in the **simulated device** only; on the real device
+  they are shown, not changed.
+- Firmware update and factory reset are **deliberately not implemented**.
+- **CONNECT 6 is not supported.**
+- OpenWitty is **not a replacement** for LEWITT CONTROL CENTER.
 
 ## Device Support
 
 | Device | Status |
 |---|---|
-| LEWITT CONNECT 2 | Read-only transport and GUI validated on one device; most controls remain simulated or individually unvalidated |
-| LEWITT CONNECT 6 | Planned (architecture keeps device support separable; nothing implemented) |
+| LEWITT CONNECT 2 | Experimental alpha: live state, desktop volume integration and the controls above validated with one device on one system |
+| LEWITT CONNECT 6 | Not supported (the architecture keeps device support separable; nothing implemented) |
 
 ## Goals
 
@@ -67,38 +86,34 @@ What does **not** exist yet:
 - LED brightness and colours, custom-button function, settings preservation of unknown device bytes
 - Autosetup / autogain workflow (simulated)
 - Pending-edit tracking and merge with external device changes
+- Desktop volume integration (Settings → Desktop integration, `openwitty-volumed`)
 
-See [FEATURES.md](FEATURES.md) for the exact list and evidence level.
+See [FEATURES.md](FEATURES.md) for the exact list and the evidence level of each row, and
+[docs/VOLUME_INTEGRATION.md](docs/VOLUME_INTEGRATION.md) for the desktop volume integration.
 
-### Desktop volume (KDE/PipeWire)
+## Install
 
-On Linux 7.3 the CONNECT 2's hardware volume may be missing from the desktop because of a broken microphone
-control on the device; a per-device kernel compatibility quirk works around it (opt-in, documented). The optional
-`openwitty-volumed` user service keeps the desktop volume in step with the hardware knob. Run
-`openwitty-volumed --check` for a read-only diagnosis, and see [docs/VOLUME_INTEGRATION.md](docs/VOLUME_INTEGRATION.md).
+See **[docs/INSTALLATION.md](docs/INSTALLATION.md)**: Arch/CachyOS package, Debian/Ubuntu package,
+user-local install, USB permissions, the optional kernel quirk, desktop integration and uninstalling.
 
-## Quick start (no hardware needed)
+Try it without hardware:
 
 ```sh
 cmake --preset release && cmake --build --preset release
 ctest --preset release
-build-release/src/gui/openwitty --mock      # simulated device
+build-release/src/gui/openwitty --mock      # simulated device, always labelled as simulated
 ```
 
-With a connected CONNECT 2 and the documented USB permissions, launch the
-hardware-validated **read-only** GUI normally (16 Hz settings / 48 Hz status):
+With a connected CONNECT 2 and the USB permission rule installed, start `openwitty` without
+`--mock`.
 
-```sh
-build-release/src/gui/openwitty
-```
+Further reading:
 
-Rootless build instructions, packaging and the first real-device procedure:
-
-- [docs/INSTALLATION.md](docs/INSTALLATION.md) — Ubuntu `.deb`, Arch/CachyOS, user-local install
+- [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) — what has been tested, known limitations
+- [CHANGELOG.md](CHANGELOG.md) — draft release notes
 - [DEVELOPMENT.md](DEVELOPMENT.md) — toolchain, presets, sanitizers
 - [docs/USB_PERMISSIONS.md](docs/USB_PERMISSIONS.md) and [docs/USB_ACCESS.md](docs/USB_ACCESS.md) — udev, driver ownership
-- [docs/HARDWARE_TEST_PLAN.md](docs/HARDWARE_TEST_PLAN.md) — ordered, read-only first-device validation
-- [docs/HANDOFF_HARDWARE_TESTING.md](docs/HANDOFF_HARDWARE_TESTING.md) — everything needed to continue on a machine with the device
+- [docs/HARDWARE_TEST_RESULTS.md](docs/HARDWARE_TEST_RESULTS.md) — the hardware evidence
 - [PROTOCOL.md](PROTOCOL.md), [ARCHITECTURE.md](ARCHITECTURE.md), [docs/AUDIT_PHASE5E.md](docs/AUDIT_PHASE5E.md)
 
 ## Repository layout
@@ -108,7 +123,8 @@ Rootless build instructions, packaging and the first real-device procedure:
 | `src/protocol`, `src/transport`, `src/core` | Qt-free core: message codecs, transports (libusb, mock), device session and write policy |
 | `src/gui`, `src/cli` | Qt 6 / QML application, diagnostic CLI |
 | `assets/` | OpenWitty branding (icons, banner) |
-| `packaging/` | Debian, Arch, desktop, AppStream, udev |
+| `src/desktop`, `src/daemon` | desktop (ALSA) volume integration and the `openwitty-volumed` service |
+| `packaging/` | Debian, Arch, desktop, AppStream, udev, systemd user unit, man pages |
 | `tests/`, `tools/` | tests; packaging/audit/reverse-engineering tooling |
 | `docs/` | engineering documentation |
 
