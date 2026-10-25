@@ -180,12 +180,45 @@ agrees, the WirePlumber default reproduced; `wireplumber_login_screen_rule_parse
 a live PipeWire with the device): WirePlumber actually persisting a route request, the rule's effect on a real
 login screen, node disappearance and a different default sink under approach A.
 
-**Plan for a later real-device check (needs the owner's go-ahead; no OpenWitty device writes):**
-1. Control run: knob to a level clearly different from −23.5 dB and quieter (e.g. −35 dB); log out, stay on the
-   login screen ~15 s, log in; read the service's start level. Expect −23.5 dB (reproduces the cause).
-2. Install the login-screen rule (administrator), repeat: expect the knob level (≈ −35 dB) after the login.
-3. Optional attribution: raise only the login screen's WirePlumber log level for one run and look for its route
-   application. Lock screen and suspend/resume are unaffected (Phase 8I).
+**Optional live check of the login-screen rule (procedure; needs the owner's explicit approval; not run).**
+Two logout/login cycles at most: one with the rule, and one without it only if the first result is ambiguous.
+
+*Acoustic safety first.* The test deliberately lets the login screen change the speaker level, possibly
+**upwards**. No software state (mute, volume, OpenWitty settings) is trusted to carry across the login boundary:
+before each logout the owner physically secures the listening equipment — monitors/amplifier off or turned fully
+down, headphones off the head. Nothing is played during the test.
+
+*Preflight (read-only, before anything is changed):*
+1. `systemctl show display-manager -p Id` → `plasmalogin.service`; `getent passwd plasmalogin` → home
+   `/var/lib/plasmalogin`; `journalctl -b _UID=$(id -u plasmalogin) | grep wireplumber` shows its own WirePlumber.
+2. `sudo ls -la /var/lib/plasmalogin /var/lib/plasmalogin/.config 2>&1` — note owners and whether `.config` exists.
+3. The rule file exists at its source (see `docs/INSTALLATION.md`, step 1) and `spa-json-dump <file>` parses it.
+4. OpenWitty service active, settings unchanged (`desktop_volume_sync = mirror`, both writing keys `false`);
+   note the current device level from the service journal; vendor fallback and speaker/headphone control off.
+5. Save all work (the terminal and this session end at the logout).
+
+*Run (with the rule):*
+1. Owner sets the speaker volume knob to a level clearly **quieter** than −23.5 dB, e.g. about −35 dB (the service
+   journal shows it), then secures the listening equipment.
+2. Administrator installs the rule as in `docs/INSTALLATION.md`, step 3; `sudo ls -l` confirms owner and mode.
+3. Owner logs out, stays on the login screen about 15 s, logs in. No volume keys, no knob.
+4. Read-only afterwards: service start line (`journalctl --user -u openwitty-volumed -b | grep start:`), the login
+   screen's WirePlumber in `journalctl -b _UID=<uid>`, the CONNECT 2 still present in the user's session
+   (`wpctl status`), the user's `default-routes` entry.
+
+*Expected:* the service starts at the knob level (≈ −35 dB), not −23.5 dB; the CONNECT 2 is present and working in
+the user's session; the login screen's WirePlumber ran but did not create the CONNECT 2.
+*If it still reads −23.5 dB:* the rule did not apply or the attribution is wrong. Only then, as a control, remove
+the rule and repeat once without it; −23.5 dB there and the knob level with the rule would establish the cause.
+
+*Stop conditions:* any level **higher** than the knob setting after the login; the CONNECT 2 missing or silent in
+the user's session; login problems or a login screen that does not start; unexpected USB/kernel messages for the
+device; repeated service restarts. Then roll back and report; no further cycles.
+
+*Rollback:* `sudo rm /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf`
+(effective at the next login screen). If the CONNECT 2 were missing in the user's own session, check that the rule
+was not placed in `~/.config/wireplumber` or `/etc/wireplumber` and remove it there. The speaker level is restored by
+the owner with the knob, never by OpenWitty.
 
 **Alpha impact:** not a code blocker. It must be documented next to the kernel quirk (done in
 `docs/INSTALLATION.md` and `docs/VOLUME_INTEGRATION.md`); validating option B live is recommended before a public
@@ -219,22 +252,80 @@ dated 2026-10-14 that never happened. Recommendation for the first public alpha:
   type="development">` and a short description.
 * Subsequent alphas increment the label; `0.1.0` is reserved for the first non-alpha release.
 
-## Before going public (owner decisions)
+## Before going public (owner decisions and outstanding work)
 
-* **Git history** contains a personal e-mail address as author identity of 26 commits (and a first name in 13).
-  Rewriting history is outside this branch's rules; decide whether to publish the history as is, rewrite it,
-  or publish a squashed tree.
+### Git author identity
+
+The history (`git log --format='%an <%ae>'`) contains 26 commits authored as a personal Gmail address (18 as
+`st0nebyte`, 8 as `st0nebyte`) and 13 with the first name "st0nebyte"; the rest use the GitHub no-reply address.
+Options (none applied; rewriting is never done without explicit approval):
+
+| Option | Effect | Cost |
+|---|---|---|
+| Publish the history as is | e-mail and first name become public | none |
+| Rewrite authors with a mailmap (`git filter-repo --mailmap`) to the no-reply identity | history clean | new commit hashes for everything; force-push of the development branch; every clone must re-clone; hashes quoted in docs (e.g. `8608ef2`, `72a71f7`) become stale |
+| Publish a fresh repository with a squashed initial commit | clean, simple | loses the detailed history (it remains in the private repo) |
+| `.mailmap` only | display names/addresses mapped in `git log` | the original addresses remain in the objects — not a privacy fix |
+
+Set `git config user.email 133608037+st0nebyte@users.noreply.github.com` for new commits in any case.
+
+### Arch
+
+`namcap` is not installed on the host (not installed for the audit). Outstanding: `namcap PKGBUILD` and
+`namcap openwitty-*.pkg.tar.zst`; ideally a clean-chroot build (`extra-x86_64-build`, devtools).
+
+### Debian / Ubuntu (outstanding, no suitable disposable environment on the host)
+
+No `dpkg`, `lintian` or existing container image here (`systemd-nspawn` exists, but no Debian root and no
+downloads were made). Exact remaining work, in a disposable Debian 13 / Ubuntu 24.04 container or VM:
+1. `apt install` the build dependencies from `docs/INSTALLATION.md`; build with
+   `-DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user`; `ctest`.
+2. `cpack -G DEB` with `dpkg-shlibdeps` active; `dpkg-deb -I/-c`; check Depends (Qt Widgets/Network/DBus,
+   `libqt6svg6`, `libasound2`/`libasound2t64`, libusb).
+3. `lintian --pedantic` on the `.deb`.
+4. `tools/packaging/check_deb_lifecycle.sh <deb>` (install/upgrade/remove/purge in a private root), then a real
+   `apt install ./…deb` and `apt remove`/`purge` in the container; `openwitty --mock --screenshot`,
+   `openwitty-tray --wait-for-tray-seconds 0`, `systemd-analyze --user verify` of the installed unit.
+
+### Clean installation and removal test plan (both package formats)
+
+In a fresh VM or container per format, nothing else installed:
+1. Record `find / -xdev -newer <stamp>` baseline; install the package; list `pacman -Ql` / `dpkg -L`.
+2. Check: binaries run (`--version`, `--mock --screenshot`), unit present and **disabled**
+   (`systemctl --user is-enabled openwitty-volumed` → disabled), no autostart entry, udev rule present,
+   no `modprobe.d` or WirePlumber file outside `share/doc/openwitty/examples`, man pages, licences.
+3. As a user: enable mirroring and the tray in Settings (offscreen or a desktop session), confirm the files OpenWitty
+   writes are only `~/.config/openwitty/openwitty.conf` and `~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop`.
+4. Reset desktop integration; remove the package; check that no package file remains (`pacman -Qkk`/`dpkg -L`
+   against the filesystem) and that only the user's own settings directory is left, as documented.
+
+### Version identifiers: `0.1.0-alpha.1` proposal (not applied)
+
+| Place | Now | Proposed |
+|---|---|---|
+| `CMakeLists.txt` `project(... VERSION 0.1.0)` | 0.1.0 | unchanged (CMake allows no suffix) + new `set(LEWITT_VERSION_SUFFIX "alpha.1")` |
+| `src/version.hpp.in` `LEWITT_VERSION_STRING` | `@PROJECT_VERSION@` | `@PROJECT_VERSION@-alpha.1` (from the suffix) → `--version` prints `0.1.0-alpha.1` |
+| `src/gui/qml/SettingsView.qml` "OpenWitty 0.1.0" | hard-coded | `Qt.application.version` (one source of truth) |
+| `packaging/arch/PKGBUILD` `pkgver` | 0.1.0 | `0.1.0alpha1` (no hyphen allowed; sorts before 0.1.0) |
+| `packaging/arch/make-source-tarball.sh` | reads `project()` | read the full version so the tarball is `openwitty-0.1.0alpha1.tar.gz` |
+| `packaging/debian/changelog`, CPack `CPACK_PACKAGE_VERSION` | 0.1.0-1 | `0.1.0~alpha1-1` (tilde sorts before 0.1.0) |
+| `packaging/linux/…metainfo.xml` | `<release version="0.1.0" date="2026-10-14"/>` (never released) | `<release version="0.1.0~alpha1" date="<release date>" type="development">` with a short description |
+| man pages `.TH … "openwitty 0.1.0"` | 0.1.0 | `openwitty 0.1.0-alpha.1` |
+| Git tag | none | `v0.1.0-alpha.1`, annotated, on the reviewed release commit |
+| `CHANGELOG.md` | "Unreleased" | `0.1.0-alpha.1 — <date>` |
+
+### Other
+
 * Replace the packaging contact (`noreply@users.noreply.github.com` placeholder) if wanted.
-* `docs/` contains many dated engineering notes (`PHASE*`, `CLAUDE_SESSION_START.md`, handoff/test-plan
-  documents, marked historical where outdated). They are not installed by packages; decide whether they stay in
-  the public repository.
-* Run `namcap`, a Debian build with `lintian`, and a clean-VM install of both packages.
+* `docs/` keeps many dated engineering notes (`PHASE*`, handoff/test-plan documents marked historical); not
+  installed by packages; decide whether they stay public.
 * `docs/THIRD_PARTY.md` notes a possible visual similarity of the GUI with the vendor's application.
 
 ## Release blockers (current assessment)
 
-None in the code or packaging for a **private alpha review**. For a **public** release, the open items above
-(history/identity decision, `namcap`, Debian re-validation, version metadata) must be resolved first.
+None in the code or packaging for a **private alpha review**. For a **public** release: the Git identity decision,
+`namcap`, the Debian validation, the clean install/removal test and the version change above; recommended in
+addition: the live check of the login-screen rule.
 
 ## Validation run (Phase 9C, latest)
 

@@ -202,7 +202,11 @@ QString IntegrationSettings::quirkInstructions() const {
         "  options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error\n"
         "It takes effect after unplugging and replugging the CONNECT 2, or after a reboot. "
         "Side effect: errors of that broken control are reported as 0 instead of as errors. "
-        "To undo, delete the file.");
+        "To undo, delete the file.\n\n"
+        "Speaker level after a logout: with this option the login screen's own audio service can also set the "
+        "CONNECT 2's speaker level. After a logout the speaker was observed at about -23.5 dB instead of the knob "
+        "position - louder or quieter than before. Turn your speakers down before logging out if that matters. "
+        "An optional fix for the login screen is described in INSTALLATION.md (not yet validated).");
 }
 
 void IntegrationSettings::copyQuirkInstructions() {

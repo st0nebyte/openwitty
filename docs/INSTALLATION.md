@@ -119,20 +119,62 @@ It is never installed silently, by packages or by OpenWitty. Not needed if the p
 volume: available" without it; other kernels may not need it. Remove: `sudo rm
 /etc/modprobe.d/openwitty-connect2.conf`, then reboot.
 
-**Side effect at the login screen.** With the quirk the desktop can set the CONNECT 2's speaker level, and so can
-a graphical login screen, which runs its own audio service: each time the login screen appears (after a logout,
-or at boot without autologin) it sets its default level, about −23.5 dB, regardless of the knob — that can be
-louder or quieter than before. To stop that, keep the login screen from managing the CONNECT 2 (administrator
-step, login screen only; Plasma Login shown, other login screens in the file):
+> **Warning — speaker level after a logout.** With the quirk, the CONNECT 2's speaker level can be set by any
+> audio session, including the login screen's own one. **Observed** on the tested system: after a logout and login
+> the speaker was at −23.5 dB instead of the knob position — this can be **louder or quieter** than before. The
+> **explanation** (the login screen's WirePlumber applies its default volume) is strongly supported but has not
+> been traced. Turn down or switch off your speakers/headphones before logging out if a sudden level change would
+> be a problem. With autologin there is no login screen at boot; it appears after a logout. Details:
+> `docs/RELEASE_READINESS.md` ("Speaker level at the login screen").
 
-```sh
-sudo install -D -m 0644 -o plasmalogin -g plasmalogin \
-    /usr/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf \
-    /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf
-```
+#### Optional: keep the login screen away from the CONNECT 2
 
-Never put it into your own `~/.config/wireplumber` or `/etc/wireplumber` (the CONNECT 2 would vanish from your
-desktop). Remove the file to undo. Not yet tested on a real login screen (`docs/RELEASE_READINESS.md`).
+An administrator step, never done by OpenWitty or its packages, **not yet validated on a real login screen**. A
+WirePlumber rule in the *login screen user's* configuration makes that WirePlumber ignore the CONNECT 2
+(`device.disabled`): it can then no longer set its level, and the login screen plays no sound through it. No other
+device is affected and your own session never reads that file.
+
+1. The rule file — use the copy that exists on your system:
+
+   | OpenWitty installed as | File |
+   |---|---|
+   | system package | `/usr/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf` |
+   | user-local CMake install | `~/.local/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf` (installs of `72a71f7` or later) |
+   | source checkout | `packaging/wireplumber/51-openwitty-connect2-login-screen.conf` |
+
+   Check with `ls -l <file>`; if it is missing, your installation predates the rule — use the source checkout's copy.
+
+2. Find the login screen's account and home (read-only):
+
+   ```sh
+   systemctl show display-manager -p Id      # plasmalogin.service, sddm.service, gdm.service, ...
+   getent passwd plasmalogin                 # or sddm / gdm: the 6th field is the home directory
+   journalctl -b _UID=$(id -u plasmalogin) | grep -E 'wireplumber|pipewire' | head   # it runs its own audio stack
+   ```
+
+   On the tested CachyOS system: `plasmalogin.service`, user `plasmalogin` (UID 958), home `/var/lib/plasmalogin`
+   (`plasmalogin:plasmalogin`, mode 0750), its own `pipewire`/`wireplumber` processes in the journal. Other
+   distributions and login screens use other users and homes (SDDM: usually `sddm`, `/var/lib/sddm`; GDM: `gdm`,
+   `/var/lib/gdm`); only Plasma Login has been looked at.
+
+3. Install it into that user's `$HOME/.config/wireplumber/wireplumber.conf.d/`, creating missing directories **as
+   that user** (a root-owned `~/.config` could break the login screen's own settings):
+
+   ```sh
+   RULE=/usr/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf   # from step 1
+   GREETER=plasmalogin                                                               # from step 2
+   GHOME=$(getent passwd "$GREETER" | cut -d: -f6)
+   sudo -u "$GREETER" mkdir -p "$GHOME/.config/wireplumber/wireplumber.conf.d"
+   sudo install -m 0644 -o "$GREETER" -g "$GREETER" "$RULE" "$GHOME/.config/wireplumber/wireplumber.conf.d/"
+   sudo ls -l "$GHOME/.config/wireplumber/wireplumber.conf.d/"
+   ```
+
+   It takes effect the next time the login screen starts (after the next logout). Never put the file into your
+   own `~/.config/wireplumber`, `/etc/wireplumber` or `/usr/share/wireplumber` — the CONNECT 2 would vanish from
+   your own desktop.
+
+4. Undo: `sudo rm "$GHOME/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf"`; the
+   next login screen manages the CONNECT 2 again. (Directories created in step 3 can stay; they are empty.)
 
 ### Show the volume knob in the desktop volume
 

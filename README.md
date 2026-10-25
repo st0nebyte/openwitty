@@ -45,6 +45,8 @@ What works on real hardware (one device, one system):
 - **Kernel compatibility quirk (Linux 7.3):** on this kernel a broken microphone control of the
   device makes the desktop lose its hardware volume for the CONNECT 2. An optional, device-specific
   module option fixes that. OpenWitty explains and checks it, and never installs it.
+  **Side effect:** with it, the login screen's own audio session can set the speaker level — observed after a
+  logout: −23.5 dB instead of the knob position, louder or quieter (see `docs/INSTALLATION.md`).
 
 Optional and limited:
 

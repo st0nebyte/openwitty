@@ -1067,6 +1067,8 @@ TEST(Integration, SetupStatusAndQuirkExplanation) {
     EXPECT_FALSE(s->findings().isEmpty());
     EXPECT_TRUE(s->quirkInstructions().contains("29c2:0004:ignore_ctl_error"));
     EXPECT_TRUE(s->quirkInstructions().contains("never installs it"));
+    EXPECT_TRUE(s->quirkInstructions().contains("login screen"));          // Phase 9D: the side effect is explained
+    EXPECT_TRUE(s->quirkInstructions().contains("louder or quieter"));
     auto none = makeSettings(calls, std::nullopt);
     none->refresh();
     EXPECT_FALSE(none->setupAvailable());

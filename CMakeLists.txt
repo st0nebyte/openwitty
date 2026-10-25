@@ -123,8 +123,10 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
         add_test(NAME wireplumber_login_screen_rule_parses
                  COMMAND sh -c "out=\$(\"$1\" \"$2\") || exit 1; printf '%s' \"\$out\" | grep -q '\"device.disabled\": true' || exit 2; \
                                 pat=\$(printf '%s' \"\$out\" | sed -n 's/.*\"device.name\": \"~\\(.*\\)\".*/\\1/p'); \
-                                printf '%s' 'alsa_card.usb-Lewitt_GmbH_CONNECT_2_X000XXX00000-00' | grep -Eq \"^\$pat\$\" || exit 3; \
-                                printf '%s' 'alsa_card.usb-Other_Vendor_Card-00' | grep -Eq \"^\$pat\$\" && exit 4; echo RULE OK"
+                                for n in alsa_card.usb-Lewitt_GmbH_CONNECT_2_X000XXX00000-00 alsa_card.usb-Lewitt_GmbH_CONNECT_2-00; do \
+                                    printf '%s' \"\$n\" | grep -Eq \"\$pat\" || exit 3; done; \
+                                for n in alsa_card.usb-Other_Vendor_Card-00 alsa_card.usb-Lewitt_GmbH_CONNECT_6_X0-00 alsa_card.usb-Lewitt_GmbH_CONNECT_20-00 alsa_card.pci-0000_0c_00.4; do \
+                                    printf '%s' \"\$n\" | grep -Eq \"\$pat\" && exit 4; done; echo RULE OK"
                  sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/51-openwitty-connect2-login-screen.conf)
         set_tests_properties(wireplumber_login_screen_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
     endif()
