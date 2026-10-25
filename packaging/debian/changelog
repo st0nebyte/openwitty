@@ -1,4 +1,4 @@
-openwitty (0.1.0-1) unstable; urgency=low
+openwitty (0.1.0~alpha1-1) unstable; urgency=low
 
   * Initial experimental packaging (unreleased): live read-only device view,
     desktop volume integration with an optional systemd user service, and a

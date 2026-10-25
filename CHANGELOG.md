@@ -2,10 +2,10 @@
 
 All notable changes to OpenWitty. Unofficial project, not affiliated with LEWITT.
 
-## Unreleased — first public alpha (draft, not tagged)
+## 0.1.0-alpha.1 — unreleased (prepared 2026-10-25, not tagged)
 
-Proposed version: `0.1.0-alpha.1` (see `docs/RELEASE_READINESS.md`, "Versioning"). The source tree still
-advertises `0.1.0`; nothing has been tagged or released.
+Version metadata set in the tree (`--version`: `0.1.0-alpha.1`; Debian `0.1.0~alpha1`; Arch `0.1.0alpha1`;
+AppStream `0.1.0~alpha1`, type development). No Git tag and no release yet.
 
 Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Plasma 6 (Wayland),
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.

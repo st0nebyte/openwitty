@@ -62,7 +62,7 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 
 | # | Item | Status |
 |---|---|---|
-| 21 | Version and release metadata | **OPEN** — see "Versioning" |
+| 21 | Version and release metadata | **DONE** (`0.1.0-alpha.1`, checked by `version_consistency`); tag and release date at release time |
 | 22 | Login-screen rule (Phase 9C option B) live-validated | **OPEN** — plan below |
 
 ## Known limitations and experimental features
@@ -299,7 +299,11 @@ In a fresh VM or container per format, nothing else installed:
 4. Reset desktop integration; remove the package; check that no package file remains (`pacman -Qkk`/`dpkg -L`
    against the filesystem) and that only the user's own settings directory is left, as documented.
 
-### Version identifiers: `0.1.0-alpha.1` proposal (not applied)
+### Version identifiers: `0.1.0-alpha.1` (applied in Phase 9D, no tag yet)
+
+Applied as in the table below; `version_consistency` (CTest) checks that all sites agree. Still to do at release:
+the annotated tag `v0.1.0-alpha.1` and the release date in AppStream/CHANGELOG.
+
 
 | Place | Now | Proposed |
 |---|---|---|

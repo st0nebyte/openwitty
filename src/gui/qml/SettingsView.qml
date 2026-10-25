@@ -230,7 +230,7 @@ Rectangle {
     Column {
         visible: root.open !== "desktop"
         x: 390; y: 60; width: 310; spacing: 10
-        Text { color: Theme.text; font.pixelSize: 12; text: "OpenWitty 0.1.0 — unofficial, experimental; not affiliated with LEWITT" }
+        Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 12; text: "OpenWitty " + Qt.application.version + " — unofficial, experimental; not affiliated with LEWITT" }
         Text { color: Theme.textDim; font.pixelSize: 12
                text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated" : "not decoded yet") }
         Row { spacing: 8

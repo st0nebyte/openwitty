@@ -1,6 +1,6 @@
 // Generated from src/version.hpp.in by CMake. No timestamps (reproducible builds).
 #pragma once
-#define LEWITT_VERSION_STRING "@PROJECT_VERSION@"
+#define LEWITT_VERSION_STRING "@LEWITT_VERSION@"
 #define LEWITT_APP_NAME "OpenWitty"
 #define LEWITT_APP_DESKTOP_ID "io.github.st0nebyte.openwitty"
 #define LEWITT_BUILD_FLAVOUR "@LEWITT_BUILD_FLAVOUR@"

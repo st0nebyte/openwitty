@@ -1,7 +1,7 @@
 # CPack configuration (included at the end of the top-level CMakeLists.txt).
 #   cmake --build build && (cd build && cpack -G DEB)        # no root needed
 set(CPACK_PACKAGE_NAME "openwitty")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION "${LEWITT_VERSION_DEBIAN}")
 set(CPACK_PACKAGE_VENDOR "unofficial community project")
 set(CPACK_PACKAGE_CONTACT "st0nebyte <noreply@users.noreply.github.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Unofficial, experimental control application for the LEWITT CONNECT 2")

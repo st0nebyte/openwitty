@@ -31,7 +31,14 @@
   </provides>
   <categories><category>AudioVideo</category><category>Audio</category></categories>
   <content_rating type="oars-1.1"/>
-  <releases><release version="0.1.0" date="2026-10-14"/></releases>
+  <releases>
+    <release version="0.1.0~alpha1" date="2026-10-25" type="development">
+      <description>
+        <p>First alpha (prepared, not yet published): live read-only view of one CONNECT 2, desktop volume
+        integration with an optional background service and system tray icon, simulated device.</p>
+      </description>
+    </release>
+  </releases>
   <url type="homepage">https://github.com/st0nebyte/openwitty</url>
   <url type="bugtracker">https://github.com/st0nebyte/openwitty/issues</url>
   <url type="vcs-browser">https://github.com/st0nebyte/openwitty</url>

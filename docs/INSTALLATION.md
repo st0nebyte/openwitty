@@ -36,7 +36,7 @@ Build the package from this repository as a normal user (never as root):
 ```sh
 packaging/arch/make-source-tarball.sh            # tarball of the committed tree
 cd packaging/arch && makepkg -s                  # -s asks pacman for missing build dependencies
-sudo pacman -U openwitty-0.1.0-1-x86_64.pkg.tar.zst
+sudo pacman -U openwitty-0.1.0alpha1-1-x86_64.pkg.tar.zst
 ```
 
 Remove: `sudo pacman -R openwitty` (see "Uninstall" for your own settings and the service).
@@ -49,8 +49,8 @@ sudo apt install build-essential cmake ninja-build pkg-config libgtest-dev libus
     qml6-module-qtquick-shapes                                   # build dependencies
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user
 cmake --build build && ctest --test-dir build --output-on-failure
-(cd build && cpack -G DEB)                                       # -> build/openwitty_0.1.0-1_amd64.deb
-sudo apt install ./build/openwitty_0.1.0-1_amd64.deb
+(cd build && cpack -G DEB)                                       # -> build/openwitty_0.1.0~alpha1-1_amd64.deb
+sudo apt install ./build/openwitty_0.1.0~alpha1-1_amd64.deb
 ```
 
 Inspect the package first with `dpkg-deb -I` / `dpkg-deb -c`. Its postinst only reloads the udev rules for
