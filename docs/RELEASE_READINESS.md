@@ -37,7 +37,8 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 | 17 | GUI *Speaker/headphone control* exercised on hardware | **NOT DONE** — documented as not exercised |
 | 18 | Version and release metadata decided | **OPEN** — see "Versioning" |
 | 19 | Tray icon and single window (Phase 9B): offscreen tests (tray unavailable, service disabled/running/idle/not installed, repeated opens, quit leaves the service alone, autostart on/off/reset), end-to-end single-instance script, no USB/ALSA linkage | PASS (offline) |
-| 20 | Tray icon and window activation live on KDE Plasma (Wayland) | PASS except login autostart — see "KDE Plasma acceptance (Phase 9B)" |
+| 20 | Tray icon and window activation live on KDE Plasma (Wayland), incl. login autostart | PASS — see "KDE Plasma acceptance (Phase 9B)" |
+| 22 | Speaker level at login follows the knob position of the previous session | **FAIL (limitation, not caused by OpenWitty)** — WirePlumber restores its saved level onto the device; see "Confirmed limitation: WirePlumber restores the speaker level at login" |
 | 21 | Single-instance ownership race-free (flock), explicit failure | PASS — 7 barrier-synchronised race tests (also under ASan/UBSan), end-to-end script |
 
 ## Known limitations and experimental features
@@ -87,9 +88,32 @@ showed a red "already in use by another OpenWitty process" for 1–2 s (the norm
 "Connecting — taking over the CONNECT 2 from the OpenWitty background service…" with 300 ms lease retries
 (`8eda3b1`); the header indicator still said "Error" (`7fc6015`); "usb" shown as "USB" (`230b7dd`).
 
-**Not performed live:** the icon coming back automatically after a logout/login (autostart entry verified, the
-login itself not yet); the tray status following a knob-display change made in the window (offline only); the
+**Login (owner logged out and in, 18:29):** the tray icon came back by itself (`openwitty-tray` started by the
+session's XDG autostart, parent the systemd user manager); `openwitty-volumed` was stopped with the old session
+and started with the new one (new PID, `NRestarts=0`, read-only start); settings and autostart entry unchanged.
+
+**Not performed live:** the tray status following a knob-display change made in the window (offline only); the
 tray on a desktop without a Status Notifier host (offline only: exits quietly).
+
+## Confirmed limitation: WirePlumber restores the speaker level at login
+
+Observed (Phase 9B login, and consistent with every start in the logs of 2026-10-25): the device speaker was at
+−9.34 dB when the owner logged out (last read by the window); the service started after login read −23.50 dB.
+WirePlumber's `~/.local/state/wireplumber/default-routes` holds `channelVolumes 0.066836` for the CONNECT 2 output
+= −23.5 dB. Because the kernel forwards desktop volume changes to the device (Feature Unit 2 SET honoured),
+WirePlumber's route restore at login sets the **device** to that saved level. WirePlumber saves levels changed
+through PipeWire (desktop slider, volume keys), but not the ALSA updates OpenWitty makes to mirror the knob, so the
+saved level is the last *desktop-set* one. The startup hold keeps OpenWitty from treating the restore as a user
+change, but the restore itself happens before OpenWitty starts and is outside its control.
+
+Effect: after a login the speaker returns to the last level set on the desktop, which can be quieter **or louder**
+than the knob position of the previous session. Not caused by OpenWitty; not seen as a problem by the owner yet.
+Not attributed by a kernel trace (inferred from the saved state, the start levels and the timing).
+
+Fix options (design decision, not implemented): (a) mirror the knob through PipeWire (route volume via the
+PipeWire/WirePlumber API instead of the raw ALSA control) so WirePlumber saves it; (b) document how to stop
+WirePlumber from restoring this route; (c) let the service record the last device level and report a login
+change. (a) is the clean one; it touches the synchronization path and needs its own validation.
 
 ## Installation and rollback
 
