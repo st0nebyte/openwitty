@@ -1,6 +1,7 @@
 #include "core/VolumeSync.hpp"
 
 #include <cmath>
+#include <cstdio>
 
 namespace lewitt {
 
@@ -14,13 +15,13 @@ bool VolumeSync::isEcho(const DesktopLevel& d, TimePoint now) const {
     return echo_ && now <= echoUntil_ && echo_->muted == d.muted && sameLevel(echo_->db, d.db);
 }
 
-SyncAction VolumeSync::alignDesktop(TimePoint now, const char* why) {
+SyncAction VolumeSync::alignDesktop(TimePoint now, std::string why) {
     SyncAction a;
     if (!hw_ || !cfg_.mirrorHardwareToDesktop) return a;
     if (desk_ && desktopMatchesHardware(*desk_, *hw_)) return a;
     DesktopLevel target{hw_->db, hw_->muted};
     a.setDesktop = target;
-    a.note = why;
+    a.note = std::move(why);
     echo_ = target;
     echoUntil_ = now + cfg_.echoWindow;
     desk_ = target;
@@ -142,8 +143,12 @@ SyncAction VolumeSync::onHardware(OutputLevel hw, TimePoint now) {
     if (hw_ && hw.muted == hw_->muted && sameLevel(hw.db, hw_->db)) return a;
     hw_ = hw;
     queued_.reset();                                   // the device changed after the queued request
-    auto r = alignDesktop(now, "hardware: changed on the device (knob/other tool), mirrored to the desktop");
-    if (r.empty()) r.note = "hardware: changed on the device, desktop already matches";
+    // The source cannot be told apart from the device side: the speaker knob or Mute button, another
+    // tool, or a desktop change that the kernel applied to the device.
+    char lvl[64];
+    std::snprintf(lvl, sizeof lvl, "%.2f dB %s", hw.db, hw.muted ? "muted" : "unmuted");
+    auto r = alignDesktop(now, std::string("hardware: device speaker now ") + lvl + ", mirrored to the desktop");
+    if (r.empty()) r.note = std::string("hardware: device speaker now ") + lvl + ", desktop already matches";
     return r;
 }
 

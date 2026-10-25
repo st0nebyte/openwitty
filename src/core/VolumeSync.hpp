@@ -89,7 +89,7 @@ private:
     bool sameLevel(double a, double b) const;
     bool desktopMatchesHardware(const DesktopLevel& d, const OutputLevel& h) const;
     bool isEcho(const DesktopLevel& d, TimePoint now) const;
-    SyncAction alignDesktop(TimePoint now, const char* why);
+    SyncAction alignDesktop(TimePoint now, std::string why);
     SyncAction evaluate(const DesktopLevel& d, TimePoint now);
 
     VolumeSyncConfig cfg_;

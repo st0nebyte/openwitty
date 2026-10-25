@@ -30,9 +30,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <thread>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "core/Authorization.hpp"
@@ -95,7 +97,31 @@ Args parse(int argc, char** argv) {
     return a;
 }
 
-void say(const std::string& m) { std::fprintf(stderr, "%s\n", m.c_str()); }
+// True only if stderr IS the journal stream systemd announced (JOURNAL_STREAM="<dev>:<inode>", see
+// systemd.exec(5)); an inherited variable with a different stderr does not count.
+bool stderrIsJournal() {
+    const char* js = std::getenv("JOURNAL_STREAM");
+    unsigned long long dev = 0, ino = 0;
+    if (!js || std::sscanf(js, "%llu:%llu", &dev, &ino) != 2) return false;
+    struct stat st{};
+    return fstat(STDERR_FILENO, &st) == 0 && static_cast<unsigned long long>(st.st_dev) == dev &&
+           static_cast<unsigned long long>(st.st_ino) == ino;
+}
+
+// Under systemd the journal timestamps every line; elsewhere we add wall-clock time (ms).
+void say(const std::string& m) {
+    static const bool journal = stderrIsJournal();
+    if (journal) {
+        std::fprintf(stderr, "%s\n", m.c_str());
+        return;
+    }
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+    char ts[16];
+    std::strftime(ts, sizeof ts, "%H:%M:%S", std::localtime(&t));
+    std::fprintf(stderr, "%s.%03lld %s\n", ts, static_cast<long long>(ms), m.c_str());
+}
 
 // Log a condition once until it changes (no journal spam while waiting).
 struct OnceLog {
@@ -237,8 +263,8 @@ int main(int argc, char** argv) {
             nextPoll = now + std::chrono::milliseconds(a.pollMs);
         }
         if (link->notice() != lastNotice) {
+            say(link->notice().empty() ? "notice cleared: desktop and device agree again" : "notice: " + link->notice());
             lastNotice = link->notice();
-            if (!lastNotice.empty()) say("notice: " + lastNotice);
         }
         if (!link->healthy()) {
             say("device link lost: reconnecting (read-only start again)");

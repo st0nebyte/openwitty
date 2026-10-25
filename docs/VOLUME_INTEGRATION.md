@@ -32,6 +32,14 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Startup is read-only towards the device** in every mode; a 5 s hold keeps WirePlumber's login route restore from being
   treated as a user change.
 
+## Validation status (real device)
+| Behaviour | Status |
+|---|---|
+| Ordinary boot: quirk active, mixer loads, hardware-volume route present, FU2 SET reaches the device | observed once (Phase 8E, 2026-10-25) |
+| Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); speaker volume knob turned up by the owner (−36 → −27 dB) mirrored to the desktop step by step; speaker mute via the Mute button (short press, speaker output selected) mirrored to the desktop; after the physical unmute the desktop was left muted with the notice, as designed; no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
+| What finally unmuted the desktop control in that test (OpenWitty's alignment cannot) – the kernel reporting the device's mute state itself, or WirePlumber | not determined: the log had no timestamps. Fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level). A short repeat – one Mute short press on/off **without** the daemon running – would show whether the kernel already tracks the speaker mute natively |
+| Vendor fallback in the "SET ignored" state; GUI ↔ daemon hand-over; suspend/resume; second ordinary boot | not yet tested on the device |
+
 ## Kernel compatibility quirk
 `options snd_usb_audio quirk_flags=29c2:0004:ignore_ctl_error` (example: `packaging/modprobe/openwitty-connect2.conf`).
 * **What it does:** for this one USB id, failed mixer control reads/writes return 0 instead of an error, so the ALSA mixer
