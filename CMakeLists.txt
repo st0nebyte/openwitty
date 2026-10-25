@@ -83,7 +83,7 @@ endif()
 # Desktop (ALSA) volume integration: policy glue is always built and tested; the libasound backend
 # and the openwitty-volumed daemon need alsa-lib and the USB transport.
 add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp
-            src/desktop/AudioSetupCheck.cpp)
+            src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp)
 target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
 target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
 option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
@@ -114,7 +114,20 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
                   set(OW_UNITDIR \"${LEWITT_SYSTEMD_USER_UNIT_DIR}\")
                   set(OW_GENERATED_DIR \"${CMAKE_BINARY_DIR}/packaging/install\")")
     install(SCRIPT packaging/systemd/InstallUserUnit.cmake)
-    install(FILES packaging/modprobe/openwitty-connect2.conf DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
+    install(FILES packaging/modprobe/openwitty-connect2.conf
+                  packaging/wireplumber/51-openwitty-connect2-login-screen.conf
+            DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
+    # Login-screen WirePlumber rule (example only): valid SPA-JSON, matches the CONNECT 2's card name pattern.
+    find_program(LEWITT_SPA_JSON_DUMP spa-json-dump)
+    if(LEWITT_BUILD_TESTS AND LEWITT_SPA_JSON_DUMP)
+        add_test(NAME wireplumber_login_screen_rule_parses
+                 COMMAND sh -c "out=\$(\"$1\" \"$2\") || exit 1; printf '%s' \"\$out\" | grep -q '\"device.disabled\": true' || exit 2; \
+                                pat=\$(printf '%s' \"\$out\" | sed -n 's/.*\"device.name\": \"~\\(.*\\)\".*/\\1/p'); \
+                                printf '%s' 'alsa_card.usb-Lewitt_GmbH_CONNECT_2_X000XXX00000-00' | grep -Eq \"^\$pat\$\" || exit 3; \
+                                printf '%s' 'alsa_card.usb-Other_Vendor_Card-00' | grep -Eq \"^\$pat\$\" && exit 4; echo RULE OK"
+                 sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/51-openwitty-connect2-login-screen.conf)
+        set_tests_properties(wireplumber_login_screen_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
+    endif()
     # The generated user unit must verify cleanly (keys in the right sections, valid ExecStart).
     find_program(LEWITT_SYSTEMD_ANALYZE systemd-analyze)
     if(LEWITT_BUILD_TESTS AND LEWITT_SYSTEMD_ANALYZE)
@@ -178,6 +191,7 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
     target_sources(lewitt_tests PRIVATE tests/cpp/test_output_control.cpp tests/cpp/test_volume_sync.cpp
                                         tests/cpp/test_desktop_link.cpp        # Phase 8D volume integration
+                                        tests/cpp/test_route_volume.cpp        # Phase 9C route-volume proof of concept
                                         tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)

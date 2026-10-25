@@ -16,30 +16,54 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
 
 ## Checklist
 
+Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the commands.
+
+**Build and tests**
+
 | # | Check | Result |
 |---|---|---|
-| 1 | Builds from a fresh tree (Release), all CTests pass | PASS — 282/282 |
-| 2 | GUI test suite (offscreen) | PASS — 54/54 |
-| 3 | ASan/UBSan suite (`-DLEWITT_BUILD_GUI=OFF`) | PASS — see "Validation run" |
-| 4 | USB call-site audit (`tools/audit/check_usb_call_sites.sh`) | PASS |
-| 5 | Packaging staging check (`packaging_staging`, incl. service, man pages, licences, no `modprobe.d`, unit not enabled) | PASS |
-| 6 | Real `makepkg` (rootless, temporary directories) incl. `check()` | PASS — 281/281 (`packaging_staging` excluded by design) |
-| 7 | `namcap` | **NOT RUN** — not installed; must be run before publishing an Arch package |
-| 8 | Debian `lintian`, `dpkg-shlibdeps`, install/remove lifecycle since the desktop integration | **NOT RUN** — no Debian tooling on the host |
-| 9 | Desktop entry (`desktop-file-validate`), AppStream (`appstreamcli validate --no-net`), man pages (groff warnings) | PASS — no errors, no hints |
-| 10 | Package contents: `root:root`, stripped, no RPATH, no development paths, licences, udev rule, user unit installed disabled, quirk only as an example | PASS (Arch package inspected; `.deb` contents inspected) |
-| 11 | Uninstall: manifest lists every installed file and link; packages remove their files; user settings documented | PASS (staging tests; user-local uninstall procedure documented) |
-| 12 | Public documentation consistent with the hardware evidence | PASS after Phase 9A (README, INSTALLATION, PACKAGING, FEATURES, man pages, AppStream, package descriptions) |
-| 13 | Unofficial-project disclaimer in README, desktop entry, AppStream, packages, `--version` | PASS |
-| 14 | No proprietary artefacts, captures, build outputs, device serials or secrets tracked | PASS for the tree; see "Before going public" for the Git history |
-| 15 | Real-device validation of the desktop integration (window, service, hand-over, Mute button, boot/login, suspend/resume) | PASS on the tested configuration (`docs/VOLUME_INTEGRATION.md`) |
-| 16 | Vendor fallback validated on hardware | **NOT DONE** — documented as experimental |
-| 17 | GUI *Speaker/headphone control* exercised on hardware | **NOT DONE** — documented as not exercised |
-| 18 | Version and release metadata decided | **OPEN** — see "Versioning" |
-| 19 | Tray icon and single window (Phase 9B): offscreen tests (tray unavailable, service disabled/running/idle/not installed, repeated opens, quit leaves the service alone, autostart on/off/reset), end-to-end single-instance script, no USB/ALSA linkage | PASS (offline) |
-| 20 | Tray icon and window activation live on KDE Plasma (Wayland), incl. login autostart | PASS — see "KDE Plasma acceptance (Phase 9B)" |
-| 22 | Speaker level at login follows the knob position of the previous session | **FAIL (limitation, not caused by OpenWitty)** — WirePlumber restores its saved level onto the device; see "Confirmed limitation: WirePlumber restores the speaker level at login" |
-| 21 | Single-instance ownership race-free (flock), explicit failure | PASS — 7 barrier-synchronised race tests (also under ASan/UBSan), end-to-end script |
+| 1 | Release build, all CTests | PASS — 292/292 |
+| 2 | GUI tests (offscreen) / tray tests / single-instance race tests | PASS — 57/57, 17/17, 7/7 (race and tray also under ASan/UBSan) |
+| 3 | ASan/UBSan suite (`-DLEWITT_BUILD_GUI=OFF`) | PASS — 272/272 |
+| 4 | USB call-site audit (incl. tray/desktop-UI and single-instance rules) | PASS |
+| 5 | End-to-end single-instance script (second starts, two trays, unanswering owner) | PASS |
+
+**Packaging**
+
+| # | Check | Result |
+|---|---|---|
+| 6 | Packaging staging check (service, tray, man pages, licences, no `modprobe.d`, no autostart entry, unit not enabled) | PASS |
+| 7 | Real rootless `makepkg` incl. `check()` | PASS — 291/291 (`packaging_staging` excluded by design) |
+| 8 | Package contents: `root:root`, stripped, no RPATH/development paths, licences, udev rule, unit disabled, quirk and login-screen rule only as examples | PASS (Arch package inspected; `.deb` contents inspected in Phase 9A) |
+| 9 | Desktop entry, AppStream, man pages validators | PASS |
+| 10 | Uninstall: manifest complete; packages remove their files; user settings and tray entry documented | PASS |
+| 11 | `namcap` | **NOT RUN** — not installed |
+| 12 | Debian `lintian`, `dpkg-shlibdeps`, install/remove lifecycle since the desktop integration | **NOT RUN** — no Debian tooling on the host |
+
+**Documentation and repository**
+
+| # | Check | Result |
+|---|---|---|
+| 13 | Public documentation consistent with the evidence | PASS (Phase 9A–9C) |
+| 14 | Unofficial-project disclaimer everywhere | PASS |
+| 15 | No proprietary artefacts, captures, build outputs, device serials or secrets in the tree | PASS; Git history: see "Before going public" |
+
+**Real device and desktop (one system)**
+
+| # | Check | Result |
+|---|---|---|
+| 16 | Desktop integration: window, service, hand-over, Mute button, boot/login, suspend/resume | PASS (`docs/VOLUME_INTEGRATION.md`) |
+| 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
+| 18 | Speaker level unchanged across logout/login | **FAIL (limitation)** — the login screen's own audio service sets its default level; see "Speaker level at the login screen (Phase 9C)" |
+| 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
+| 20 | GUI *Speaker/headphone control* on hardware | **NOT DONE** |
+
+**Open decisions**
+
+| # | Item | Status |
+|---|---|---|
+| 21 | Version and release metadata | **OPEN** — see "Versioning" |
+| 22 | Login-screen rule (Phase 9C option B) live-validated | **OPEN** — plan below |
 
 ## Known limitations and experimental features
 
@@ -52,6 +76,9 @@ or merged into `main`; that needs an explicit release decision by the owner. Rev
   on hardware), CLI write commands (`instrument-mute` never executed).
 * The kernel compatibility quirk is specific to the CONNECT 2 and was needed on Linux 7.3.0; other kernels have
   not been checked. It is never installed by OpenWitty or its packages.
+* With the kernel quirk, a graphical login screen's own audio service sets the CONNECT 2 speaker to its default
+  level (≈ −23.5 dB) each time it appears; optional login-screen-only WirePlumber rule (example, not yet
+  live-tested). See "Speaker level at the login screen (Phase 9C)".
 * The device stalls for a few seconds after power-up (kernel `usb_set_interface failed (-110)` on every boot);
   the service recovers with one bounded reconnect.
 * A resume after which the device is re-enumerated (power lost during sleep), longer sleeps and `s2idle` as the
@@ -95,25 +122,74 @@ and started with the new one (new PID, `NRestarts=0`, read-only start); settings
 **Not performed live:** the tray status following a knob-display change made in the window (offline only); the
 tray on a desktop without a Status Notifier host (offline only: exits quietly).
 
-## Confirmed limitation: WirePlumber restores the speaker level at login
+## Speaker level at the login screen (Phase 9C)
 
-Observed (Phase 9B login, and consistent with every start in the logs of 2026-10-25): the device speaker was at
-−9.34 dB when the owner logged out (last read by the window); the service started after login read −23.50 dB.
-WirePlumber's `~/.local/state/wireplumber/default-routes` holds `channelVolumes 0.066836` for the CONNECT 2 output
-= −23.5 dB. Because the kernel forwards desktop volume changes to the device (Feature Unit 2 SET honoured),
-WirePlumber's route restore at login sets the **device** to that saved level. WirePlumber saves levels changed
-through PipeWire (desktop slider, volume keys), but not the ALSA updates OpenWitty makes to mirror the knob, so the
-saved level is the last *desktop-set* one. The startup hold keeps OpenWitty from treating the restore as a user
-change, but the restore itself happens before OpenWitty starts and is outside its control.
+**Observation (Phase 9B):** before the logout the window read −9.34 dB (18:22); after the login the service read
+−23.50 dB (18:29:25.79). Every start on 2026-10-25 began at −23.50 dB.
 
-Effect: after a login the speaker returns to the last level set on the desktop, which can be quieter **or louder**
-than the knob position of the previous session. Not caused by OpenWitty; not seen as a problem by the owner yet.
-Not attributed by a kernel trace (inferred from the saved state, the start levels and the timing).
+**Correction:** Phase 9B attributed this to the user's WirePlumber restoring a stale saved level at login. That
+is not what happened: the user's PipeWire, WirePlumber and pipewire-pulse ran unchanged from 12:23 (same PIDs)
+through the logout and login, so they restored nothing.
 
-Fix options (design decision, not implemented): (a) mirror the knob through PipeWire (route volume via the
-PipeWire/WirePlumber API instead of the raw ALSA control) so WirePlumber saves it; (b) document how to stop
-WirePlumber from restoring this route; (c) let the service record the last device level and report a login
-change. (a) is the clean one; it touches the synchronization path and needs its own validation.
+**Root-cause assessment (strong evidence, not proven by a trace):**
+
+| # | Evidence (read-only) |
+|---|---|
+| 1 | 18:29:19: the Plasma Login screen (user `plasmalogin`, UID 958, session class `greeter`) got its own systemd user manager, which started its **own PipeWire and WirePlumber** (18:29:20) — the only audio stack started in the window between −9.34 and −23.50 dB |
+| 2 | That WirePlumber's state directory (`/var/lib/plasmalogin/.local/state/wireplumber/`) is empty: no saved routes, so `apply-routes.lua` applies `device.routes.default-sink-volume` = **0.064** (WirePlumber 0.5.18 default) |
+| 3 | PipeWire's ALSA layer rounds playback volumes **up** to the next hardware step (`acp/alsa-mixer.c`, `rounding = +1`, PipeWire 1.6.10): 0.064 = −23.88 dB → **−23.50 dB** — exactly the observed level (reproduced by `RouteVolumePoC.WirePlumberDefaultSinkVolumeLandsOnMinus23_5dB`) |
+| 4 | With the kernel quirk, an ALSA volume write reaches the device (Feature Unit 2 SET honoured), so the login screen sets the **device** level |
+| 5 | Afterwards the user's state file held 0.066836 (= −23.5 dB, rewritten 18:29) and the user's output route has `save = true`: the user's WirePlumber persisted the level the login screen had set |
+
+Remaining uncertainty: no PipeWire/WirePlumber debug log of the login screen's route application exists; the
+attribution rests on timing, elimination and the exact default-volume match. The 12:23 boot used autologin (no
+login screen): its −23.50 dB is consistent with the user's WirePlumber restoring the level saved after an
+earlier login-screen appearance, also not traced.
+
+Why it matters for OpenWitty: without the kernel quirk the desktop has no hardware volume for the CONNECT 2 and
+no WirePlumber can change its level; the quirk OpenWitty documents makes the device's level settable by every
+audio session, including a login screen's. The change can be louder or quieter than the knob position.
+
+**How WirePlumber persists route volumes (WirePlumber 0.5.18 / PipeWire 1.6.10 source):** `state-routes.lua`
+stores a route's volume only when the device reports the route with `save = true`. PipeWire's ALSA device reports
+the port's sticky save flag: set by a route request with `save = true` (pipewire-pulse `set_card_volume` — the KDE
+slider and volume keys; WirePlumber's mixer API — `wpctl set-volume` on a node with a device route), cleared by
+WirePlumber's own route application (`apply-routes.lua`, `save = false`, when the device appears or the profile
+changes). A hardware-originated change — the kernel, or OpenWitty's ALSA mirror write — is re-announced with the
+*current* flag, so it is persisted only after a desktop volume change in that WirePlumber lifetime. (The Phase 9B
+statement "ALSA updates are never saved" was too strong.) `device.restore-routes` is global; even without it,
+`apply-routes.lua` applies the default sink volume to a newly appearing route.
+
+**Approaches evaluated:**
+
+| | Approach | Fixes the login-screen reset? | Notes |
+|---|---|---|---|
+| A | Mirror the knob through the CONNECT 2's PipeWire route with `save = true` (identified by device name and route, never the default sink) | **No** — the login screen's WirePlumber still applies its own default | Makes the *user's* saved level follow the knob deterministically (closes the gap after a WirePlumber start). Needs a PipeWire client path (libpipewire or `wpctl`) and exact rounding: a naive linear value lands one step **louder** on 61 of 121 steps in the model; `planRouteMirror()` lands on the device's step for all 121 (round-up and nearest). Feedback, mute and fallback-to-ALSA rules as today. Deferred |
+| B | Login screen only: a WirePlumber rule (`device.disabled = true` for `~alsa_card.usb-Lewitt_GmbH_CONNECT_2.*`) in the login-screen user's config | **Yes** (for Plasma Login; SDDM/GDM paths documented, untested) | Device-specific, leaves the user's session and restore untouched; no sound from the CONNECT 2 on the login screen; administrator step, never installed automatically (`examples/51-openwitty-connect2-login-screen.conf`, syntax and pattern checked offline). **Recommended** |
+| C | Keep the ALSA path; document; optionally let the service remember the last level and report a change found at start | Explains, does not prevent | Never writes a remembered level back. Documentation done; the start-time notice is a small later addition |
+
+**Safety of the recommendation:** B changes nothing in OpenWitty's write paths (no vendor SET in mirror mode,
+fresh read before alignment, never louder, round down, never unmute, headphone untouched, ownership rules all
+unchanged). A, if ever implemented, keeps them by construction (`planRouteMirror`) and must additionally fall back
+to the ALSA path when PipeWire or the route is unavailable, and must ignore its own echo exactly as today.
+
+**Offline proof (Phase 9C):** `tests/cpp/test_route_volume.cpp` — every hardware step reached exactly with both
+ACP rounding modes, off-grid device levels rounded down, never an unmute, no request when the desktop already
+agrees, the WirePlumber default reproduced; `wireplumber_login_screen_rule_parses` — rule parses with
+`spa-json-dump`, matches the CONNECT 2 card name pattern and not another vendor's. Not covered offline (would need
+a live PipeWire with the device): WirePlumber actually persisting a route request, the rule's effect on a real
+login screen, node disappearance and a different default sink under approach A.
+
+**Plan for a later real-device check (needs the owner's go-ahead; no OpenWitty device writes):**
+1. Control run: knob to a level clearly different from −23.5 dB and quieter (e.g. −35 dB); log out, stay on the
+   login screen ~15 s, log in; read the service's start level. Expect −23.5 dB (reproduces the cause).
+2. Install the login-screen rule (administrator), repeat: expect the knob level (≈ −35 dB) after the login.
+3. Optional attribution: raise only the login screen's WirePlumber log level for one run and look for its route
+   application. Lock screen and suspend/resume are unaffected (Phase 8I).
+
+**Alpha impact:** not a code blocker. It must be documented next to the kernel quirk (done in
+`docs/INSTALLATION.md` and `docs/VOLUME_INTEGRATION.md`); validating option B live is recommended before a public
+alpha.
 
 ## Installation and rollback
 
@@ -159,6 +235,14 @@ dated 2026-10-14 that never happened. Recommendation for the first public alpha:
 
 None in the code or packaging for a **private alpha review**. For a **public** release, the open items above
 (history/identity decision, `namcap`, Debian re-validation, version metadata) must be resolved first.
+
+## Validation run (Phase 9C, latest)
+
+CachyOS host; nothing installed, the running user-local installation, service, tray and settings untouched.
+Release build: CTest 292/292, GUI 57/57, tray 17/17, race 7/7 (5 repeats in 9B; race and tray also under
+ASan/UBSan); `build-asan`: 272/272; USB audit PASS; `packaging_staging` and `install_staging_user_unit` PASS;
+real rootless `makepkg`: `check()` 291/291 — its first run exposed the single-instance socket-path defect fixed in
+`f90f528`; privacy grep and `git diff --check` clean.
 
 ## Validation run (Phase 9A)
 

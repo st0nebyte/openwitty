@@ -41,6 +41,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Known limitations
 
-See `docs/RELEASE_READINESS.md`. In short: one device and one distribution tested; most controls change the
+See `docs/RELEASE_READINESS.md`. In short: one device and one distribution tested; with the kernel quirk a
+login screen resets the speaker to its default level (optional login-screen rule provided as an example); most controls change the
 simulated device only; vendor fallback unvalidated; CONNECT 6 unsupported; firmware update and factory reset
 deliberately not implemented; not a replacement for LEWITT CONTROL CENTER.

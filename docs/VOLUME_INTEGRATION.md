@@ -59,6 +59,13 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Upstream:** the right long-term fix is in the kernel (keep a per-channel control readable when only some channels stall,
   or a device quirk for 29c2:0004); worth reporting to linux-sound with the Phase 8C analysis.
 
+### Login screen side effect (Phase 9C)
+A graphical login screen runs its own PipeWire/WirePlumber. With the quirk it can set the device level: with no
+saved state it applies WirePlumber's default sink volume 0.064 (−23.88 dB), which PipeWire rounds up to the
+hardware step −23.50 dB. Observed after a logout/login (−9.34 → −23.50 dB) with the user's own audio stack running
+unchanged throughout; analysis, evidence and the remaining uncertainty in `docs/RELEASE_READINESS.md`. Optional
+remedy for the login screen only: `packaging/wireplumber/51-openwitty-connect2-login-screen.conf` (example).
+
 ## Command line (diagnostics; ordinary use is the Settings page)
 Modes are mutually exclusive: no flag = follow the settings file, or exactly one of `--mirror`, `--vendor-fallback`, `--dry-run`, `--check`; conflicting or
 repeated mode flags, `--max-increase-db` outside the fallback, and options with `--check` are rejected before anything runs.

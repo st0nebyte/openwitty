@@ -119,6 +119,21 @@ It is never installed silently, by packages or by OpenWitty. Not needed if the p
 volume: available" without it; other kernels may not need it. Remove: `sudo rm
 /etc/modprobe.d/openwitty-connect2.conf`, then reboot.
 
+**Side effect at the login screen.** With the quirk the desktop can set the CONNECT 2's speaker level, and so can
+a graphical login screen, which runs its own audio service: each time the login screen appears (after a logout,
+or at boot without autologin) it sets its default level, about −23.5 dB, regardless of the knob — that can be
+louder or quieter than before. To stop that, keep the login screen from managing the CONNECT 2 (administrator
+step, login screen only; Plasma Login shown, other login screens in the file):
+
+```sh
+sudo install -D -m 0644 -o plasmalogin -g plasmalogin \
+    /usr/share/doc/openwitty/examples/51-openwitty-connect2-login-screen.conf \
+    /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf
+```
+
+Never put it into your own `~/.config/wireplumber` or `/etc/wireplumber` (the CONNECT 2 would vanish from your
+desktop). Remove the file to undo. Not yet tested on a real login screen (`docs/RELEASE_READINESS.md`).
+
 ### Show the volume knob in the desktop volume
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move
