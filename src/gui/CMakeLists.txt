@@ -2,7 +2,8 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick Svg)
 qt_standard_project_setup()
 
 # Backend facade as a static library so it can be tested without the QML app.
-qt_add_library(lewitt_gui_backend STATIC DeviceController.cpp DeviceController.hpp MeterPresentation.cpp MeterPresentation.hpp MeterDynamics.hpp)
+qt_add_library(lewitt_gui_backend STATIC DeviceController.cpp DeviceController.hpp MeterPresentation.cpp MeterPresentation.hpp MeterDynamics.hpp
+    IntegrationSettings.cpp IntegrationSettings.hpp)
 target_include_directories(lewitt_gui_backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(lewitt_gui_backend PUBLIC lewitt_core lewitt_desktop Qt6::Core Qt6::Gui)
 

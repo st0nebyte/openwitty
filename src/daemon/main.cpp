@@ -6,7 +6,10 @@
 // ("broken GET_CUR"), so it never learns about hardware-knob changes; this daemon reads the device
 // through the vendor protocol (interface 3) and mirrors such changes to the desktop.
 //
-//   openwitty-volumed                    mirror mode (default): device opened READ-ONLY; knob changes are
+//   openwitty-volumed                    follows the user configuration ($XDG_CONFIG_HOME/openwitty/
+//                                        openwitty.conf, written by the GUI) and its changes while running:
+//                                        off = idle, mirror, or mirror + vendor fallback. Without a file: idle.
+//   openwitty-volumed --mirror           mirror mode regardless of the configuration: device opened READ-ONLY; knob changes are
 //                                        mirrored to the ALSA control under the alignment safety rules
 //                                        (fresh re-read, round down, never unmute); a desktop change the
 //                                        device does not follow is reported, never corrected
@@ -40,6 +43,7 @@
 #include "core/Authorization.hpp"
 #include "core/DeviceSession.hpp"
 #include "core/OutputControl.hpp"
+#include "core/UserConfig.hpp"
 #include <alsa/asoundlib.h>
 
 #include "desktop/AlsaDesktopMixer.hpp"
@@ -58,6 +62,7 @@ enum class Mode { Mirror, Fallback, DryRun, Check };
 
 struct Args {
     Mode mode{Mode::Mirror};
+    bool explicitMode{false};         // a mode flag was given: the configuration file does not apply
     bool writes{false};               // vendor writes (fallback mode only)
     double maxIncreaseDb{10.0};
     int pollMs{1000};
@@ -71,6 +76,7 @@ Args parse(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         if (s == "--vendor-fallback") a.mode = Mode::Fallback, ++modeFlags;
+        else if (s == "--mirror") a.mode = Mode::Mirror, ++modeFlags;
         else if (s == "--dry-run") a.mode = Mode::DryRun, ++modeFlags;
         else if (s == "--check") a.mode = Mode::Check, ++modeFlags;
         else if (s == "--max-increase-db" && i + 1 < argc) {
@@ -91,6 +97,7 @@ Args parse(int argc, char** argv) {
     // Exactly one mode, decided once: no flag silently overrides another, and write authorization is
     // derived from the final mode only (never left over from an earlier flag).
     if (modeFlags > 1) a.ok = false;
+    a.explicitMode = modeFlags == 1;
     if (increaseGiven && a.mode != Mode::Fallback) a.ok = false;    // only the fallback ever raises a level
     if (pollGiven && a.mode == Mode::Check) a.ok = false;           // --check takes no options
     a.writes = a.ok && a.mode == Mode::Fallback;
@@ -139,6 +146,49 @@ std::unique_ptr<DeviceSession> makeSession(bool writes) {
     return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(readOnlyHardwareOptions()), WritePolicy{});
 }
 
+// What the daemon is doing right now: from an explicit flag, or from the user configuration.
+enum class Effective { Idle, Mirror, Fallback, DryRun };
+
+Effective fromFlags(Mode m) {
+    return m == Mode::Fallback ? Effective::Fallback : m == Mode::DryRun ? Effective::DryRun : Effective::Mirror;
+}
+Effective fromConfig(const UserConfig& c) {
+    if (c.desktopVolumeSync == DesktopVolumeSync::Off) return Effective::Idle;
+    return c.vendorFallback ? Effective::Fallback : Effective::Mirror;
+}
+const char* describe(Effective e) {
+    switch (e) {
+        case Effective::Idle: return "idle (desktop volume sync is off in the settings)";
+        case Effective::Mirror: return "mirror mode (device read-only; desktop control follows the device)";
+        case Effective::Fallback: return "mirror + vendor fallback (device writes: speaker volume/mute only)";
+        case Effective::DryRun: return "dry run (no writes)";
+    }
+    return "?";
+}
+
+// Re-reads the user configuration when the file changes (checked every loop iteration, <= 250 ms).
+struct ConfigWatch {
+    std::string path = userConfigPath();
+    bool exists{false};
+    struct timespec mtime{};
+    off_t size{-1};
+    UserConfig config;
+    bool poll() {                                     // true when (re)loaded
+        struct stat st{};
+        const bool e = !path.empty() && stat(path.c_str(), &st) == 0;
+        if (e == exists && (!e || (st.st_mtim.tv_sec == mtime.tv_sec && st.st_mtim.tv_nsec == mtime.tv_nsec &&
+                                   st.st_size == size)) && size != -1)
+            return false;
+        exists = e;
+        mtime = e ? st.st_mtim : timespec{};
+        size = e ? st.st_size : 0;
+        auto parsed = loadUserConfig(path);
+        for (const auto& w : parsed.warnings) say("settings: " + w);
+        config = parsed.config;
+        return true;
+    }
+};
+
 int runCheck() {
     const AudioSetupStatus st = collectAudioSetup();
     auto row = [](const char* k, const std::string& v) { std::printf("%-32s %s\n", k, v.c_str()); };
@@ -162,7 +212,8 @@ void sleepMs(int ms) {
 int main(int argc, char** argv) {
     Args a = parse(argc, argv);
     if (!a.ok) {
-        say("usage: openwitty-volumed [--poll-ms 250..5000]                     (mirror mode, device read-only)\n"
+        say("usage: openwitty-volumed [--poll-ms 250..5000]                     (follows the user settings)\n"
+            "       openwitty-volumed --mirror [--poll-ms 250..5000]            (device read-only)\n"
             "       openwitty-volumed --vendor-fallback [--max-increase-db 0..20] [--poll-ms 250..5000]\n"
             "       openwitty-volumed --dry-run [--poll-ms 250..5000]\n"
             "       openwitty-volumed --check\n"
@@ -185,15 +236,27 @@ int main(int argc, char** argv) {
 
     VolumeSyncConfig cfg;
     cfg.maxIncreaseDb = a.maxIncreaseDb;
-    LinkOptions opt;
-    opt.deviceWrites = a.mode == Mode::Fallback ? DeviceWriteMode::Fallback
-                     : a.mode == Mode::Mirror   ? DeviceWriteMode::Native
-                                                : DeviceWriteMode::None;
-    opt.desktopWrites = a.mode != Mode::DryRun;   // a dry run changes nothing at all, not even ALSA
-    say(std::string("openwitty-volumed: ") +
-        (a.mode == Mode::Fallback ? "mirror + vendor fallback (device writes: speaker volume/mute only)"
-         : a.mode == Mode::Mirror ? "mirror mode (device read-only; desktop control follows the device)"
-                                  : "dry run (no writes)"));
+    // Without a mode flag the user configuration decides (Settings > Desktop integration in the GUI);
+    // a vendor fallback chosen there is the user's explicit authorization, so no environment variables.
+    ConfigWatch watch;
+    Effective eff = Effective::Idle;
+    if (a.explicitMode) {
+        eff = fromFlags(a.mode);
+        say(std::string("openwitty-volumed: ") + describe(eff));
+    } else {
+        watch.poll();
+        eff = fromConfig(watch.config);
+        say(std::string("openwitty-volumed: ") + describe(eff) + " - settings: " +
+            (watch.path.empty() ? std::string("(none)") : watch.path));
+    }
+    auto linkOptions = [&] {
+        LinkOptions opt;
+        opt.deviceWrites = eff == Effective::Fallback ? DeviceWriteMode::Fallback
+                         : eff == Effective::Mirror   ? DeviceWriteMode::Native
+                                                      : DeviceWriteMode::None;
+        opt.desktopWrites = eff != Effective::DryRun;   // a dry run changes nothing at all, not even ALSA
+        return opt;
+    };
 
     std::unique_ptr<DeviceSession> session;
     AlsaDesktopMixer mixer;
@@ -210,6 +273,23 @@ int main(int argc, char** argv) {
     };
 
     while (!gStop) {
+        if (!a.explicitMode && watch.poll()) {
+            const Effective e = fromConfig(watch.config);
+            if (e != eff) {
+                say(std::string("settings changed: ") + describe(e));
+                release();                    // the next start is read-only again, with the new mode
+                mixer.close();
+                eff = e;
+                wait.last.clear();
+            }
+        }
+        if (eff == Effective::Idle) {
+            release();
+            if (mixer.isOpen()) mixer.close();
+            wait("idle: desktop volume sync is off in the settings");
+            sleepMs(1000);
+            continue;
+        }
         if (ControlLease::yieldRequestedInDirectory(dir, std::chrono::seconds(30))) {
             if (session) say("another OpenWitty client asked for the device: releasing it");
             release();
@@ -219,7 +299,7 @@ int main(int argc, char** argv) {
         }
         if (!session || session->needsReconnect()) {
             link.reset();
-            session = makeSession(a.writes);
+            session = makeSession(eff == Effective::Fallback);
             if (auto s = session->connect(); !s) {
                 session.reset();
                 wait(s.error().code == Errc::ControlInUse ? "waiting: device in use by another OpenWitty client"
@@ -239,7 +319,7 @@ int main(int argc, char** argv) {
             say("desktop control: ALSA card " + std::to_string(mixer.cardIndex()));
         }
         if (!link) {
-            link = std::make_unique<DesktopVolumeLink>(*session, mixer, cfg, opt, say);
+            link = std::make_unique<DesktopVolumeLink>(*session, mixer, cfg, linkOptions(), say);
             if (!link->start(DesktopVolumeLink::Clock::now())) {
                 release();
                 continue;

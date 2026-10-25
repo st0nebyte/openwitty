@@ -1,19 +1,15 @@
 # OpenWitty desktop-volume integration for the LEWITT CONNECT 2 (user service).
 #
-# Installed DISABLED. Default (mirror) mode opens the CONNECT 2 read-only and keeps the desktop volume
-# in step with the device (hardware knob). Note: updating the desktop's ALSA control is forwarded to the
-# device by the kernel; OpenWitty only ever writes the level the device already has (re-read first,
-# rounded down, never unmuting). Enable:
-#     systemctl --user enable --now openwitty-volumed.service
+# Installed DISABLED. Turn it on in OpenWitty: Settings > Desktop integration > "Keep it running when
+# OpenWitty is closed" (or: systemctl --user enable --now openwitty-volumed.service).
+# It follows the same settings file as the GUI ($XDG_CONFIG_HOME/openwitty/openwitty.conf): idle while
+# desktop sync is off; mirror mode opens the CONNECT 2 read-only and keeps the desktop volume in step with
+# the speaker knob and Mute button. Updating the desktop's ALSA control is forwarded to the device by the
+# kernel; OpenWitty only ever writes the level the device already has (re-read first, rounded down, never
+# unmuting). The vendor fallback is a separate, confirmed setting in the same page.
 # Check the audio setup first:  @CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --check
 #   (no OpenWitty vendor USB access, no intentional hardware SET; opening the ALSA mixer can make the
 #    kernel issue USB control reads to the device)
-# Vendor fallback for a device that ignores the standard volume control (writes the device!):
-#     systemctl --user edit openwitty-volumed.service   and add
-#         [Service]
-#         Environment=LEWITT_ALLOW_HARDWARE_WRITE=1 LEWITT_ALLOW_WRITE_SPEAKER_VOLUME=1
-#         ExecStart=
-#         ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/openwitty-volumed --vendor-fallback
 # Undo:
 #     systemctl --user disable --now openwitty-volumed.service
 [Unit]

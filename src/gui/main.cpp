@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "DeviceController.hpp"
+#include "IntegrationSettings.hpp"
 #include "lewitt/version.hpp"
 
 int main(int argc, char** argv) {
@@ -29,7 +30,7 @@ int main(int argc, char** argv) {
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
     p.addOption(sizeOpt);
-    QCommandLineOption show("show", "Open a page at start: settings | wizard | onboarding.", "page");
+    QCommandLineOption show("show", "Open a page at start: settings | settings-desktop | wizard | onboarding.", "page");
     p.addOption(show);
     QCommandLineOption quitAfterSeconds("quit-after-seconds",
         "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
@@ -58,8 +59,11 @@ int main(int argc, char** argv) {
             }
         });
     }
+    IntegrationSettings integration;
+    QObject::connect(&integration, &IntegrationSettings::configApplied, &controller, &DeviceController::applyUserConfig);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
+    engine.rootContext()->setContextProperty("integration", &integration);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Lewitt/Main.qml")));
@@ -72,6 +76,10 @@ int main(int argc, char** argv) {
     if (p.isSet(show) && !engine.rootObjects().isEmpty()) {
         QObject* root = engine.rootObjects().first();
         if (p.value(show) == "settings") root->setProperty("showSettings", true);
+        if (p.value(show) == "settings-desktop") {
+            root->setProperty("showSettings", true);
+            if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "desktop");
+        }
         if (p.value(show) == "wizard") root->setProperty("showWizard", true);
         if (p.value(show) == "onboarding") root->setProperty("showOnboarding", true);
     }

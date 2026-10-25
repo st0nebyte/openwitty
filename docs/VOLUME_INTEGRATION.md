@@ -25,8 +25,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
   follow through the vendor settings message: speaker bytes only, fresh snapshot, one SET, read-back verification, no retries,
   increases limited to 10 dB per step, never at startup. Intended for the verified "SET ignored" state.
 * **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker/headphone controls write the device only with the
-  `OPENWITTY_OUTPUT_WRITES=1` opt-in (scoped policy). While the GUI owns the device it can host the same mirror
-  (`OPENWITTY_DESKTOP_SYNC=1`, native mode only); the daemon yields the device to the GUI and takes it back afterwards.
+  confirmed *Speaker/headphone control* setting (scoped policy). While the GUI owns the device it hosts the same mirror when
+  *desktop sync* is on (native mode only); the daemon yields the device to the GUI and takes it back afterwards.
 * **One writer.** All OpenWitty processes share one per-user control lease; the GUI asks the daemon to hand over with a yield
   request. Policy and write path are the same code everywhere (`core/VolumeSync`, `desktop/DesktopVolumeLink`).
 * **Startup is read-only towards the device** in every mode; a 5 s hold keeps WirePlumber's login route restore from being
@@ -36,8 +36,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 | Behaviour | Status |
 |---|---|
 | Ordinary boot: quirk active, mixer loads, hardware-volume route present, FU2 SET reaches the device | observed once (Phase 8E, 2026-10-25) |
-| Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); speaker volume knob turned up by the owner (−36 → −27 dB) mirrored to the desktop step by step; speaker mute via the Mute button (short press, speaker output selected) mirrored to the desktop; after the physical unmute the desktop was left muted with the notice, as designed; no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
-| What finally unmuted the desktop control in that test (OpenWitty's alignment cannot) – the kernel reporting the device's mute state itself, or WirePlumber | not determined: the log had no timestamps. Fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level). A short repeat – one Mute short press on/off **without** the daemon running – would show whether the kernel already tracks the speaker mute natively |
+| Mirror mode, foreground (2026-10-25, same boot): read-only start; KDE/PipeWire volume decrease (sink 0.27 → 0.25) reached the device through the kernel (−34 → −36 dB) with no "did not follow" notice and no vendor SET (read-only transport); the owner turned the speaker volume knob up (−36 → −27 dB), mirrored to the desktop step by step; the speaker output was already selected on the CONNECT 2, and the owner pressed the Mute button (short presses) several times, deliberately more often than planned; the speaker mute was mirrored to the desktop, and after a physical unmute the desktop was left muted with the notice, as designed; no log activity for 10 s afterwards; final state after stopping: vendor GET −27.00 dB unmuted (headphone −32.40 dB muted, unchanged), ALSA −27.00 dB unmuted, sink 0.35 unmuted – consistent | passed |
+| The exact mute/unmute sequence of that test | not reconstructable (extra button presses, log without timestamps); the final unmuted desktop state is not attributed to the kernel, WirePlumber or OpenWitty. Logging fixed since (millisecond timestamps outside the journal, notice clearing logged, hardware notes carry the level) |
 | Vendor fallback in the "SET ignored" state; GUI ↔ daemon hand-over; suspend/resume; second ordinary boot | not yet tested on the device |
 
 ## Kernel compatibility quirk
@@ -53,28 +53,51 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Upstream:** the right long-term fix is in the kernel (keep a per-channel control readable when only some channels stall,
   or a device quirk for 29c2:0004); worth reporting to linux-sound with the Phase 8C analysis.
 
-## Using it
-Modes are mutually exclusive: no flag = mirror, or exactly one of `--vendor-fallback`, `--dry-run`, `--check`; conflicting or
+## Command line (diagnostics; ordinary use is the Settings page)
+Modes are mutually exclusive: no flag = follow the settings file, or exactly one of `--mirror`, `--vendor-fallback`, `--dry-run`, `--check`; conflicting or
 repeated mode flags, `--max-increase-db` outside the fallback, and options with `--check` are rejected before anything runs.
 `--check` makes no OpenWitty vendor USB access and no intentional hardware SET; it does open the CONNECT 2's ALSA mixer, which
 can make the kernel issue USB control *reads* to the device.
 ```
 openwitty-volumed --check                                   # setup diagnosis
-systemctl --user enable --now openwitty-volumed.service     # mirror mode (device read-only)
+systemctl --user enable --now openwitty-volumed.service     # = "Keep it running when OpenWitty is closed"
 journalctl --user -u openwitty-volumed -f                   # what it does
 systemctl --user disable --now openwitty-volumed.service    # undo
 ```
-Vendor fallback: `systemctl --user edit openwitty-volumed.service` (the unit file contains the exact drop-in).
 
-## User-facing configuration (design for the release; not implemented yet)
-Ordinary users should not need environment variables. Planned:
-* one settings page in the GUI, "Desktop integration": *Show hardware-knob changes in the desktop volume* (= enable the user
-  service in mirror mode), *Apply desktop volume through OpenWitty if the device does not respond* (= vendor fallback, with an
-  explanation), and a status line from `--check` with a guided explanation when the kernel quirk is needed;
-* persisted in `$XDG_CONFIG_HOME/openwitty/openwitty.conf` (`desktop_volume = off|mirror|fallback`), read by both the GUI and
-  the daemon; the systemd unit stays the single way the background part starts, enabled/disabled through
-  `systemctl --user` by the GUI on the user's request;
-* the GUI's output-control opt-in becomes a visible setting with the same explanation instead of `OPENWITTY_OUTPUT_WRITES`.
+## Settings (GUI) and the shared configuration file
+**OpenWitty → Settings → Desktop integration** (no environment variables, drop-ins or scripts needed):
+
+| Setting | Default | What it does | Writes the device? |
+|---|---|---|---|
+| Show knob and Mute button in desktop volume | off | mirror mode: the desktop (KDE/PipeWire) volume of the CONNECT 2 follows the speaker volume knob and Mute button; while OpenWitty is open the window does it, otherwise the background service | no (the desktop control is updated to the level the device already has; the kernel forwards that update) |
+| Keep it running when OpenWitty is closed | off | `systemctl --user enable --now` / `disable --now` of `openwitty-volumed.service`, only when you flip it; shows "not installed / off / on / running" | no |
+| Vendor fallback | off; needs desktop sync | if the device does not follow a desktop volume change, the background service applies it through the vendor protocol (speaker volume/mute only, ≤ 10 dB louder per step, read-back verified, never at start-up). Enabling shows an explanation that must be confirmed | **yes** |
+| Speaker/headphone control | off | OpenWitty's own speaker and headphone faders may change the device (scoped to those bytes, ≤ 10 dB louder per step, read-back verified); confirmation required; applied at once by reconnecting the session | **yes** |
+| Reset desktop integration | – | after confirmation: all of the above off and the background service disabled; the kernel quirk is not touched | no |
+
+The page also shows the setup status (sound card present, hardware volume available, kernel quirk configured/active,
+plain-language findings) and explains the kernel quirk with the exact line to install and how to remove it; OpenWitty
+never installs it. The setup check runs when the page is opened (it opens the CONNECT 2's ALSA mixer, which can cause kernel
+USB control reads; no OpenWitty vendor access).
+
+**File:** `$XDG_CONFIG_HOME/openwitty/openwitty.conf` (absolute `XDG_CONFIG_HOME` only, else `~/.config/openwitty/openwitty.conf`),
+written atomically by the GUI (0600, directory 0700), read by the GUI and by `openwitty-volumed`:
+```
+[openwitty]
+desktop_volume_sync = off      # off | mirror
+vendor_fallback = false        # true writes the device
+output_control = false         # true writes the device
+```
+Missing file = defaults. Invalid values fall back to the safe default and are shown as warnings in the page and in the
+daemon log; unknown keys are ignored with a warning. Deleting the file resets everything.
+
+**GUI ↔ daemon:** the daemon re-reads the file when it changes (checked at least every 250 ms) and switches mode at once:
+idle when sync is off, mirror (device read-only), or mirror + vendor fallback; every switch starts read-only again. The
+device itself is owned by one process at a time (control lease): when the window opens, the daemon hands the device over and
+the window mirrors (native mode only – the vendor fallback is paused while the window is open); when the window closes, the
+daemon takes it back. Explicit command-line modes (`--mirror`, `--vendor-fallback` with its two `LEWITT_ALLOW_*=1`
+variables, `--dry-run`, `--check`) override the file for diagnostics.
 
 ## Packaging
 `cmake --install` installs `openwitty`, `openwitty-cli`, `openwitty-volumed`, the udev rule and the user unit

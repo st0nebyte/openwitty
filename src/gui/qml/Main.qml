@@ -148,7 +148,7 @@ Window {
                    font.pixelSize: 11; text: device.lastError.length ? device.lastError
                                          : "Use the buttons above to start the simulated device." }
         }
-        SettingsView { visible: win.showSettings; x: 0; y: 0; width: parent.width; height: parent.height; z: 10
+        SettingsView { objectName: "settingsView"; visible: win.showSettings; x: 0; y: 0; width: parent.width; height: parent.height; z: 10
                        interactive: win.interactive; onCloseRequested: win.showSettings = false
                        onOnboardingRequested: { win.showSettings = false; win.showOnboarding = true; } }
         OnboardingOverlay { visible: win.showOnboarding; x: 0; y: 0; width: parent.width; height: parent.height; z: 12

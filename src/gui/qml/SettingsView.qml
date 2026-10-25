@@ -20,7 +20,8 @@ Rectangle {
     Column {
         x: 16; y: 60; width: 330; spacing: 6
         Repeater {
-            model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"}]
+            model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"},
+                    {k: "desktop", t: "Desktop integration"}]
             Rectangle {
                 width: 330; height: 26; color: Theme.panel; radius: 2
                 Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: Theme.text; font.pixelSize: 12; text: modelData.t }
@@ -34,7 +35,7 @@ Rectangle {
     // Section bodies
     Column {
         visible: root.open === "audio"
-        x: 16; y: 150; width: 330; spacing: 6
+        x: 16; y: 190; width: 330; spacing: 6
         ToggleSwitch { width: 330; label: "Gain lock (block external gain changes)"; enabled: root.interactive
                        checked: root.v("set.gainLock", false)
                        onToggled: (b) => device.setValue("set.gainLock", b) }
@@ -58,7 +59,7 @@ Rectangle {
     }
     Column {
         visible: root.open === "leds"
-        x: 16; y: 150; width: 330; spacing: 10
+        x: 16; y: 190; width: 330; spacing: 10
         Text { color: Theme.text; font.pixelSize: 12; text: "Brightness: " + root.v("set.ledBrightness", 0) + " %" }
         Fader_h { width: 330; enabled: root.interactive; value: root.v("set.ledBrightness", 0)
                   onMoved: (nv) => device.setValue("set.ledBrightness", nv) }
@@ -90,7 +91,7 @@ Rectangle {
     }
     Column {
         visible: root.open === "button"
-        x: 16; y: 150; width: 330; spacing: 8
+        x: 16; y: 190; width: 330; spacing: 8
         Repeater {
             model: [{v: 0, t: "Show CONTROL CENTER"}, {v: 12, t: "Toggle mic preamp styles"},
                     {v: 13, t: "Toggle instrument preamp styles"},
@@ -118,8 +119,102 @@ Rectangle {
                      : "Stored value " + root.v("set.customButton", "?") + " is not offered by the CONNECT 2 UI." }
     }
 
+    // Desktop integration: desktop (KDE/PipeWire) volume sync, background service, vendor fallback,
+    // direct output control, kernel compatibility quirk status. Device-writing options need a dialog.
+    Flickable {
+        id: desktopPage
+        objectName: "desktopIntegrationPage"
+        visible: root.open === "desktop"
+        x: 16; y: 190; width: 340; height: root.height - 200; clip: true
+        contentHeight: desktopCol.height
+        onVisibleChanged: if (visible) integration.refresh()
+        Column {
+            id: desktopCol
+            width: 330; spacing: 6
+            Text { width: 330; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: !integration.setupAvailable ? "Desktop audio check: not available in this build."
+                       : !integration.cardFound ? "The CONNECT 2 is not present as a sound card."
+                       : (integration.mixerLoads && integration.volumeControl)
+                         ? "Desktop hardware volume: available"
+                         : "Desktop hardware volume: not available" }
+            Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "Kernel compatibility quirk: " + (integration.quirkActive ? "active"
+                         : integration.quirkConfigured ? "configured, not active yet (replug the CONNECT 2 or reboot)"
+                         : "not configured") }
+            Repeater { model: integration.findings
+                       Text { width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10; text: "• " + modelData } }
+            Row { spacing: 8
+                ToggleButton { width: 150; height: 22; text: quirkHelp.visible ? "Hide quirk instructions" : "About the kernel quirk"
+                               onClicked: quirkHelp.visible = !quirkHelp.visible }
+                ToggleButton { width: 70; height: 22; text: "Refresh"; onClicked: integration.refresh() } }
+            Column { id: quirkHelp; visible: false; width: 330; spacing: 4
+                TextEdit { width: 330; wrapMode: Text.WordWrap; readOnly: true; selectByMouse: true
+                           color: Theme.textDim; font.pixelSize: 10; text: integration.quirkInstructions }
+                ToggleButton { width: 120; height: 22; text: "Copy option line"; onClicked: integration.copyQuirkInstructions() } }
+
+            Rectangle { width: 330; height: 1; color: "#333" }
+            ToggleSwitch { width: 330; label: "Show knob and Mute button in desktop volume"
+                           checked: integration.desktopSync
+                           tip: "Mirrors the CONNECT 2's speaker knob and Mute button to the KDE/PipeWire volume. Never writes the device."
+                           onToggled: (b) => integration.setDesktopSync(b) }
+            Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "The desktop slider works without this. OpenWitty only sets the desktop's volume control to the "
+                       + "level the device already has (re-read first, never unmuted)." }
+            Text { visible: integration.lastError.length > 0; width: 330; wrapMode: Text.WordWrap
+                   color: Theme.danger; font.pixelSize: 10; text: integration.lastError }
+        }
+    }
+
+    // Desktop integration, right-hand column: the options that write the device, and the reset.
+    Flickable {
+        visible: root.open === "desktop"
+        x: 390; y: 60; width: 320; height: root.height - 70; clip: true
+        contentHeight: desktopRightCol.height
+        Column {
+            id: desktopRightCol
+            width: 310; spacing: 6
+            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background" }
+            ToggleSwitch { width: 310; label: "Keep it running when OpenWitty is closed"
+                           enabled: integration.desktopSync && integration.serviceState !== "not-installed"
+                           checked: integration.serviceState === "enabled" || integration.serviceState === "active"
+                           tip: "Starts the openwitty-volumed user service with your desktop session (systemctl --user)."
+                           onToggled: (b) => integration.setBackgroundService(b) }
+            Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "Background service: " + ({"not-installed": "not installed", "disabled": "off",
+                         "enabled": "on (not running right now)", "active": "on and running",
+                         "unknown": "state unknown"})[integration.serviceState]
+                         + ". While this window is open it takes over." }
+            Rectangle { width: 310; height: 1; color: "#333" }
+            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Options that write the device" }
+            ToggleSwitch { width: 310; label: "Vendor fallback (writes the device)"
+                           enabled: integration.desktopSync
+                           checked: integration.vendorFallback
+                           tip: "Only for a device that does not respond to the desktop volume."
+                           onToggled: (b) => { if (b) confirmFallback.visible = true; else integration.setVendorFallback(false, false); } }
+            Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "Only if the desktop reports that the CONNECT 2 did not follow its volume: the background "
+                       + "service then applies it through the device's own protocol." }
+
+            Rectangle { width: 310; height: 1; color: "#333" }
+            ToggleSwitch { width: 310; label: "Speaker/headphone control (writes the device)"
+                           checked: integration.outputControl
+                           tip: "Lets this window change the speaker and headphone volume and mute directly."
+                           onToggled: (b) => { if (b) confirmOutput.visible = true; else integration.setOutputControl(false, false); } }
+            Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "OpenWitty's own speaker and headphone faders (separate from desktop sync)." }
+
+            Rectangle { width: 310; height: 1; color: "#333" }
+            ToggleButton { width: 170; height: 22; text: "Reset desktop integration"; onClicked: confirmReset.visible = true }
+            Text { width: 310; wrapMode: Text.WrapAnywhere; color: Theme.textDim; font.pixelSize: 9
+                   text: "Settings file: " + integration.configPath }
+            Repeater { model: integration.configWarnings
+                       Text { width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 9; text: "Settings: " + modelData } }
+        }
+    }
+
     // right column
     Column {
+        visible: root.open !== "desktop"
         x: 390; y: 60; width: 310; spacing: 10
         Text { color: Theme.text; font.pixelSize: 12; text: "OpenWitty 0.1.0 — unofficial, experimental; not affiliated with LEWITT" }
         Text { color: Theme.textDim; font.pixelSize: 12
@@ -136,6 +231,7 @@ Rectangle {
                        onToggled: (b) => { if (b) root.onboardingRequested(); } }
     }
     ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom
+                   visible: root.open !== "desktop"
                    anchors.bottomMargin: 14; width: 100; text: "Factory reset"; enabled: false
                    tip: "Disabled by policy" }
 
@@ -152,6 +248,53 @@ Rectangle {
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmMode.visible = false }
                 ToggleButton { width: 70; text: "Continue"; primary: true
                                onClicked: { confirmMode.visible = false; device.setDeviceMode(confirmMode.target); } } }
+        }
+    }
+
+    Rectangle {
+        id: confirmFallback
+        visible: false; z: 20; anchors.centerIn: parent; width: 320; height: 170; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 290; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "The vendor fallback writes the CONNECT 2's speaker volume and mute when the device ignores a "
+                       + "desktop change. Volume increases are limited to 10 dB per step, nothing is written at start-up, "
+                       + "and every write is read back. Use it only if the desktop volume does not reach the speaker." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmFallback.visible = false }
+                ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
+                               onClicked: { confirmFallback.visible = false; integration.setVendorFallback(true, true); } } }
+        }
+    }
+
+    Rectangle {
+        id: confirmOutput
+        visible: false; z: 20; anchors.centerIn: parent; width: 320; height: 150; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 290; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "OpenWitty will be able to change the CONNECT 2's speaker and headphone volume and mute. "
+                       + "Only those settings; each change is limited to 10 dB louder per step and read back. "
+                       + "Lower your monitors and headphones first." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmOutput.visible = false }
+                ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
+                               onClicked: { confirmOutput.visible = false; integration.setOutputControl(true, true); } } }
+        }
+    }
+
+    Rectangle {
+        id: confirmReset
+        visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 130; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "Turn off desktop volume sync, the vendor fallback, speaker/headphone control and the background "
+                       + "service? The kernel quirk, if you installed it, is not touched." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmReset.visible = false }
+                ToggleButton { width: 70; text: "Reset"; primary: true
+                               onClicked: { confirmReset.visible = false; integration.resetToDefaults(); } } }
         }
     }
 

@@ -67,7 +67,8 @@ add_library(lewitt_core STATIC
     src/core/WriteVerification.cpp
     src/core/DeviceManager.cpp
     src/core/OutputControl.cpp
-    src/core/VolumeSync.cpp)
+    src/core/VolumeSync.cpp
+    src/core/UserConfig.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_compile_options(lewitt_core PRIVATE -Wall -Wextra -Wpedantic)
 if(LEWITT_ENABLE_USB)
@@ -153,7 +154,8 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
     target_sources(lewitt_tests PRIVATE tests/cpp/test_output_control.cpp tests/cpp/test_volume_sync.cpp
                                         tests/cpp/test_desktop_link.cpp        # Phase 8D volume integration
-                                        tests/cpp/test_audio_setup_check.cpp)  # Phase 8F setup diagnosis
+                                        tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
+                                        tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
     if(LEWITT_ENABLE_USB)
         # Phase 8D CLI refusals. Every case is rejected before a transport exists (argument parsing or

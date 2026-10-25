@@ -12,6 +12,7 @@
 
 #include "core/Authorization.hpp"
 #include "core/OutputControl.hpp"
+#include "core/UserConfig.hpp"
 #include "core/RetryPolicy.hpp"
 #include "transport/ControlLease.hpp"
 #ifdef LEWITT_HAVE_ALSA
@@ -242,16 +243,18 @@ void DeviceWorker::connectUsb() {
     // Real hardware: read-only options (descriptor-driven interface selection, no explicit
     // claim/detach, writes refused at transport level; usbfs can claim implicitly for
     // interface-recipient GETs and the session policy keeps hardware writes off).
-    // Phase 8D opt-in (OPENWITTY_OUTPUT_WRITES=1, exactly): the speaker/headphone volume and mute
-    // bytes, and nothing else, become writable through the scoped output policy.
-    if (envAuthorized("OPENWITTY_OUTPUT_WRITES"))
+    // User settings (Settings > Desktop integration, core/UserConfig): with "output control" the
+    // speaker/headphone volume and mute bytes, and nothing else, become writable through the scoped
+    // output policy.
+    const UserConfig userConfig = loadUserConfig(userConfigPath()).config;
+    if (userConfig.outputControl)
         adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()),
                      outputWritePolicy(/*speaker=*/true, /*headphone=*/true));
     else
         adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
-    // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device:
-    // separate opt-in OPENWITTY_DESKTOP_SYNC=1, independent of the output-write opt-in.
-    desktopLinkWanted_ = envAuthorized("OPENWITTY_DESKTOP_SYNC");
+    // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
+    // independent of output control.
+    desktopLinkWanted_ = userConfig.desktopVolumeSync == DesktopVolumeSync::Mirror;
 #ifdef LEWITT_HAVE_ALSA
     if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
 #else
@@ -323,6 +326,26 @@ void DeviceWorker::endMeasurementSessionBestEffort() {
     if (inMeasureSession_ && session_ && session_->state() == ConnectionState::Connected)
         (void)session_->sendTrigger(Trigger::EndMeasurementSession);
     inMeasureSession_ = false;
+}
+
+// The user changed Settings > Desktop integration. Output control decides the session's write policy,
+// so a change there opens a new session (software only: the lease stays with this process, no USB
+// reset); desktop mirroring is switched without touching the session.
+void DeviceWorker::applyUserConfig() {
+    const UserConfig c = loadUserConfig(userConfigPath()).config;
+    if (!usbMode_ || !session_ || session_->isSimulated()) return;
+    if (c.outputControl != session_->writesEnabled()) {
+        connectUsb();
+        return;
+    }
+    desktopLinkWanted_ = c.desktopVolumeSync == DesktopVolumeSync::Mirror;
+#ifdef LEWITT_HAVE_ALSA
+    if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
+#else
+    desktopLinkWanted_ = false;
+#endif
+    dropDesktopLink();
+    publish();
 }
 
 void DeviceWorker::disconnectDevice() {
@@ -908,6 +931,8 @@ void DeviceController::disconnectDevice() { QMetaObject::invokeMethod(worker_, "
 void DeviceController::simulateUnplug() { QMetaObject::invokeMethod(worker_, "simulateUnplug"); }
 void DeviceController::simulateReplug() { QMetaObject::invokeMethod(worker_, "simulateReplug"); }
 void DeviceController::setSampleRate(int hz) { QMetaObject::invokeMethod(worker_, "setSampleRate", Q_ARG(int, hz)); }
+void DeviceController::applyUserConfig() { QMetaObject::invokeMethod(worker_, "applyUserConfig", Qt::QueuedConnection); }
+
 void DeviceController::flush() { QMetaObject::invokeMethod(worker_, "poll", Qt::BlockingQueuedConnection); }
 void DeviceController::setDeviceMode(bool m) { QMetaObject::invokeMethod(worker_, "setDeviceMode", Q_ARG(bool, m)); }
 void DeviceController::retryPending() { QMetaObject::invokeMethod(worker_, "retryPending"); }

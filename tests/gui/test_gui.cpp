@@ -11,12 +11,16 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <cmath>
 #include <functional>
 #include <optional>
 
 #include "DeviceController.hpp"
+#include "IntegrationSettings.hpp"
+#include "core/UserConfig.hpp"
 #include "transport/ControlLease.hpp"
 
 namespace {
@@ -47,12 +51,26 @@ struct Count {
     int count() const { return n; }
 };
 QGuiApplication* app() {
+    // Never read or write the developer's real OpenWitty settings from the tests.
+    static QTemporaryDir* configHome = [] {
+        auto* d = new QTemporaryDir();
+        qputenv("XDG_CONFIG_HOME", d->path().toUtf8());
+        return d;
+    }();
+    (void)configHome;
     static int argc = 1;
     static char name[] = "lewitt_gui_tests";
     static char* argv[] = {name, nullptr};
     // Intentionally leaked: avoids static-destruction order problems at process exit.
     static QGuiApplication* a = new QGuiApplication(argc, argv);
     return a;
+}
+// Settings backend for QML tests: no systemctl, no real ALSA/device access.
+IntegrationSettings* fakeIntegration() {
+    static IntegrationSettings* s = new IntegrationSettings(
+        nullptr, [](const QString&, const QStringList&, QString* out) { if (out) *out = "LoadState=not-found\n"; return 0; },
+        [] { return std::optional<lewitt::AudioSetupStatus>(); });
+    return s;
 }
 // Pump events until the predicate holds (worker thread results are queued).
 template <class F> bool waitFor(F pred, int ms = 3000) {
@@ -210,6 +228,7 @@ TEST(Qml, MainWindowLoadsWithoutErrors) {
     DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
@@ -238,6 +257,7 @@ TEST(Qml, LegacyDiagnosticRateIsClearlyLabelled) {
     DeviceController c(nullptr, true);
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -251,6 +271,7 @@ TEST(Qml, ProductionRateIsNotMarkedExperimental) {
     DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -267,6 +288,7 @@ TEST(Qml, EightMetersBindToObservedPresentationAndClearOnDisconnect) {
     DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -449,6 +471,7 @@ TEST(Qml, MockWindowRendersAtNarrowAndRegularWidths) {
     ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected"; }));
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -473,6 +496,7 @@ TEST(Qml, PanicMuteIndicatorFollowsDerivedState) {
     DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -500,6 +524,7 @@ TEST(Qml, FreshnessWarningTracksStaleRecoveryAndReconnect) {
     DeviceController c;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
     QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
     ASSERT_EQ(comp.status(), QQmlComponent::Ready);
     std::unique_ptr<QObject> root(comp.create());
@@ -909,7 +934,7 @@ TEST(GuiState, UsbModeNeverClaimsSimulationOrWritability) {
 // Phase 8D: the desktop volume link is never active in simulation, even with the opt-in set.
 TEST(GuiBackend, DesktopVolumeLinkIsOffInSimulation) {
     app();
-    qputenv("OPENWITTY_DESKTOP_SYNC", "1");
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, false, false}, lewitt::userConfigPath()).ok());
     {
         DeviceController c;
         c.connectMock();
@@ -917,5 +942,141 @@ TEST(GuiBackend, DesktopVolumeLinkIsOffInSimulation) {
         ASSERT_TRUE(waitFor([&] { return c.values().contains("desktop.volumeLink"); }));
         EXPECT_EQ(c.values()["desktop.volumeLink"].toString(), "off");
     }
-    qunsetenv("OPENWITTY_DESKTOP_SYNC");
+    ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
+}
+
+// Phase 8G: Settings > Desktop integration backend.
+namespace {
+struct Calls {
+    QStringList log;
+    QString show = "LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\n";
+};
+std::unique_ptr<IntegrationSettings> makeSettings(Calls& calls, std::optional<lewitt::AudioSetupStatus> st = std::nullopt) {
+    return std::make_unique<IntegrationSettings>(
+        nullptr,
+        [&calls](const QString& prog, const QStringList& args, QString* out) {
+            calls.log << prog + " " + args.join(' ');
+            if (args.contains("show") && out) *out = calls.show;
+            if (args.contains("enable")) calls.show = "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\n";
+            if (args.contains("disable")) calls.show = "LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\n";
+            return 0;
+        },
+        [st] { return st; });
+}
+lewitt::UserConfig onDisk() { return lewitt::loadUserConfig(lewitt::userConfigPath()).config; }
+}  // namespace
+
+TEST(Integration, DefaultsAreOffAndNothingIsRunOnStartup) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    auto s = makeSettings(calls);
+    EXPECT_FALSE(s->desktopSync());
+    EXPECT_FALSE(s->vendorFallback());
+    EXPECT_FALSE(s->outputControl());
+    EXPECT_EQ(s->serviceState(), "disabled");
+    for (const auto& c : calls.log) EXPECT_TRUE(c.contains(" show ")) << c.toStdString();   // only a status query
+}
+
+TEST(Integration, DeviceWritingOptionsNeedConfirmationAndFallbackNeedsSync) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    auto s = makeSettings(calls);
+    int applied = 0;
+    QObject::connect(s.get(), &IntegrationSettings::configApplied, [&] { ++applied; });
+    s->setOutputControl(true, /*confirmed=*/false);
+    EXPECT_FALSE(onDisk().outputControl);
+    s->setOutputControl(true, true);
+    EXPECT_TRUE(onDisk().outputControl);
+    s->setVendorFallback(true, true);                     // sync is off: refused
+    EXPECT_FALSE(onDisk().vendorFallback);
+    s->setDesktopSync(true);
+    s->setVendorFallback(true, false);                    // not confirmed: refused
+    EXPECT_FALSE(onDisk().vendorFallback);
+    s->setVendorFallback(true, true);
+    EXPECT_TRUE(onDisk().vendorFallback);
+    EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
+    s->setDesktopSync(false);                              // turning sync off also turns the fallback off
+    EXPECT_FALSE(onDisk().vendorFallback);
+    EXPECT_TRUE(onDisk().outputControl);                   // separate setting, untouched
+    EXPECT_EQ(applied, 4);
+    for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable")) << c.toStdString();   // never starts the service
+}
+
+TEST(Integration, BackgroundServiceOnlyOnRequestAndResetTurnsEverythingOff) {
+    app();
+    ASSERT_TRUE(lewitt::saveUserConfig({lewitt::DesktopVolumeSync::Mirror, true, true}, lewitt::userConfigPath()).ok());
+    Calls calls;
+    auto s = makeSettings(calls);
+    s->setBackgroundService(true);
+    EXPECT_TRUE(calls.log.contains("systemctl --user enable --now openwitty-volumed.service"));
+    EXPECT_EQ(s->serviceState(), "active");
+    s->resetToDefaults();
+    EXPECT_TRUE(calls.log.contains("systemctl --user disable --now openwitty-volumed.service"));
+    EXPECT_EQ(s->serviceState(), "disabled");
+    EXPECT_EQ(onDisk(), lewitt::UserConfig{});
+}
+
+TEST(Integration, MissingServiceIsReportedNotStarted) {
+    app();
+    Calls calls;
+    calls.show = "LoadState=not-found\nUnitFileState=\nActiveState=inactive\n";
+    auto s = makeSettings(calls);
+    EXPECT_EQ(s->serviceState(), "not-installed");
+    s->setBackgroundService(true);
+    EXPECT_FALSE(s->lastError().isEmpty());
+    for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable")) << c.toStdString();
+}
+
+TEST(Integration, SetupStatusAndQuirkExplanation) {
+    app();
+    Calls calls;
+    lewitt::AudioSetupStatus st;
+    st.card = 3;
+    st.mixerLoadError = -6;
+    auto s = makeSettings(calls, st);
+    EXPECT_FALSE(s->setupAvailable());                     // not probed until the page is opened
+    s->refresh();
+    EXPECT_TRUE(s->setupAvailable());
+    EXPECT_TRUE(s->cardFound());
+    EXPECT_FALSE(s->mixerLoads());
+    EXPECT_FALSE(s->findings().isEmpty());
+    EXPECT_TRUE(s->quirkInstructions().contains("29c2:0004:ignore_ctl_error"));
+    EXPECT_TRUE(s->quirkInstructions().contains("never installs it"));
+    auto none = makeSettings(calls, std::nullopt);
+    none->refresh();
+    EXPECT_FALSE(none->setupAvailable());
+}
+
+TEST(Integration, InvalidFileValuesAreShownAndFallBackToOff) {
+    app();
+    const QString path = QString::fromStdString(lewitt::userConfigPath());
+    QDir().mkpath(QFileInfo(path).path());
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write("vendor_fallback = yes please\ndesktop_volume_sync = mirror\n");
+    f.close();
+    Calls calls;
+    auto s = makeSettings(calls);
+    EXPECT_TRUE(s->desktopSync());
+    EXPECT_FALSE(s->vendorFallback());
+    EXPECT_EQ(s->configWarnings().size(), 1);
+    ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
+}
+
+TEST(Qml, DesktopIntegrationPageLoadsWithoutErrors) {
+    app();
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", fakeIntegration());
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/SettingsView.qml")));
+    for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
+    ASSERT_EQ(comp.status(), QQmlComponent::Ready);
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    root->setProperty("open", "desktop");
+    QCoreApplication::processEvents();
+    EXPECT_EQ(root->property("open").toString(), "desktop");
 }

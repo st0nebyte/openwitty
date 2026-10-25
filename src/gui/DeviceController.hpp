@@ -44,6 +44,7 @@ public slots:
     void injectFault(const QString& kind);                       // simulation only
     void simulateExternalChange(const QString& key, const QVariant& v);  // simulation only
     void simulatePanicMute();                                     // simulation only
+    void applyUserConfig();                                       // Settings > Desktop integration changed
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void meterSample(const QVariantList& levels, qint64 monotonicNs); // observed status data only
@@ -109,8 +110,8 @@ private:
     QString deviceListSignature();
     void noteOpenFailure(const lewitt::Status& s);
     // Desktop volume mirroring hosted in the GUI while it owns the device (the background
-    // openwitty-volumed yields to the GUI). Native mode only (never a device write); opt-in
-    // OPENWITTY_DESKTOP_SYNC=1 on a real device. The link refers to session_, so it is always
+    // openwitty-volumed yields to the GUI). Native mode only (never a device write); on a real device
+    // when the user setting "desktop sync" is on. The link refers to session_, so it is always
     // dropped before session_ changes.
     void serviceDesktopLink();
     void dropDesktopLink();
@@ -163,6 +164,7 @@ public:
     Q_INVOKABLE void injectFault(const QString& kind);
     Q_INVOKABLE void simulateExternalChange(const QString& key, const QVariant& v);
     Q_INVOKABLE void simulatePanicMute();
+    Q_INVOKABLE void applyUserConfig();
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
     Q_INVOKABLE void traceQmlObserved();  // opt-in measurement marker; never touches hardware
