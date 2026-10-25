@@ -285,14 +285,30 @@ address (`git config user.email`).
 * **Pushed** with exact leases: `phase7-hardware-integration` 9615d05→`d39c727`, `hardware-validation-2026-10-14`
   868331c→`171990e`, `phase6e-work-preparation` 7d8a4c0→`94b89a3`, `phase7a-interface-discovery` be0d3f3→`820412d`.
   Local branches reset to them; hash references in the docs translated with filter-repo's commit map (34 in 15 files).
-* **Not rewritten:** `main` (`ef61433`, all 29 commits carry the personal identity — see below) and GitHub's
-  `refs/pull/1..3` (read-only, GitHub-managed; they keep the old commits; removing them needs GitHub support). GitHub
-  may also keep the old commits reachable by hash until its garbage collection; the repository is private.
-* **Open (owner decision): `main`.** Keeping `main` unchanged leaves the identity in the default branch, and the
-  rewritten development branch no longer shares commits with it (the common history up to `f641709` now has new
-  hashes), so a later merge would duplicate those 14 commits. Rewriting `main` with the same rules (prepared and
-  verified in the disposable mirror: `ef61433` → `9da2276`, tree differs in one doc line) restores the common history.
-  It needs a force-push to the protected default branch.
+* **`main`** (owner-approved, second step): remote re-checked immediately before, pushed with an exact lease
+  `ef61433` → `9da2276`. Afterwards: 29 commits as before, all subjects identical and in order, tree differs in one
+  doc line. The old development branch had carried byte-identical **copies** of `main`'s 15 own commits that
+  differed only in the identity fields; after the mapping they converged, so `main` is now an ancestor of the
+  development branch (no merge was made; 130 development commits are not in `main`). Across all branches: 173
+  distinct old commits → 158 rewritten (15 duplicates absorbed), every old commit maps to an existing new one.
+* **Not rewritten — unresolved privacy blocker:** GitHub's `refs/pull/1..3/head` (`66bc210`, `d1d5e4e`, `6cef96f`;
+  read-only, GitHub-managed) still point at the old commits with the personal identity, and GitHub may keep old
+  commits reachable by hash until its garbage collection. Options: see "Pull-request refs" below.
+
+### Pull-request refs (open)
+
+| Option | Effect | Needs |
+|---|---|---|
+| GitHub Support removes the PR refs / closed PRs and purges cached views and unreachable objects | the existing repository is clean | a support request by the owner (GitHub's "remove sensitive data" procedure) |
+| Publish a **new, separate repository** pushed only from the sanitized branches (no `refs/pull/*`); keep this repository private or archive it | clean public history at once; PR discussion of the 3 old asset PRs stays private | creating a repository; deciding what happens to the old one |
+| Keep this repository private and never publish it | no exposure | nothing |
+
+Facts (GitHub's "Removing sensitive data from a repository", checked 2026-10-25): `refs/pull/*` are read-only and
+cannot be force-pushed; only GitHub Support can "dereference or delete any affected PRs", run a garbage collection
+and remove cached views — and only after all other references are clean and no fork holds the data; Support "won't
+remove non-sensitive data" (whether a personal address qualifies is Support's decision). The repository has **no
+forks**; the three PRs are the merged branding/asset PRs #1–#3. Nothing has been changed or requested (no
+visibility change, no support contact).
 
 ### Arch
 
@@ -348,7 +364,7 @@ the annotated tag `v0.1.0-alpha.1` and the release date in AppStream/CHANGELOG.
 
 ## Release blockers (current assessment)
 
-None in the code or packaging for a **private alpha review**. For a **public** release: the Git identity decision,
+None in the code or packaging for a **private alpha review**. For a **public** release: the pull-request refs (privacy, see above),
 `namcap`, the Debian validation, the clean install/removal test and the version change above; recommended in
 addition: the live check of the login-screen rule.
 

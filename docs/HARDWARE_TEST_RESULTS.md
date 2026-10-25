@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Machine:** CachyOS Linux (Arch-based), kernel `7.2.9-2-cachyos`, KDE Plasma (Wayland), PipeWire/PulseAudio-compat.
-**Build under test:** commit `ef6143363cdd69c25e3baa8f278068d838a6ac72` (HEAD at session start), `release` preset.
+**Build under test:** commit `9da22767f34504c05af45b1d9b1b42b18c38f264` (HEAD at session start), `release` preset.
 **Device:** LEWITT CONNECT 2, serial `<redacted, see note>`, bus 6 device 4, path `/sys/bus/usb/devices/6-4.1`.
 
 *Serial numbers and other per-unit identifiers below are redacted to a fixed-length placeholder
