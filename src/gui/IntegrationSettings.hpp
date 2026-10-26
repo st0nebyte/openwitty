@@ -14,7 +14,12 @@ class IntegrationSettings : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool desktopSync READ desktopSync NOTIFY changed)
     Q_PROPERTY(bool vendorFallback READ vendorFallback NOTIFY changed)
-    Q_PROPERTY(bool outputControl READ outputControl NOTIFY changed)
+    // Phase 10B: independent device-write permissions (each confirmed on its own, off by default).
+    Q_PROPERTY(bool speakerControl READ speakerControl NOTIFY changed)
+    Q_PROPERTY(bool headphoneControl READ headphoneControl NOTIFY changed)
+    Q_PROPERTY(bool ledBrightnessControl READ ledBrightnessControl NOTIFY changed)
+    // An older settings file had the combined output_control = true; it grants nothing now (reconfirm).
+    Q_PROPERTY(bool legacyOutputControlPending READ legacyOutputControlPending NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
     Q_PROPERTY(QStringList configWarnings READ configWarnings NOTIFY changed)
     // not-installed | disabled | enabled | active | unknown
@@ -47,7 +52,10 @@ public:
 
     bool desktopSync() const { return cfg_.desktopVolumeSync == lewitt::DesktopVolumeSync::Mirror; }
     bool vendorFallback() const { return cfg_.vendorFallback; }
-    bool outputControl() const { return cfg_.outputControl; }
+    bool speakerControl() const { return cfg_.speakerControl; }
+    bool headphoneControl() const { return cfg_.headphoneControl; }
+    bool ledBrightnessControl() const { return cfg_.ledBrightnessControl; }
+    bool legacyOutputControlPending() const { return cfg_.legacyOutputControlPending; }
     QString configPath() const { return path_; }
     QStringList configWarnings() const { return warnings_; }
     QString serviceState() const { return serviceState_; }
@@ -72,7 +80,11 @@ public:
     Q_INVOKABLE void setDesktopSync(bool on);          // off also turns the vendor fallback off
     // Device-writing options: only with explicit confirmation from the UI dialog.
     Q_INVOKABLE void setVendorFallback(bool on, bool confirmed);
-    Q_INVOKABLE void setOutputControl(bool on, bool confirmed);
+    // Turning on needs confirmed = true (the UI's dialog); turning off always works. Each changes only its own key.
+    Q_INVOKABLE void setSpeakerControl(bool on, bool confirmed);
+    Q_INVOKABLE void setHeadphoneControl(bool on, bool confirmed);
+    Q_INVOKABLE void setLedBrightnessControl(bool on, bool confirmed);
+    Q_INVOKABLE void dismissLegacyOutputControl();
     // systemctl --user enable --now / disable --now; turning it off is always allowed, turning it on
     // needs desktop sync. Returns whether the resulting service state is the requested one.
     Q_INVOKABLE bool setBackgroundService(bool on);

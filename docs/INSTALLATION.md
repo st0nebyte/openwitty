@@ -218,9 +218,11 @@ works the same without it. Tested offscreen; on KDE Plasma it uses the standard 
 **"Reset desktop integration"** turns everything off again, disables the service and removes the tray login entry. The settings live in
 `~/.config/openwitty/openwitty.conf`; deleting that file restores the defaults.
 
-The other options on that page write the device and need confirmation: *Speaker/headphone control* (OpenWitty's
-own faders) and the *vendor fallback* (experimental, not validated on hardware; only for a device that ignores
-the desktop volume).
+One option on that page writes the device and needs confirmation: the *vendor fallback* (experimental, not
+validated on hardware; only for a device that ignores the desktop volume). The switches that let OpenWitty's own
+controls write the device are on **Settings → Device control**: *speaker control*, *headphone control* and *LED
+brightness*, each off by default and each confirmed separately. A settings file from an older OpenWitty with
+`output_control = true` grants nothing any more: the page asks you to turn on the controls you want again.
 
 ## Uninstall
 

@@ -22,8 +22,13 @@ struct UserConfig {
     // Only with desktopVolumeSync: if the device does not follow a desktop change, apply it through the
     // vendor settings message (writes the device). Requires the user's explicit confirmation in the GUI.
     bool vendorFallback{false};
-    // Allow the GUI to change the speaker and headphone volume/mute directly (writes the device).
-    bool outputControl{false};
+    // Phase 10B: three independent GUI write permissions, each confirmed on its own (writes the device):
+    bool speakerControl{false};        // speaker volume + mute: settings bytes 20-22
+    bool headphoneControl{false};      // headphone volume + mute: settings bytes 27-29
+    bool ledBrightnessControl{false};  // LED brightness: settings byte 37
+    // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
+    // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.
+    bool legacyOutputControlPending{false};
 
     bool operator==(const UserConfig&) const = default;
 };

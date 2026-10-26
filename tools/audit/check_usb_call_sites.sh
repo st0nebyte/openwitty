@@ -64,23 +64,36 @@ grep -q 'pol.hardwareWriteOffsets.push_back(f.offset + i)' src/cli/main.cpp && g
 if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src/gui/*.cpp src/gui/*.hpp >/dev/null; then echo "FAIL GUI references hardware write policy"; fail=1; else echo "ok   GUI never enables hardware writes"; fi
 # Phase 7A: the GUI may build a UsbTransport only from the fixed read-only option set, and the
 # control interface may never be a hard-coded number or a DFU (class 0xFE) interface.
-# Phase 8D/8G: besides readOnlyHardwareOptions() the GUI may use outputControlHardwareOptions(), only behind
-# the user's confirmed "output control" setting (core/UserConfig, default off) and only paired with
-# outputWritePolicy(speaker, headphone). The settings backend itself never writes the device.
+# Phase 8D/8G/10B: besides readOnlyHardwareOptions() the GUI may use outputControlHardwareOptions(), at exactly one
+# site, only when one of the individually confirmed write permissions is on (core/UserConfig, all default off), and
+# only paired with guiWritePolicy(speaker, headphone, ledBrightness) - the union of exactly those fields' bytes.
+# The settings backend itself never writes the device.
 if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -vE 'readOnlyHardwareOptions\(\)|outputControlHardwareOptions\(\)' >/dev/null; then echo "FAIL GUI constructs a UsbTransport with unreviewed options"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() or the gated output options only"; fi
 n_out=$(grep -c 'outputControlHardwareOptions()' src/gui/DeviceController.cpp)
-if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'if (userConfig.outputControl)' \
-   || ! grep -A1 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/true)'; then
-    echo "FAIL GUI output writes must be one gated outputControlHardwareOptions()+outputWritePolicy() site"; fail=1
-else echo "ok   GUI output writes: one site, behind the confirmed setting, output-scoped policy"; fi
+if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'if (anyWritePermission)' \
+   || ! grep -B6 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'userConfig.speakerControl || userConfig.headphoneControl || userConfig.ledBrightnessControl' \
+   || ! grep -A1 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'guiWritePolicy(userConfig.speakerControl, userConfig.headphoneControl, userConfig.ledBrightnessControl)'; then
+    echo "FAIL GUI writes must be one gated outputControlHardwareOptions()+guiWritePolicy(confirmed fields) site"; fail=1
+else echo "ok   GUI writes: one site, only with a confirmed permission, policy = union of the confirmed fields"; fi
+# guiWritePolicy adds exactly the LED brightness byte to the output policy, nothing else
+gwp=$(grep -A8 'WritePolicy guiWritePolicy' src/core/OutputControl.cpp)
+if printf '%s' "$gwp" | grep -q 'WritePolicy p = outputWritePolicy(speaker, headphone);' \
+   && printf '%s' "$gwp" | grep -q 'hardwareWriteOffsets.push_back(settings_off::kLedBrightness);' \
+   && [ "$(printf '%s' "$gwp" | grep -c 'settings_off::')" -eq 1 ] \
+   && ! printf '%s' "$gwp" | grep -qE 'hardwareTriggers|allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true'; then
+    echo "ok   guiWritePolicy = output policy + LED brightness byte only (no triggers, routing or persistent changes)"
+else echo "FAIL guiWritePolicy scope changed"; fail=1; fi
 if grep -nE 'UsbTransport|DeviceSession|commit|stageOutput|writeDevice' src/gui/IntegrationSettings.cpp >/dev/null; then
     echo "FAIL IntegrationSettings must not touch the device"; fail=1
 else echo "ok   IntegrationSettings never touches the device"; fi
-if grep -q 'if (on && !confirmed) return;' src/gui/IntegrationSettings.cpp \
+if [ "$(grep -c 'if (on && !confirmed) return;' src/gui/IntegrationSettings.cpp)" -ge 3 ] \
    && grep -q 'if (on && (!confirmed || !desktopSync())) return;' src/gui/IntegrationSettings.cpp \
-   && grep -q 'bool vendorFallback{false};' src/core/UserConfig.hpp && grep -q 'bool outputControl{false};' src/core/UserConfig.hpp; then
-    echo "ok   device-writing settings default off and need confirmation"
-else echo "FAIL device-writing settings must default off and need confirmation"; fail=1; fi
+   && grep -q 'bool vendorFallback{false};' src/core/UserConfig.hpp \
+   && grep -q 'bool speakerControl{false};' src/core/UserConfig.hpp && grep -q 'bool headphoneControl{false};' src/core/UserConfig.hpp \
+   && grep -q 'bool ledBrightnessControl{false};' src/core/UserConfig.hpp \
+   && ! grep -nE '(speakerControl|headphoneControl|ledBrightnessControl)[[:space:]]*=[[:space:]]*(true|.*legacyOutputControl)' src/core/UserConfig.cpp >/dev/null; then
+    echo "ok   device-writing settings default off, need confirmation, and the legacy setting grants nothing"
+else echo "FAIL device-writing settings must default off and need confirmation (legacy must grant nothing)"; fail=1; fi
 # the GUI-hosted desktop link only mirrors (native mode); it never uses the vendor fallback
 if grep -q 'o.deviceWrites = DeviceWriteMode::Native' src/gui/DeviceController.cpp && ! grep -q 'DeviceWriteMode::Fallback' src/gui/*.cpp; then
     echo "ok   GUI desktop link is native (mirror-only)"

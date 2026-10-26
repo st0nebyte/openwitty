@@ -1,7 +1,7 @@
-# Feature completion roadmap (CONNECT 2) — Phase 10A audit
+# Feature completion roadmap (CONNECT 2) — Phase 10A audit, updated after Phase 10B
 
 Audit of every GUI control against the code, the tests and the hardware evidence, as of the development branch
-after Phase 10A (2026-10-25). Supersedes the status claims in older phase notes where they disagree; the evidence
+after Phase 10A (2026-10-25); Phase 10B changes (2026-10-26) are marked. Supersedes the status claims in older phase notes where they disagree; the evidence
 itself is in `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md` and `PROTOCOL.md`.
 
 **Bottom line:** OpenWitty reads and displays the CONNECT 2 well (validated live), and its desktop integration is
@@ -40,7 +40,27 @@ A decoded field is not proof that writing it is safe. A W-cli result is not proo
 |---|---|
 | Simulated device | all (unchanged) |
 | Real device, default (read-only) | none |
-| Real device, *Speaker/headphone control* confirmed | speaker volume, speaker mute, headphone volume, headphone mute |
+| Real device, *speaker control* confirmed (10B) | speaker volume, speaker mute (bytes 20–22) |
+| Real device, *headphone control* confirmed (10B) | headphone volume, headphone mute (bytes 27–29) |
+| Real device, *LED brightness* confirmed (10B) | LED brightness (byte 37) |
+
+## Phase 10B (offline, no hardware writes)
+
+* **WP-B done.** Settings → Device control has three switches — speaker control, headphone control, LED
+  brightness — each off by default, each with its own confirmation, each persisted (`speaker_control`,
+  `headphone_control`, `led_brightness_control`). The session policy is `guiWritePolicy()`: exactly the union of
+  the enabled scopes, no triggers; any change reconnects the session. Legacy `output_control = true` grants
+  nothing (fail-closed) and only shows a reconfirmation notice. The switches had been below the visible area of the
+  desktop page; the new section fixes that.
+* **WP-C done (except the firmware-version decode).** Mix: the knob shows the raw device value ("device value N
+  (of −100…0)") and explains that the scale is uncalibrated; out-of-range values are clamped for display; the
+  setter still accepts only the simulator's −1…1 and is not authorized on the real device. Sample rate: read
+  from the kernel (`/proc/asound/cardN/pcm0{p,c}/sub0/hw_params`, cross-checked with `stream0`), "unknown" while no
+  stream is open or the sources disagree; the PipeWire graph rate is deliberately not used (it is not the device
+  rate). `dsp.state` is available / unavailable / unknown from that rate. Onboarding and tooltips persist in
+  `gui.conf`.
+* **Defects fixed:** after a successful write `write.state` stayed "prepared" (now "verified"); a fractional
+  `hw_params` rate was accepted as an integer (now requires an exact ratio).
 
 ## Feature matrix
 
@@ -84,7 +104,7 @@ device)** · **Mock** · **HW read** · **HW write** · **GUI end to end** · **
 
 | Function | QML → backend | Field | Policy today | Mock | HW read | HW write | GUI e2e | Risk / test | Gap / defect | Prio |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Input/playback mix | knob → `mon.mix` | 35–36, sign-inverted Q8.8 | none | ✔ (−1…1) | R-hw (−100…0), R-gui | — | read ✔ | Med: monitoring level | **defect (latent):** the setter takes the simulator's −1…1, the device uses −100…0; must be fixed before any write | P2 |
+| Input/playback mix | knob → `mon.mix` | 35–36, sign-inverted Q8.8 | none | ✔ (−1…1) | R-hw (−100…0), R-gui | — | read ✔ | Med: monitoring level | raw device value shown (10B); the setter still takes the simulator's −1…1 — a real-device write needs a calibrated mapping first | P2 |
 | Direct monitoring mic / inst | → `mon.mic`/`mon.inst` | 34 (0 inst, 1 mic, 2 both) | none | ✔ state machine | R-dec | — | — | Med: routing, feedback | both buttons share one byte | P2 |
 | Dim | → `out.dim` | 32 | none | ✔ | R-dec (no physical control) | — | — | Low (quieter) | dim amount device-side | P2 |
 | Mono | → `out.mono` | 33 | none | ✔ | R-dec | — | — | Low | — | P2 |
@@ -108,12 +128,12 @@ device)** · **Mock** · **HW read** · **HW write** · **GUI end to end** · **
 
 | Function | State | Gap | Prio |
 |---|---|---|---|
-| Sample rate | real device shows "Unknown"; selector simulation only | read the rate from PipeWire/ALSA (display); selection belongs to the desktop | P2 |
+| Sample rate | real device: rate of the open kernel stream, else "Unknown" (10B); selector simulation only | selection belongs to the desktop | done (display) |
 | Firmware version | "not decoded yet" | decode `iface_version_t` | P2 |
 | Firmware update, factory reset | disabled by policy (factory reset refused in code) | — | X |
 | Presets (`.preset`) | not implemented | import/export format (shared with CONNECT 6) | P3 |
-| Onboarding tour | on demand | **first-run flag not persisted** | P2 |
-| Tooltips / footer hints | implemented | "Show tooltips" not persisted | P3 |
+| Onboarding tour | shown once at first start, then on demand (10B) | — | done |
+| Tooltips / footer hints | implemented; "Show tooltips" persisted (10B) | — | done |
 | Write verification, retry/discard | implemented (`commitAndVerify`), mock-tested | never exercised on hardware from the GUI | P1 (with the first GUI write) |
 | Unsent-edit display | edits shown on top of the device state, flagged | refused edits no longer staged (10A) | done |
 | Device-change merge (knob/button) | device-wins merge, live-validated (reads) | — | done |
@@ -142,10 +162,10 @@ any unexpected audible change; restore the original value at the end.
 
 | Step | Field (only) | Preconditions / owner actions | Expected | Read-back | Abort | Restore | Safeguards |
 |---|---|---|---|---|---|---|---|
-| **HW-1** LED brightness via the GUI | 37 | a GUI authorization for byte 37 only (to be built, WP-B); owner watches the LEDs | LEDs dim to the chosen value; GUI shows it | byte 37 = value, all other bytes unchanged | any other byte differs; no visible change; error | original brightness | cosmetic; no audio risk |
-| **HW-2** Speaker mute via the GUI | 22 | speakers turned down / amp off; *Speaker/headphone control* confirmed | speaker muted / unmuted | byte 22 | anything else changes | original mute state | mute before unmute |
+| **HW-1** LED brightness via the GUI | 37 | *LED brightness* confirmed (exists since 10B), speaker/headphone control off; owner watches the LEDs | LEDs dim to the chosen value; GUI shows "verified" | byte 37 = value, all other bytes unchanged | any other byte differs; no visible change; error; ambiguous result | original brightness | cosmetic; no audio risk; procedure below |
+| **HW-2** Speaker mute via the GUI | 22 | speakers turned down / amp off; *speaker control* confirmed, headphone control off | speaker muted / unmuted | byte 22 | anything else changes | original mute state | mute before unmute |
 | **HW-3** Speaker volume via the GUI (decreases first) | 20–21 | as HW-2; desktop volume untouched | level follows the fader | bytes 20–21 | an increase beyond 10 dB; other bytes | original level with the knob | decreases only first; then one small increase |
-| **HW-4** Headphone mute, then volume via the GUI | 29, then 27–28 | headphones **off the head**; first-ever headphone SET | as above | bytes 29 / 27–28 | as above | original | decreases first |
+| **HW-4** Headphone mute, then volume via the GUI | 29, then 27–28 | headphones **off the head**; *headphone control* confirmed, speaker control off; first-ever headphone SET | as above | bytes 29 / 27–28 | as above | original | decreases first |
 | **HW-5** Mic / instrument mute | 2 / 12 | outputs muted or monitoring off | mute follows | byte 2 / 12 | — | original | instrument-mute CLI step first (prepared) |
 | **HW-6** Mic / instrument gain (decreases first) | 0–1 / 10–11 | monitoring off, outputs down | gain follows | 2 bytes | clipping/feedback | original | small steps |
 | **HW-7** LED colours, custom button | 38–52 / 53 | none | colours / button function change | the 3 bytes / byte 53 | — | original | cosmetic; colours are persistent |
@@ -159,10 +179,27 @@ any unexpected audible change; restore the original value at the end.
 
 Excluded: firmware update, factory reset, device-mode switching, mobile streaming (until reverse-engineered).
 
+### HW-1 procedure (LED brightness, first GUI write)
+
+1. Owner approval for HW-1 only. Install the build under test (it replaces the running installation: stop the
+   window first; the background service and tray may stay — the service yields the device to the window).
+2. Settings → Device control: turn on **LED brightness** only and confirm. The banner must read "can change: LED
+   brightness"; every other control display-only.
+3. Capture the original state: `openwitty-cli read settings` (full settings bytes; note byte 37).
+4. Make **one** change on the LED brightness control to a clearly different value. Expect the LEDs to change and
+   the GUI write status "verified".
+5. Read back with the CLI: byte 37 = the chosen value, every other byte identical to step 3.
+6. Restore: set the original brightness in the GUI once, read back again, compare with step 3.
+7. Turn LED brightness off again.
+
+Abort on any other byte changing, a USB error, a "failed" status or no visible change. After an **ambiguous**
+result (timeout, "unverified", disconnect during the write) do **not** retry automatically or by hand: read the
+device first, record the state, and stop for analysis.
+
 ## Dependencies
 
-* HW-1 needs **WP-B** (narrow GUI authorizations); HW-2…HW-4 need WP-B's split of speaker and headphone.
-* HW-9 (mix) needs the mix mapping fix (WP-C). HW-10 (mix-to-speakers) needs the `OutputSource` value set (RE).
+* HW-1…HW-4: WP-B done (10B) — only owner approval and the HW procedure remain.
+* HW-9 (mix) needs a calibrated mix mapping for writes (WP-C showed the raw value only). HW-10 (mix-to-speakers) needs the `OutputSource` value set (RE).
 * HW-13 needs per-trigger authorization (exists since 10A) plus a verified autogain completion/result model.
 * HW-14 needs every component step. Denoise as the official feature needs HW-13's denoise measurement.
 * Presets need a stable set of validated writes.
@@ -172,8 +209,8 @@ Excluded: firmware update, factory reset, device-mode switching, mobile streamin
 | WP | Content | Hardware |
 |---|---|---|
 | **A** (done in 10A) | per-control capabilities, trigger authorization, refused edits not staged, banner | none |
-| **B** | narrow GUI authorizations: a confirmed *LED control* (byte 37, later 38–52/53) and splitting *Speaker/headphone control* into speaker and headphone; each persisted in the settings file, off by default, own confirmation; tests | none |
-| **C** | offline corrections: mix mapping (−100…0), `dsp.available` from the real rate (unknown → hint), sample-rate display from PipeWire/ALSA, onboarding/tooltips persistence, firmware-version decode attempt | none |
+| **B** (done in 10B) | narrow GUI authorizations: a confirmed *LED control* (byte 37, later 38–52/53) and splitting *Speaker/headphone control* into speaker and headphone; each persisted in the settings file, off by default, own confirmation; tests | none |
+| **C** (done in 10B, except the firmware-version decode) | offline corrections: mix mapping (−100…0), `dsp.available` from the real rate (unknown → hint), sample-rate display from PipeWire/ALSA, onboarding/tooltips persistence, firmware-version decode attempt | none |
 | **D** | live validation HW-1 (LED via GUI) | owner-approved |
 | **E** | live validation HW-2…HW-4 (outputs via GUI, one field at a time) | owner-approved |
 | **F** | input mute/gain (HW-5/HW-6), cosmetic (HW-7) | owner-approved |
@@ -187,7 +224,7 @@ Excluded: firmware update, factory reset, device-mode switching, mobile streamin
 * GUI writes, each validated live: **LED brightness**, **speaker volume/mute**, **headphone volume/mute**, **mic and
   instrument mute**; ideally mic/instrument gain.
 * Every other control clearly display-only on the real device (now the case) — documented as such.
-* WP-C's corrections (mix mapping, DSP availability, persisted onboarding).
+* WP-C's corrections (mix display, DSP availability, persisted onboarding) — done in 10B.
 
 ## Longer-term CONTROL CENTER parity
 

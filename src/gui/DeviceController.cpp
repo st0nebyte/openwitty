@@ -19,6 +19,7 @@
 #include "transport/ControlLease.hpp"
 #ifdef LEWITT_HAVE_ALSA
 #include "desktop/AlsaDesktopMixer.hpp"
+#include "desktop/DeviceSampleRate.hpp"
 #endif
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
@@ -246,13 +247,16 @@ void DeviceWorker::connectUsb() {
     // Real hardware: read-only options (descriptor-driven interface selection, no explicit
     // claim/detach, writes refused at transport level; usbfs can claim implicitly for
     // interface-recipient GETs and the session policy keeps hardware writes off).
-    // User settings (Settings > Desktop integration, core/UserConfig): with "output control" the
-    // speaker/headphone volume and mute bytes, and nothing else, become writable through the scoped
-    // output policy.
+    // User settings (Settings > Desktop integration, core/UserConfig): each confirmed write permission adds
+    // exactly its own bytes to the session's policy; nothing else ever becomes writable here.
     const UserConfig userConfig = loadUserConfig(userConfigPath()).config;
-    if (userConfig.outputControl)
+    // Phase 10B: only the individually confirmed fields are writable (union of speaker 20-22, headphone 27-29,
+    // LED brightness 37); nothing confirmed = the read-only transport options.
+    const bool anyWritePermission =
+        userConfig.speakerControl || userConfig.headphoneControl || userConfig.ledBrightnessControl;
+    if (anyWritePermission)
         adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()),
-                     outputWritePolicy(/*speaker=*/true, /*headphone=*/true));
+                     guiWritePolicy(userConfig.speakerControl, userConfig.headphoneControl, userConfig.ledBrightnessControl));
     else
         adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
     // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
@@ -275,18 +279,21 @@ void DeviceWorker::connectUsb() {
     markInitialReads();
     if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
+    refreshDeviceRate(true);
     publish();
     publishMeterSample();
 }
 
 // Tests only (not reachable from QML): a caller-provided transport and policy, e.g. a simulated device that
 // claims to be real hardware, so per-control permissions can be checked offline. Never used by the application.
-void DeviceWorker::connectTransportForTesting(std::unique_ptr<IDeviceTransport> t, WritePolicy p) {
+void DeviceWorker::connectTransportForTesting(std::unique_ptr<IDeviceTransport> t, WritePolicy p, std::string procRoot) {
     usbMode_ = false;
+    rateProcRoot_ = std::move(procRoot);
     adoptSession(std::move(t), std::move(p));
     auto s = session_->connect();
     if (!s) report(s);
     markInitialReads();
+    refreshDeviceRate(true);
     publish();
 }
 
@@ -350,7 +357,9 @@ void DeviceWorker::endMeasurementSessionBestEffort() {
 void DeviceWorker::applyUserConfig() {
     const UserConfig c = loadUserConfig(userConfigPath()).config;
     if (!usbMode_ || !session_ || session_->isSimulated()) return;
-    if (c.outputControl != session_->writesEnabled()) {
+    const WritePolicy wanted = guiWritePolicy(c.speakerControl, c.headphoneControl, c.ledBrightnessControl);
+    if (wanted.allowHardwareWrites != session_->policy().allowHardwareWrites ||
+        wanted.hardwareWriteOffsets != session_->policy().hardwareWriteOffsets) {
         connectUsb();
         return;
     }
@@ -460,13 +469,25 @@ void DeviceWorker::simulateReplug() {
 }
 
 void DeviceWorker::setSampleRate(int hz) {
-    sampleRate_ = hz;
-    if (session_) session_->setSampleRateHint(static_cast<std::uint32_t>(hz));
+    sampleRate_ = hz;                      // the simulator's rate selector; never applied to a real device
+    if (session_ && session_->isSimulated()) session_->setSampleRateHint(static_cast<std::uint32_t>(hz));
     publish();
+}
+
+// Phase 10B: a real session's sample rate comes only from the kernel's view of the CONNECT 2's own PCM (read-only
+// /proc files); unknown when no stream is open. It also feeds the documented 96 kHz Denoise/Comp restriction
+// (0 = unknown: no restriction is inferred).
+void DeviceWorker::refreshDeviceRate(bool force) {
+    if (!session_ || session_->isSimulated()) return;
+    if (!force && (++ratePolls_ % 48) != 0) return;     // about once a second at the 48 Hz status cadence
+    const auto r = readConnect2SampleRate(rateProcRoot_);
+    deviceRate_ = r.hz;
+    session_->setSampleRateHint(deviceRate_.value_or(0));
 }
 
 void DeviceWorker::poll() {
     if (!session_) return;
+    refreshDeviceRate(false);
     const qint64 pollStart = traceEnabled_ ? nowNs() : 0;
     const qint64 pollGapUs = lastPollNs_ ? (pollStart - lastPollNs_) / 1000 : 0;
     if (traceEnabled_) lastPollNs_ = pollStart;
@@ -653,7 +674,11 @@ void DeviceWorker::publish() {
                            session_ && session_->writesEnabled(), session_ && session_->isSimulated());
     // The sample rate comes from the audio stack, which this backend does not read yet: only the
     // simulator has a value. On real hardware the key is absent (the UI shows "Unknown").
-    if (session_ && session_->isSimulated() && cs == ConnectionState::Connected) v["sampleRate"] = sampleRate_;
+    const bool sim = session_ && session_->isSimulated();
+    if (sim && cs == ConnectionState::Connected) v["sampleRate"] = sampleRate_;
+    else if (!sim && cs == ConnectionState::Connected && deviceRate_) v["sampleRate"] = *deviceRate_;
+    else v["sampleRate"] = QVariant();                  // unknown: the UI shows "Unknown"
+    v["sampleRate.source"] = sim ? QString("simulated") : deviceRate_ ? QString("device") : QString("unknown");
     v["restarting"] = restarting_;
     // Phase 7A connection presentation. One state, derived only from facts the worker knows.
     if (cs == ConnectionState::Connected) { lostLink_ = false; intentionalDisconnect_ = false; }
@@ -703,7 +728,13 @@ void DeviceWorker::publish() {
                          : mode == DeviceMode::Normal ? "Normal" : "Unknown";
         v["set.macosStreaming"] = mode == DeviceMode::MacOSStreaming;
     }
-    v["dsp.available"] = dspAvailable(static_cast<std::uint32_t>(sampleRate_));
+    // Denoise/Comp are documented as unavailable at 96 kHz. Simulation: the simulated rate. Real device: only a
+    // confirmed rate decides; unknown is reported as unknown, never as available.
+    {
+        const std::optional<unsigned> rate = sim ? std::optional<unsigned>(static_cast<unsigned>(sampleRate_)) : deviceRate_;
+        v["dsp.state"] = !rate ? QString("unknown") : dspAvailable(*rate) ? QString("available") : QString("unavailable");
+        v["dsp.available"] = rate ? QVariant(dspAvailable(*rate)) : QVariant();
+    }
     // Phase 10A: per-control write capability ("can.<key>"), derived from the session's write policy. QML enables
     // a control only if its flag is true; on real hardware that is exactly what the policy authorizes.
     {
@@ -891,12 +922,11 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     verifying_ = true;
     auto r = session_->commitAndVerify();
     verifying_ = false;
-    if (r.state == WriteState::Verified) {
-        pendingKeys_.remove(key);
-    } else {
-        reportWrite(r);                      // keep the edit, flag it, let the user retry/discard
-        pendingKeys_.insert(key);
-    }
+    // Phase 10B: every outcome is recorded (write.state), so a confirmed write is shown as verified too; a failed
+    // one keeps the edit for retry/discard and reports the error.
+    reportWrite(r);
+    if (r.state == WriteState::Verified) pendingKeys_.remove(key);
+    else pendingKeys_.insert(key);
     publish();
 }
 
@@ -989,11 +1019,15 @@ void DeviceController::setSampleRate(int hz) { QMetaObject::invokeMethod(worker_
 void DeviceController::applyUserConfig() { QMetaObject::invokeMethod(worker_, "applyUserConfig", Qt::QueuedConnection); }
 
 void DeviceController::flush() { QMetaObject::invokeMethod(worker_, "poll", Qt::BlockingQueuedConnection); }
-void DeviceController::connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p) {
+void DeviceController::connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p,
+                                                  std::string procRoot) {
     auto* raw = t.release();
-    QMetaObject::invokeMethod(worker_, [this, raw, p] {
-        worker_->connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport>(raw), p);
+    QMetaObject::invokeMethod(worker_, [this, raw, p, procRoot] {
+        worker_->connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport>(raw), p, procRoot);
     }, Qt::BlockingQueuedConnection);
+}
+void DeviceController::refreshSampleRateForTesting() {
+    QMetaObject::invokeMethod(worker_, [this] { worker_->refreshRateForTesting(); }, Qt::BlockingQueuedConnection);
 }
 void DeviceController::setDeviceMode(bool m) { QMetaObject::invokeMethod(worker_, "setDeviceMode", Q_ARG(bool, m)); }
 void DeviceController::retryPending() { QMetaObject::invokeMethod(worker_, "retryPending"); }

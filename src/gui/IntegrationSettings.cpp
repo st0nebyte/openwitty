@@ -124,10 +124,32 @@ void IntegrationSettings::setVendorFallback(bool on, bool confirmed) {
     save(next);
 }
 
-void IntegrationSettings::setOutputControl(bool on, bool confirmed) {
+void IntegrationSettings::setSpeakerControl(bool on, bool confirmed) {
     if (on && !confirmed) return;
     UserConfig next = cfg_;
-    next.outputControl = on;
+    next.speakerControl = on;
+    if (on) next.legacyOutputControlPending = false;   // reconfirmed (for the speaker)
+    save(next);
+}
+
+void IntegrationSettings::setHeadphoneControl(bool on, bool confirmed) {
+    if (on && !confirmed) return;
+    UserConfig next = cfg_;
+    next.headphoneControl = on;
+    if (on) next.legacyOutputControlPending = false;
+    save(next);
+}
+
+void IntegrationSettings::setLedBrightnessControl(bool on, bool confirmed) {
+    if (on && !confirmed) return;
+    UserConfig next = cfg_;
+    next.ledBrightnessControl = on;
+    save(next);
+}
+
+void IntegrationSettings::dismissLegacyOutputControl() {
+    UserConfig next = cfg_;
+    next.legacyOutputControlPending = false;
     save(next);
 }
 

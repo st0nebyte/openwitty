@@ -996,7 +996,9 @@ TEST(Integration, DefaultsAreOffAndNothingIsRunOnStartup) {
     auto s = makeSettings(calls);
     EXPECT_FALSE(s->desktopSync());
     EXPECT_FALSE(s->vendorFallback());
-    EXPECT_FALSE(s->outputControl());
+    EXPECT_FALSE(s->speakerControl());
+    EXPECT_FALSE(s->headphoneControl());
+    EXPECT_FALSE(s->ledBrightnessControl());
     EXPECT_EQ(s->serviceState(), "disabled");
     for (const auto& c : calls.log) EXPECT_TRUE(c.contains(" show ")) << c.toStdString();   // only a status query
 }
@@ -1008,10 +1010,10 @@ TEST(Integration, DeviceWritingOptionsNeedConfirmationAndFallbackNeedsSync) {
     auto s = makeSettings(calls);
     int applied = 0;
     QObject::connect(s.get(), &IntegrationSettings::configApplied, [&] { ++applied; });
-    s->setOutputControl(true, /*confirmed=*/false);
-    EXPECT_FALSE(onDisk().outputControl);
-    s->setOutputControl(true, true);
-    EXPECT_TRUE(onDisk().outputControl);
+    s->setSpeakerControl(true, /*confirmed=*/false);
+    EXPECT_FALSE(onDisk().speakerControl);
+    s->setSpeakerControl(true, true);
+    EXPECT_TRUE(onDisk().speakerControl);
     s->setVendorFallback(true, true);                     // sync is off: refused
     EXPECT_FALSE(onDisk().vendorFallback);
     s->setDesktopSync(true);
@@ -1022,7 +1024,7 @@ TEST(Integration, DeviceWritingOptionsNeedConfirmationAndFallbackNeedsSync) {
     EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
     s->setDesktopSync(false);                              // turning sync off also turns the fallback off
     EXPECT_FALSE(onDisk().vendorFallback);
-    EXPECT_TRUE(onDisk().outputControl);                   // separate setting, untouched
+    EXPECT_TRUE(onDisk().speakerControl);                  // separate setting, untouched
     EXPECT_EQ(applied, 4);
     for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable")) << c.toStdString();   // never starts the service
 }
@@ -1252,11 +1254,12 @@ struct RealLike {
     lewitt::MockTransport mock;
     lewitt::testing::FakeHardware* hw{nullptr};
     std::unique_ptr<DeviceController> c;
+    QTemporaryDir proc;                                    // fixture /proc/asound (empty: no sound card)
     explicit RealLike(lewitt::WritePolicy p) {
         c = std::make_unique<DeviceController>();
         auto t = std::make_unique<lewitt::testing::FakeHardware>(&mock);
         hw = t.get();
-        c->connectTransportForTesting(std::move(t), std::move(p));
+        c->connectTransportForTesting(std::move(t), std::move(p), proc.path().toStdString());
         c->flush();
         EXPECT_TRUE(waitFor([&] { return c->connection() == "Connected" && c->values().contains("can.spk.mute"); }));
     }
@@ -1357,4 +1360,374 @@ TEST(GuiPermissions, EveryQmlControlKeyHasACapabilityEntry) {
         while (it.hasNext()) keys << it.next().captured(1);
     }
     for (const QString& k : keys) EXPECT_NE(lewitt::controlFootprint(k.toStdString()), nullptr) << k.toStdString();
+}
+
+// ---- Phase 10B: independent write permissions ------------------------------------------------------------------
+namespace {
+void writeConfigText(const char* text) {
+    const std::string path = lewitt::userConfigPath();
+    QDir().mkpath(QFileInfo(QString::fromStdString(path)).absolutePath());
+    QFile f(QString::fromStdString(path));
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(text);
+}
+lewitt::Bytes deviceBytes(RealLike& r) { return r.mock.settingsBytes(); }
+std::vector<std::size_t> changedOffsets(const lewitt::Bytes& a, const lewitt::Bytes& b) {
+    std::vector<std::size_t> d;
+    for (std::size_t i = 0; i < a.size() && i < b.size(); ++i)
+        if (a[i] != b[i]) d.push_back(i);
+    return d;
+}
+}  // namespace
+
+TEST(Permissions10B, EachPermissionIsIndependentAndUnrelatedSettingsArePreserved) {
+    app();
+    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nvendor_fallback = false\n");
+    Calls calls;
+    auto s = makeSettings(calls);
+    s->setLedBrightnessControl(true, true);
+    EXPECT_TRUE(onDisk().ledBrightnessControl);
+    EXPECT_FALSE(onDisk().speakerControl);
+    EXPECT_FALSE(onDisk().headphoneControl);
+    s->setHeadphoneControl(true, true);
+    s->setSpeakerControl(true, false);                      // not confirmed: refused
+    EXPECT_FALSE(onDisk().speakerControl);
+    EXPECT_TRUE(onDisk().headphoneControl);
+    s->setLedBrightnessControl(false, false);               // turning off needs no confirmation
+    EXPECT_FALSE(onDisk().ledBrightnessControl);
+    EXPECT_TRUE(onDisk().headphoneControl);                 // the others stay
+    EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
+    EXPECT_FALSE(onDisk().vendorFallback);
+    for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable") || c.contains("disable")) << c.toStdString();
+}
+
+TEST(Permissions10B, LegacyOutputControlAsksForReconfirmationAndGrantsNothing) {
+    app();
+    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nvendor_fallback = false\noutput_control = true\n");
+    Calls calls;
+    auto s = makeSettings(calls);
+    EXPECT_TRUE(s->legacyOutputControlPending());
+    EXPECT_FALSE(s->speakerControl());
+    EXPECT_FALSE(s->headphoneControl());
+    s->setLedBrightnessControl(true, true);                 // an unrelated permission keeps the notice
+    EXPECT_TRUE(onDisk().legacyOutputControlPending);
+    s->setHeadphoneControl(true, true);                     // reconfirming an output permission ends it
+    EXPECT_FALSE(onDisk().legacyOutputControlPending);
+    EXPECT_FALSE(onDisk().speakerControl);                  // only what was reconfirmed
+    EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
+    writeConfigText("output_control = true\n");
+    auto t = makeSettings(calls);
+    t->dismissLegacyOutputControl();
+    EXPECT_FALSE(onDisk().legacyOutputControlPending);
+    EXPECT_FALSE(onDisk().speakerControl || onDisk().headphoneControl || onDisk().ledBrightnessControl);
+}
+
+TEST(Permissions10B, ResetTurnsEveryWritePermissionOff) {
+    app();
+    writeConfigText("speaker_control = true\nheadphone_control = true\nled_brightness_control = true\noutput_control = true\n");
+    Calls calls;
+    auto s = makeSettings(calls);
+    EXPECT_TRUE(s->resetToDefaults());
+    EXPECT_EQ(onDisk(), lewitt::UserConfig{});
+}
+
+TEST(Permissions10B, ConfirmationDialogCancelGrantsNothingEnableGrantsOnlyThatField) {
+    app();
+    writeConfigText("[openwitty]\n");
+    Calls calls;
+    auto s = makeSettings(calls);
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", s.get());
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    root->setProperty("showSettings", true);                 // Settings > Desktop integration
+    QObject* sv = root->findChild<QObject*>("settingsView");
+    ASSERT_TRUE(sv);
+    sv->setProperty("open", "device");                        // Settings > Device control
+    QCoreApplication::processEvents();
+    QObject* sw = root->findChild<QObject*>("ledControlSwitch");
+    QObject* dialog = root->findChild<QObject*>("confirmWriteDialog");
+    QObject* cancel = root->findChild<QObject*>("confirmWriteCancel");
+    QObject* enable = root->findChild<QObject*>("confirmWriteEnable");
+    ASSERT_TRUE(sw && dialog && cancel && enable);
+    QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
+    EXPECT_TRUE(dialog->property("visible").toBool());
+    EXPECT_EQ(dialog->property("field").toString(), "led");
+    QMetaObject::invokeMethod(cancel, "clicked");
+    EXPECT_FALSE(dialog->property("visible").toBool());
+    EXPECT_FALSE(s->ledBrightnessControl());
+    EXPECT_FALSE(sw->property("checked").toBool());        // the switch shows the real (unchanged) state
+    QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
+    QMetaObject::invokeMethod(enable, "clicked");
+    EXPECT_TRUE(s->ledBrightnessControl());
+    EXPECT_FALSE(s->speakerControl());
+    EXPECT_FALSE(s->headphoneControl());
+    EXPECT_TRUE(sw->property("checked").toBool());
+}
+
+TEST(Permissions10B, EveryCombinationAuthorizesExactlyItsControls) {
+    app();
+    for (int m = 0; m < 8; ++m) {
+        const bool sp = m & 1, hp = m & 2, led = m & 4;
+        RealLike r(lewitt::guiWritePolicy(sp, hp, led));
+        for (const auto& k : lewitt::controlKeys()) {
+            const QString key = QString::fromStdString(k);
+            const bool expected = (sp && (key == "spk.volume" || key == "spk.mute")) ||
+                                  (hp && (key == "hp.volume" || key == "hp.mute")) || (led && key == "set.ledBrightness");
+            EXPECT_EQ(r.can(k.c_str()), expected) << k << " combination " << m;
+        }
+    }
+}
+
+TEST(Permissions10B, LedBrightnessAloneWritesOnlyByte37AndRestoresTheOriginal) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    EXPECT_FALSE(r.can("spk.volume"));
+    EXPECT_FALSE(r.can("set.led.icons"));                    // LED colours are not part of it
+    const int original = r.c->values().value("set.ledBrightness").toInt();
+    const lewitt::Bytes before = deviceBytes(r);
+    const int target = original == 60 ? 40 : 60;
+    r.c->setValue("set.ledBrightness", target);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("set.ledBrightness").toInt() == target; }));
+    EXPECT_EQ(changedOffsets(before, deviceBytes(r)), (std::vector<std::size_t>{lewitt::settings_off::kLedBrightness}));
+    EXPECT_EQ(r.c->values().value("write.state").toString(), "verified");
+    r.c->setValue("set.ledBrightness", original);            // the later hardware test's restore step
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("set.ledBrightness").toInt() == original; }));
+    EXPECT_EQ(deviceBytes(r), before);
+    // speaker and headphone edits are refused without staging
+    const int writes = r.hw->writeCalls;
+    r.c->setValue("spk.mute", true);
+    r.c->setValue("hp.volume", -40.0);
+    r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls, writes);
+    EXPECT_FALSE(r.c->values().value("pending.spk.mute").toBool());
+}
+
+TEST(Permissions10B, AnAmbiguousLedWriteIsNeverRetriedAutomatically) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    r.hw->dropWrites = true;                                  // the device acknowledges but ignores the SET
+    const int original = r.c->values().value("set.ledBrightness").toInt();
+    r.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("pending.set.ledBrightness").toBool(); }));
+    const int writes = r.hw->writeCalls;
+    for (int i = 0; i < 5; ++i) r.c->flush();                 // polls only
+    EXPECT_EQ(r.hw->writeCalls, writes);                      // no automatic retry
+    EXPECT_EQ(lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value().ledBrightness(), original);
+}
+
+TEST(Permissions10B, SpeakerIncreasesStayBoundedTo10dBPerStep) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(true, false, false));
+    {
+        auto m = lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value();   // device at -40 dB
+        ASSERT_TRUE(m.setSpeakerVolumeDb(-40.0).ok());
+        auto b = m.bytes();
+        r.mock.setSettingsBytes(lewitt::Bytes(b.begin(), b.end()));
+    }
+    ASSERT_TRUE(waitFor([&] {
+        r.c->flush();                                         // settings are read on their own schedule
+        return std::fabs(r.c->values().value("spk.volume").toDouble() + 40.0) < 0.01;
+    }));
+    const double start = -40.0;
+    r.c->setValue("spk.volume", 0.0);                         // a jump to the maximum
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("spk.volume").toDouble() > start; }));
+    EXPECT_LE(r.c->values().value("spk.volume").toDouble(), start + 10.0 + 1e-6);   // -30 dB, not 0 dB
+    EXPECT_GE(r.c->values().value("spk.volume").toDouble(), start + 10.0 - 0.01);
+}
+
+// ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------
+namespace {
+void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field is stored sign-inverted Q8.8
+    lewitt::Bytes b = mock.settingsBytes();
+    const auto q = static_cast<std::int16_t>(std::lround(-deviceValue * 256.0));
+    b[lewitt::settings_off::kInputPlaybackMix] = static_cast<std::uint8_t>(q & 0xff);
+    b[lewitt::settings_off::kInputPlaybackMix + 1] = static_cast<std::uint8_t>((q >> 8) & 0xff);
+    mock.setSettingsBytes(b);
+}
+}  // namespace
+
+TEST(MonitorMix, RealDeviceValuesAreShownOnTheObservedScaleAndClamped) {
+    app();
+    RealLike r{lewitt::WritePolicy{}};
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    QObject* knob = root->findChild<QObject*>("monitorMixKnob");
+    QObject* readout = root->findChild<QObject*>("monitorMixReadout");
+    ASSERT_TRUE(knob && readout);
+    struct Case { double device, frac; const char* text; };
+    for (const Case& c : {Case{-100, 0.0, "device value -100 (of -100...0)"}, Case{-50, 0.5, "device value -50 (of -100...0)"},
+                          Case{0, 1.0, "device value 0 (of -100...0)"}, Case{-120, 0.0, "device value -120 (of -100...0)"},
+                          Case{5, 1.0, "device value 5 (of -100...0)"}}) {
+        setRawMix(r.mock, c.device);
+        ASSERT_TRUE(waitFor([&] {
+            r.c->flush();
+            return std::fabs(r.c->values().value("mon.mix").toDouble() - c.device) < 0.01;
+        })) << c.device;
+        QCoreApplication::processEvents();
+        EXPECT_NEAR(knob->property("frac").toDouble(), c.frac, 1e-9) << c.device;   // out-of-range values are clamped
+        EXPECT_TRUE(readout->property("visible").toBool());
+        EXPECT_EQ(readout->property("text").toString(), c.text);
+    }
+    EXPECT_FALSE(knob->property("enabled").toBool());          // display only on the real device
+    EXPECT_FALSE(r.can("mon.mix"));
+}
+
+TEST(MonitorMix, SimulatorKeepsItsScaleAndHasNoReadout) {
+    app();
+    DeviceController c;
+    QQmlEngine engine;
+    auto root = loadMain(c, engine);
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected" && c.values().contains("mon.mix"); }));
+    QCoreApplication::processEvents();
+    QObject* knob = root->findChild<QObject*>("monitorMixKnob");
+    QObject* readout = root->findChild<QObject*>("monitorMixReadout");
+    ASSERT_TRUE(knob && readout);
+    EXPECT_DOUBLE_EQ(knob->property("from").toDouble(), -1.0);
+    EXPECT_DOUBLE_EQ(knob->property("to").toDouble(), 1.0);
+    EXPECT_FALSE(readout->property("visible").toBool());
+    c.setValue("mon.mix", 1.0);
+    c.flush();
+    ASSERT_TRUE(waitFor([&] { return std::fabs(c.values().value("mon.mix").toDouble() - 1.0) < 0.01; }));
+    QCoreApplication::processEvents();
+    EXPECT_NEAR(knob->property("frac").toDouble(), 1.0, 1e-9);
+    lewitt::SettingsMessage m = lewitt::SettingsMessage::fromBytes(lewitt::Bytes(0x80, 0)).value();
+    EXPECT_FALSE(m.setInputPlaybackMix(-100.0).ok());          // no real-device write scale is assumed
+}
+
+// ---- Phase 10B: real sample rate and DSP availability ------------------------------------------------------------
+TEST(SampleRate10B, UnknownOnAnIdleOrMissingDeviceAndNeverTheSimulatedDefault) {
+    app();
+    RealLike r{lewitt::WritePolicy{}};                       // fixture /proc/asound without the card
+    EXPECT_FALSE(r.c->values().value("sampleRate").isValid());
+    EXPECT_EQ(r.c->values().value("sampleRate.source").toString(), "unknown");
+    EXPECT_EQ(r.c->values().value("dsp.state").toString(), "unknown");
+    r.c->setSampleRate(96000);                               // the simulator's selector cannot change a real session
+    r.c->flush();
+    EXPECT_FALSE(r.c->values().value("sampleRate").isValid());
+    EXPECT_EQ(r.c->values().value("dsp.state").toString(), "unknown");
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    bool unknownShown = false;
+    for (QObject* o : root->findChildren<QObject*>())
+        if (o->property("text").toString() == "Unknown") unknownShown = true;
+    EXPECT_TRUE(unknownShown);
+}
+
+TEST(SampleRate10B, AConfirmed96kHzMakesDenoiseAndCompUnavailable) {
+    app();
+    RealLike r{lewitt::WritePolicy{}};
+    const QString card = r.proc.path() + "/card3";
+    QDir().mkpath(card + "/pcm0p/sub0");
+    QFile id(card + "/usbid"); ASSERT_TRUE(id.open(QIODevice::WriteOnly)); id.write("29c2:0004\n"); id.close();
+    QFile hw(card + "/pcm0p/sub0/hw_params"); ASSERT_TRUE(hw.open(QIODevice::WriteOnly));
+    hw.write("access: MMAP_INTERLEAVED\nrate: 96000 (96000/1)\n"); hw.close();
+    r.c->refreshSampleRateForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("sampleRate").toInt() == 96000; }));
+    EXPECT_EQ(r.c->values().value("sampleRate.source").toString(), "device");
+    EXPECT_EQ(r.c->values().value("dsp.state").toString(), "unavailable");
+    EXPECT_FALSE(r.c->values().value("dsp.available").toBool());
+    QFile hw48(card + "/pcm0p/sub0/hw_params"); ASSERT_TRUE(hw48.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    hw48.write("rate: 48000 (48000/1)\n"); hw48.close();
+    r.c->refreshSampleRateForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("dsp.state").toString() == "available"; }));
+}
+
+TEST(SampleRate10B, MockModeKeepsItsSimulatedRate) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected" && c.values().contains("dsp.state"); }));
+    EXPECT_EQ(c.values().value("sampleRate.source").toString(), "simulated");
+    EXPECT_EQ(c.values().value("sampleRate").toInt(), 48000);
+    EXPECT_EQ(c.values().value("dsp.state").toString(), "available");
+    c.setSampleRate(96000);
+    ASSERT_TRUE(waitFor([&] { return c.values().value("dsp.state").toString() == "unavailable"; }));
+}
+
+// ---- Phase 10B: GUI preferences ----------------------------------------------------------------------------------
+#include "GuiPreferences.hpp"
+
+TEST(GuiPreferences10B, DefaultsPersistenceAndSafeFallback) {
+    app();
+    QTemporaryDir d;
+    const QString path = d.path() + "/openwitty/gui.conf";
+    {
+        GuiPreferences p(path);
+        EXPECT_FALSE(p.onboardingDone());                    // missing file: first run
+        EXPECT_TRUE(p.showTooltips());
+        p.setOnboardingDone(true);
+        p.setShowTooltips(false);
+    }
+    GuiPreferences again(path);
+    EXPECT_TRUE(again.onboardingDone());
+    EXPECT_FALSE(again.showTooltips());
+    for (const char* text : {"onboarding_done = maybe\nshow_tooltips = 0\n", "onboarding_done = true\nonboarding_done = true\n",
+                             "\x01garbage\n", "show_tooltips = false\nshow_tooltips = false\n"}) {
+        QFile f(path);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(text);
+        f.close();
+        GuiPreferences p(path);
+        EXPECT_FALSE(p.onboardingDone()) << text;            // invalid or ambiguous: defaults
+        EXPECT_TRUE(p.showTooltips()) << text;
+    }
+}
+
+TEST(GuiPreferences10B, SeparateFromDeviceWritePermissions) {
+    app();
+    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nled_brightness_control = true\n");
+    const lewitt::UserConfig before = onDisk();
+    GuiPreferences p;                                        // default path, next to openwitty.conf
+    EXPECT_TRUE(p.path().endsWith("/openwitty/gui.conf"));
+    p.setShowTooltips(!p.showTooltips());
+    p.setOnboardingDone(!p.onboardingDone());
+    EXPECT_EQ(onDisk(), before);                             // the device permissions file is untouched
+}
+
+TEST(GuiPreferences10B, OnboardingFinishAndTooltipSwitchAreRemembered) {
+    app();
+    QTemporaryDir d;
+    GuiPreferences prefs(d.path() + "/gui.conf");
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("prefs", &prefs);
+    auto root = loadMain(c, engine);
+    ASSERT_TRUE(root);
+    root->setProperty("showOnboarding", true);
+    QObject* overlay = root->findChild<QObject*>("onboardingOverlay");
+    ASSERT_TRUE(overlay);
+    QMetaObject::invokeMethod(overlay, "finished");
+    EXPECT_FALSE(root->property("showOnboarding").toBool());
+    EXPECT_TRUE(prefs.onboardingDone());
+    root->setProperty("showSettings", true);
+    QCoreApplication::processEvents();
+    QObject* tips = root->findChild<QObject*>("showTooltipsSwitch");
+    ASSERT_TRUE(tips);
+    QMetaObject::invokeMethod(tips, "toggled", Q_ARG(bool, false));
+    EXPECT_FALSE(prefs.showTooltips());
+    GuiPreferences reread(prefs.path());
+    EXPECT_FALSE(reread.showTooltips());
+    EXPECT_TRUE(reread.onboardingDone());
+}
+
+TEST(GuiPreferences10B, FirstRunDecisionIsDeterministic) {
+    app();
+    QTemporaryDir d;
+    GuiPreferences p(d.path() + "/gui.conf");
+    EXPECT_TRUE(p.showOnboardingAtStart(false, false));     // first interactive start
+    EXPECT_FALSE(p.showOnboardingAtStart(true, false));     // screenshot runs never
+    EXPECT_FALSE(p.showOnboardingAtStart(false, true));     // an explicit --show page wins
+    p.setOnboardingDone(true);
+    EXPECT_FALSE(p.showOnboardingAtStart(false, false));    // remembered
 }

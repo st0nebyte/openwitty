@@ -15,7 +15,9 @@ Item {
         objectName: "monitorMixKnob"
         x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
         enabled: root.can("mon.mix"); showValue: false; warnFrom: 1
-        tip: "Hear your input signal and computer"
+        tip: device.simulated ? "Hear your input signal and computer"
+             : "Monitoring mix as read from the CONNECT 2 (device scale -100...0, observed at the physical stops). "
+               + "How it maps to the 100:0...0:100 labels in between is not calibrated. Display only."
         // Physical CONNECT 2 reads observed in Phase 7C span -100..0. Keep the established
         // simulated -1..1 control unchanged; real hardware remains display-only.
         from: device.simulated ? -1 : -100; to: device.simulated ? 1 : 0
@@ -24,6 +26,10 @@ Item {
         minLabel: "100:0"; maxLabel: "0:100"
         onMoved: (nv) => device.setValue("mon.mix", nv)
     }
+    // Phase 10B: on the real device the raw value is shown, since the label mapping is not calibrated.
+    Text { objectName: "monitorMixReadout"; visible: !device.simulated && device.values["mon.mix"] !== undefined
+           anchors.horizontalCenter: parent.horizontalCenter; y: 168; color: Theme.textDim; font.pixelSize: 9
+           text: "device value " + Math.round(root.v("mon.mix", 0)) + " (of -100...0)" }
     Text { x: 3; y: 186; horizontalAlignment: Text.AlignHCenter; width: 78; color: Theme.textDim
            font.pixelSize: 9; text: "Direct\ninput signal" }
     Text { x: 80; y: 186; horizontalAlignment: Text.AlignHCenter; width: 70; color: Theme.textDim

@@ -27,8 +27,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Vendor fallback (explicit opt-in).** `--vendor-fallback` additionally applies a desktop change that the device did not
   follow within the follow grace (1.5 s) through the vendor settings message: speaker bytes only, fresh snapshot, one SET, read-back verification, no retries,
   increases limited to 10 dB per step, never at startup. Intended for the verified "SET ignored" state.
-* **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker/headphone controls write the device only with the
-  confirmed *Speaker/headphone control* setting (scoped policy). While the GUI owns the device it hosts the same mirror when
+* **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker and headphone controls write the device only with the
+  confirmed *speaker control* or *headphone control* setting respectively (Settings → Device control; scoped policy). While the GUI owns the device it hosts the same mirror when
   *desktop sync* is on (native mode only); the daemon yields the device to the GUI and takes it back afterwards.
 * **One writer.** All OpenWitty processes share one per-user control lease; the GUI asks the daemon to hand over with a yield
   request. Policy and write path are the same code everywhere (`core/VolumeSync`, `desktop/DesktopVolumeLink`).
@@ -89,7 +89,6 @@ systemctl --user disable --now openwitty-volumed.service    # undo
 | Show the volume knob in the desktop volume | off | mirror mode: the desktop (KDE/PipeWire) volume of the CONNECT 2 follows the speaker volume knob, which the kernel cannot see (broken volume read-back); while OpenWitty is open the window does it, otherwise the background service. The Mute button and the desktop slider/mute need no OpenWitty: the kernel handles them (validated on the development system, Phase 8H) | no (the desktop control is updated to the level the device already has; the kernel forwards that update) |
 | Keep it running when OpenWitty is closed | off | `systemctl --user enable --now` / `disable --now` of `openwitty-volumed.service`, only when you flip it; shows "not installed / off / on / running" | no |
 | Vendor fallback | off; needs desktop sync | if the device does not follow a desktop volume change, the background service applies it through the vendor protocol (speaker volume/mute only, ≤ 10 dB louder per step, read-back verified, never at start-up). Enabling shows an explanation that must be confirmed | **yes** |
-| Speaker/headphone control | off | OpenWitty's own speaker and headphone faders may change the device (scoped to those bytes, ≤ 10 dB louder per step, read-back verified); confirmation required; applied at once by reconnecting the session | **yes** |
 | Show OpenWitty in the system tray | off | starts `openwitty-tray` now and at login (XDG autostart entry); off removes the entry and quits the icon. The icon shows the knob-display and service state and opens OpenWitty; it never uses the device and never changes the service (Phase 9B) | no |
 | Reset desktop integration | – | after confirmation: all of the above off, the background service disabled and the tray login entry removed; the kernel quirk is not touched | no |
 
@@ -104,8 +103,14 @@ written atomically by the GUI (0600, directory 0700), read by the GUI and by `op
 [openwitty]
 desktop_volume_sync = off      # off | mirror
 vendor_fallback = false        # true writes the device
-output_control = false         # true writes the device
+speaker_control = false        # true: OpenWitty's speaker fader/mute write the device
+headphone_control = false      # true: OpenWitty's headphone fader/mute write the device
+led_brightness_control = false # true: OpenWitty's LED brightness control writes the device
 ```
+The three device-control keys are set on **Settings → Device control** (each confirmed separately, applied at once by
+reconnecting the session with the matching scoped policy: speaker bytes 20–22, headphone bytes 27–29, LED byte 37).
+`output_control` from an older version grants **nothing**: `output_control = true` is kept only as a reminder (with a
+"grants NOTHING" comment) until speaker or headphone control is set or the notice is dismissed.
 Missing file = defaults. Invalid values fall back to the safe default and are shown as warnings in the page and in the
 daemon log; unknown keys are ignored with a warning. Deleting the file resets everything.
 
@@ -150,7 +155,7 @@ rm -f ~/.config/openwitty/openwitty.conf                   # optional: forget th
 
 ## Settings validation (real device)
 Scope: the Settings page, mirror on/off from the page, the background-service switch, the GUI ↔ daemon hand-over.
-**Vendor fallback and Speaker/headphone control stay off throughout.** Nothing changes the speaker level except the owner's
+**Vendor fallback and speaker/headphone control stay off throughout.** Nothing changes the speaker level except the owner's
 knob/Mute button and one small desktop decrease. No reboot, replug, USB reset or audio-service restart.
 1. Install as above; `systemctl --user status` shows the unit loaded and disabled. Settings file absent (defaults).
 2. Start `openwitty`, open Settings → Desktop integration: expect "Desktop hardware volume: available", quirk active, all

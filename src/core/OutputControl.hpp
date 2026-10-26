@@ -26,6 +26,10 @@ std::vector<std::size_t> outputWriteOffsets(Output o);
 // A write policy that authorizes hardware writes for exactly the given outputs' bytes and nothing
 // else (no routing, no persistent changes, no other settings byte). Empty selection = read-only.
 WritePolicy outputWritePolicy(bool speaker, bool headphone);
+// Phase 10B: the GUI's hardware write policy - exactly the union of the individually confirmed permissions:
+// speaker volume+mute (bytes 20-22), headphone volume+mute (27-29), LED brightness (37). No triggers, no routing
+// or persistent changes. All false = the read-only default (no hardware writes at all).
+WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness);
 
 // Clamp to the device range and round to the Q8.8 grid the device stores. Non-finite -> nullopt.
 std::optional<double> normalizeOutputDb(double db);

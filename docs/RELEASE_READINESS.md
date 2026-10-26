@@ -56,7 +56,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
 | 18 | Speaker level unchanged across logout/login | **FAIL (limitation)** — the login screen's own audio service sets its default level; see "Speaker level at the login screen (Phase 9C)" |
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
-| 20 | GUI *Speaker/headphone control* on hardware | **NOT DONE** — no GUI control has written to the real device yet; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20 | GUI device control (speaker, headphone, LED brightness) on hardware | **NOT DONE** — no GUI control has written to the real device yet; first step HW-1 (LED) in `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
 | 20a | GUI permissions match the write policy (Phase 10A: per-control capabilities; triggers need their own authorization) | PASS (offline tests) |
 
 **Open decisions**
@@ -70,10 +71,10 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 
 * Tested on one device and one system only (table above). The desktop integration's timing (the device reports
   a level the kernel set 0.4–0.7 s late; the follow grace is 1.5 s) was measured on that system only.
-* On the real device most controls are display-only; only the speaker/headphone volume and mute can be changed
-  from the GUI, and only after a confirmed opt-in. Low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom
+* On the real device most controls are display-only; only the speaker volume/mute, the headphone volume/mute and the LED
+  brightness can be changed from the GUI, each only after its own confirmed opt-in. Low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom
   button, autogain/autosetup and sample-rate selection work with the simulated device only.
-* **Experimental:** vendor fallback (not validated on hardware), GUI speaker/headphone control (not exercised
+* **Experimental:** vendor fallback (not validated on hardware), GUI device control (not exercised
   on hardware), CLI write commands (`instrument-mute` never executed).
 * The kernel compatibility quirk is specific to the CONNECT 2 and was needed on Linux 7.3.0; other kernels have
   not been checked. It is never installed by OpenWitty or its packages.

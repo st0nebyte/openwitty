@@ -44,6 +44,8 @@ Window {
     property bool showSettings: false
     property bool showWizard: false
     property bool showOnboarding: false
+    // Phase 10B: the tooltip preference is restored from gui.conf (when the application provides it)
+    Component.onCompleted: if (typeof prefs !== "undefined") Hint.enabled = prefs.showTooltips
     // One frame-synchronized clock for eight presentation envelopes; never performs USB I/O.
     FrameAnimation {
         running: win.visible && win.active && win.live && device.meters.needsFrames
@@ -168,8 +170,9 @@ Window {
         SettingsView { objectName: "settingsView"; visible: win.showSettings; x: 0; y: 0; width: parent.width; height: parent.height; z: 10
                        interactive: win.interactive; onCloseRequested: win.showSettings = false
                        onOnboardingRequested: { win.showSettings = false; win.showOnboarding = true; } }
-        OnboardingOverlay { visible: win.showOnboarding; x: 0; y: 0; width: parent.width; height: parent.height; z: 12
-                            onFinished: win.showOnboarding = false }
+        OnboardingOverlay { objectName: "onboardingOverlay"; visible: win.showOnboarding; x: 0; y: 0; width: parent.width; height: parent.height; z: 12
+                            onFinished: { win.showOnboarding = false;
+                                          if (typeof prefs !== "undefined") prefs.setOnboardingDone(true); } }
         AutosetupWizard { visible: win.showWizard; x: 0; y: 0; width: parent.width; height: parent.height; z: 11
                           interactive: win.interactive && device.values["can.autosetup"] === true
                           onCloseRequested: win.showWizard = false }

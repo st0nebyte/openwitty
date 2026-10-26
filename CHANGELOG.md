@@ -24,9 +24,13 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Setup check for the desktop hardware volume and the kernel compatibility quirk (`openwitty-volumed --check`,
   Settings page), with an example module option for Linux 7.3 (`examples/openwitty-connect2.conf`, never
   installed automatically).
-- Optional, confirmed *Speaker/headphone control*: OpenWitty's faders write speaker and headphone volume/mute
-  only (≤ 10 dB louder per step, read back, never retried). The vendor write path is verified on hardware; the
-  GUI option has not been exercised on hardware.
+- Settings → Device control: three separate, separately confirmed permissions — speaker control, headphone
+  control, LED brightness — each scoped to its own bytes (volume ≤ 10 dB louder per step; every write read back,
+  never retried). All other real-device controls are display-only and say so per control. The vendor write path
+  is verified on hardware; the GUI permissions have not been exercised on hardware.
+- Device sample rate shown from the kernel's stream state (read-only; "unknown" while no stream is open); the
+  monitoring-mix knob also shows the raw device value, because the device scale is not calibrated.
+- GUI preferences (`gui.conf`): the first-run introduction is shown once, the tooltip setting is remembered.
 - Optional *vendor fallback* for a device that ignores the desktop volume — **experimental, not validated on
   hardware**.
 - `openwitty-cli`: device listing, diagnosis, read-only reads, and four opt-in single-setting write commands
@@ -38,6 +42,18 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   forwarded) instead of opening a second device session. Launcher action "Desktop integration settings".
 - One-writer control lease shared by all OpenWitty processes; USB call-site audit; man pages for all four
   programs; Arch PKGBUILD and Debian packaging; udev `uaccess` rule.
+
+### Changed
+
+- The combined `output_control` setting was replaced by `speaker_control`, `headphone_control` and
+  `led_brightness_control`. An existing `output_control = true` grants nothing (fail-closed); OpenWitty asks
+  you to reconfirm the controls you want.
+
+### Fixed
+
+- After a successful write the GUI write status stayed "prepared"; it now reads "verified".
+- Triggers (e.g. Autogain) could have been sent under the speaker/headphone permission; triggers now need their
+  own authorization, which no control has.
 
 ### Known limitations
 

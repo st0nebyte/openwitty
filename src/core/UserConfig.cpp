@@ -18,6 +18,13 @@ std::string trim(const std::string& s) {
     if (b == std::string::npos) return {};
     return s.substr(b, s.find_last_not_of(" \t\r\n") - b + 1);
 }
+bool& flag(UserConfig& c, const std::string& key) {
+    if (key == "vendor_fallback") return c.vendorFallback;
+    if (key == "speaker_control") return c.speakerControl;
+    if (key == "headphone_control") return c.headphoneControl;
+    if (key == "led_brightness_control") return c.ledBrightnessControl;
+    return c.legacyOutputControlPending;   // "output_control" (legacy)
+}
 int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
     if (v == "true" || v == "yes" || v == "on" || v == "1") return 1;
     if (v == "false" || v == "no" || v == "off" || v == "0") return 0;
@@ -45,7 +52,8 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
             continue;
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
-        const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control";
+        const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control" ||
+                           key == "speaker_control" || key == "headphone_control" || key == "led_brightness_control";
         if (!known) {
             r.warnings.push_back("unknown key '" + key + "' ignored");
             continue;
@@ -64,15 +72,21 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         } else {
             const int b = parseBool(value);
             if (b < 0) r.warnings.push_back(key + ": '" + value + "' is not true|false, using false");
-            (key == "vendor_fallback" ? r.config.vendorFallback : r.config.outputControl) = b == 1;
+            flag(r.config, key) = b == 1;
         }
     }
     for (const auto& key : duplicated) {
         r.warnings.push_back("'" + key + "' is set more than once: ambiguous, using the safe default");
         if (key == "desktop_volume_sync") r.config.desktopVolumeSync = DesktopVolumeSync::Off;
-        else if (key == "vendor_fallback") r.config.vendorFallback = false;
-        else r.config.outputControl = false;
+        else flag(r.config, key) = false;
     }
+    // Legacy migration, fail-closed: the old combined output permission is never turned into the new ones. It
+    // only asks for a reconfirmation - and only while none of the new output permissions has been given.
+    if (r.config.legacyOutputControlPending && (r.config.speakerControl || r.config.headphoneControl))
+        r.config.legacyOutputControlPending = false;
+    if (r.config.legacyOutputControlPending)
+        r.warnings.push_back("output_control (from an older OpenWitty) no longer grants anything: turn on the speaker "
+                             "and/or headphone control again in Settings > Desktop integration if you want them");
     return r;
 }
 
@@ -84,8 +98,17 @@ std::string serializeUserConfig(const UserConfig& c) {
       << "desktop_volume_sync = " << (c.desktopVolumeSync == DesktopVolumeSync::Mirror ? "mirror" : "off") << "\n"
       << "# true writes the device: apply a desktop volume change the device did not follow (vendor protocol).\n"
       << "vendor_fallback = " << (c.vendorFallback ? "true" : "false") << "\n"
-      << "# true writes the device: let OpenWitty change the speaker/headphone volume and mute directly.\n"
-      << "output_control = " << (c.outputControl ? "true" : "false") << "\n";
+      << "# Each of the following writes the device, is confirmed on its own and changes only the bytes named.\n"
+      << "# true: OpenWitty's speaker fader and MUTE change the speaker volume and mute (settings bytes 20-22).\n"
+      << "speaker_control = " << (c.speakerControl ? "true" : "false") << "\n"
+      << "# true: OpenWitty's headphone fader and MUTE change the headphone volume and mute (bytes 27-29).\n"
+      << "headphone_control = " << (c.headphoneControl ? "true" : "false") << "\n"
+      << "# true: OpenWitty's LED brightness slider changes the LED brightness (byte 37).\n"
+      << "led_brightness_control = " << (c.ledBrightnessControl ? "true" : "false") << "\n";
+    if (c.legacyOutputControlPending)
+        o << "# Legacy setting from an older OpenWitty. It grants NOTHING; it is kept only so that Settings can ask\n"
+          << "# you to reconfirm the speaker/headphone control above. Removed when you do so or reset.\n"
+          << "output_control = true\n";
     return o.str();
 }
 

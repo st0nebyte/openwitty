@@ -99,7 +99,7 @@ endif()
 # Desktop (ALSA) volume integration: policy glue is always built and tested; the libasound backend
 # and the openwitty-volumed daemon need alsa-lib and the USB transport.
 add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp
-            src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp)
+            src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp src/desktop/DeviceSampleRate.cpp)
 target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
 target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
 option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
@@ -218,6 +218,7 @@ if(LEWITT_BUILD_TESTS)
                                         tests/cpp/test_route_volume.cpp        # Phase 9C route-volume proof of concept
                                         tests/cpp/test_trigger_policy.cpp      # Phase 10A trigger authorization
                                         tests/cpp/test_control_capabilities.cpp # Phase 10A per-control capabilities
+                                        tests/cpp/test_device_sample_rate.cpp  # Phase 10B real sample rate
                                         tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)

@@ -28,6 +28,15 @@ WritePolicy outputWritePolicy(bool speaker, bool headphone) {
     return p;
 }
 
+WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness) {
+    WritePolicy p = outputWritePolicy(speaker, headphone);
+    if (ledBrightness) {
+        p.allowHardwareWrites = true;
+        p.hardwareWriteOffsets.push_back(settings_off::kLedBrightness);
+    }
+    return p;
+}
+
 std::optional<double> normalizeOutputDb(double db) {
     if (!std::isfinite(db)) return std::nullopt;
     db = std::clamp(db, kVolumeMinDb, kVolumeMaxDb);

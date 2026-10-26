@@ -10,6 +10,7 @@
 
 #include "DeviceController.hpp"
 #include "GuiActivation.hpp"
+#include "GuiPreferences.hpp"
 #include "InstanceChannel.hpp"
 #include "IntegrationSettings.hpp"
 #include "lewitt/version.hpp"
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
     p.addOption(sizeOpt);
-    QCommandLineOption show("show", "Open a page at start: settings | settings-desktop | wizard | onboarding.", "page");
+    QCommandLineOption show("show", "Open a page at start: settings | settings-device | settings-desktop | wizard | onboarding.", "page");
     p.addOption(show);
     QCommandLineOption quitAfterSeconds("quit-after-seconds",
         "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
@@ -88,6 +89,8 @@ int main(int argc, char** argv) {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
     engine.rootContext()->setContextProperty("integration", &integration);
+    GuiPreferences prefs;                       // gui.conf: onboarding done, show tooltips (no device settings)
+    engine.rootContext()->setContextProperty("prefs", &prefs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Lewitt/Main.qml")));
@@ -105,10 +108,18 @@ int main(int argc, char** argv) {
             root->setProperty("showSettings", true);
             if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "desktop");
         }
+        if (page == "settings-device") {
+            root->setProperty("showSettings", true);
+            if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "device");
+        }
         if (page == "wizard") root->setProperty("showWizard", true);
         if (page == "onboarding") root->setProperty("showOnboarding", true);
     };
     if (p.isSet(show)) showPage(p.value(show));
+    // First run: the onboarding tour once, until it is finished or skipped (then remembered in gui.conf). Not for
+    // screenshot runs or explicit --show pages; always available again from Settings.
+    else if (prefs.showOnboardingAtStart(p.isSet(shot), p.isSet(show)) && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("showOnboarding", true);
     if (instance) {
         QObject::connect(instance.get(), &InstanceChannel::messageReceived, &app, [&](const QString& m) {
             GuiActivation a;

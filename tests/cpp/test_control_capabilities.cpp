@@ -5,6 +5,7 @@
 
 #include "core/ControlCapabilities.hpp"
 #include "core/OutputControl.hpp"
+#include <algorithm>
 
 using namespace lewitt;
 
@@ -71,4 +72,43 @@ TEST(ControlCapabilities, SimulationKeepsEveryControlAndUnknownKeysAreNeverWrita
     EXPECT_EQ(writable(WritePolicy{}, true).size(), controlKeys().size());
     EXPECT_FALSE(controlWritable("in2.phantom", WritePolicy{}, true));    // input 2 has no phantom power
     EXPECT_FALSE(controlWritable("nonsense", outputWritePolicy(true, true), false));
+}
+
+// ---- Phase 10B: the GUI policy is exactly the union of the confirmed fields --------------------------------------
+#include "FakeHardware.hpp"
+
+TEST(GuiWritePolicy, ByteScopesAreExactAndNothingElseIsGranted) {
+    using V = std::vector<std::size_t>;
+    auto offs = [](const WritePolicy& p) { V v = p.hardwareWriteOffsets; std::sort(v.begin(), v.end()); return v; };
+    EXPECT_FALSE(guiWritePolicy(false, false, false).allowHardwareWrites);
+    EXPECT_TRUE(guiWritePolicy(false, false, false).hardwareWriteOffsets.empty());
+    EXPECT_EQ(offs(guiWritePolicy(true, false, false)), (V{20, 21, 22}));
+    EXPECT_EQ(offs(guiWritePolicy(false, true, false)), (V{27, 28, 29}));
+    EXPECT_EQ(offs(guiWritePolicy(false, false, true)), (V{37}));
+    EXPECT_EQ(offs(guiWritePolicy(true, true, true)), (V{20, 21, 22, 27, 28, 29, 37}));
+    for (int m = 0; m < 8; ++m) {
+        const WritePolicy p = guiWritePolicy(m & 1, m & 2, m & 4);
+        EXPECT_TRUE(p.hardwareTriggers.empty()) << m;
+        EXPECT_FALSE(p.allowRoutingChanges) << m;
+        EXPECT_FALSE(p.allowPersistentChanges) << m;
+    }
+}
+
+TEST(GuiWritePolicy, TheSessionItselfRefusesBytesOutsideThePermission) {
+    MockTransport mock;
+    auto t = std::make_unique<lewitt::testing::FakeHardware>(&mock);
+    auto* hw = t.get();
+    DeviceSession s(std::move(t), guiWritePolicy(false, false, /*led=*/true));
+    ASSERT_TRUE(s.connect().ok());
+    ASSERT_TRUE(s.edit([](SettingsMessage& m) { return m.setSpeakerMute(true); }).ok());   // staging is not writing
+    auto r = s.commitAndVerify(lewitt::testing::fastPoll());
+    EXPECT_NE(r.state, WriteState::Verified);
+    EXPECT_EQ(hw->writeCalls, 0);                                    // refused before the transport
+    s.discardPending();
+    ASSERT_TRUE(s.edit([](SettingsMessage& m) { return m.setLedBrightness(42); }).ok());
+    EXPECT_EQ(s.commitAndVerify(lewitt::testing::fastPoll()).state, WriteState::Verified);
+    EXPECT_EQ(hw->writeCalls, 1);
+    EXPECT_EQ(SettingsMessage::fromBytes(mock.settingsBytes()).value().ledBrightness(), 42);
+    EXPECT_FALSE(s.sendTrigger(Trigger::ResetLedColors).ok());
+    EXPECT_EQ(hw->writeCalls, 1);
 }

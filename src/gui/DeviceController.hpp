@@ -57,12 +57,20 @@ signals:
 public:
     // Thread-safe, non-blocking: abort the in-flight transport request (used on shutdown).
     void cancelAll();
-    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p);
+    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p,
+                                    std::string procRoot = "/proc/asound");
+    void refreshRateForTesting() { refreshDeviceRate(true); publish(); }
 private:
     void publish();
     void publishMeterSample();
     void armRescan();
     bool refuseUnauthorized(const QString& key);
+    void refreshDeviceRate(bool force);
+    std::optional<unsigned> deviceRate_;
+    int ratePolls_{0};
+public:
+    std::string rateProcRoot_{"/proc/asound"};   // tests point this at a fixture directory
+private:
     void adoptSession(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy policy = {});
     lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
     void report(const lewitt::Status& s);
@@ -181,7 +189,9 @@ public:
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
     // Tests only, never from QML: see DeviceWorker::connectTransportForTesting().
-    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p);
+    void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p,
+                                    std::string procRoot = "/proc/asound");
+    void refreshSampleRateForTesting();
     Q_INVOKABLE void traceQmlObserved();  // opt-in measurement marker; never touches hardware
     void traceFrameSwapped();
 signals:

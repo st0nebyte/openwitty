@@ -13,7 +13,10 @@ Item {
     function v(k, d) { var x = device.values[p + k]; return x === undefined ? d : x; }
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
     function can(k) { return root.interactive && device.values["can." + k] === true; }
-    readonly property bool dsp: device.values["dsp.available"] !== false
+    // Phase 10B: Denoise/Comp at 96 kHz. "unknown" (real device, no confirmed rate) is not shown as unavailable.
+    readonly property bool dsp: device.values["dsp.state"] !== "unavailable"
+    readonly property bool dspUnknown: device.values["dsp.state"] === "unknown"
+    readonly property string dspTip: dspUnknown ? " (availability depends on the sample rate, which is unknown)" : ""
     readonly property bool pending: device.values["pending." + p + "gain"] === true
     width: 152; height: 267
     Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
@@ -70,11 +73,11 @@ Item {
     Row {
         x: 31; y: 211; spacing: 4
         ToggleButton { width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
-                       tip: root.dsp ? "Good for live streaming" : "Choose lower sample rate to enable this function"
+                       tip: root.dsp ? "Good for live streaming" + root.dspTip : "Choose lower sample rate to enable this function"
                        active: root.v("denoise", false)
                        onClicked: device.setValue(root.p + "denoise", !active) }
         ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.can(root.p + "compress"); unavailable: !root.dsp
-                       tip: root.dsp ? "Consistent level, louder signal, finished sound" : "Choose lower sample rate to enable this function"
+                       tip: root.dsp ? "Consistent level, louder signal, finished sound" + root.dspTip : "Choose lower sample rate to enable this function"
                        active: root.v("compress", false)
                        onClicked: device.setValue(root.p + "compress", !active) }
     }
