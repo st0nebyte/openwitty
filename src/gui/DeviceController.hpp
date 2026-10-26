@@ -53,8 +53,10 @@ public slots:
     // owner-approved hardware tests. Each does one ordinary settings GET on the session already open (same
     // serialized transport, same control lease); nothing here can stage or send a write.
     void enableHardwareCheck();
-    void hwCheckRecordBaseline();
+    void hwCheckRecordBaseline();        // only while none exists: one read; the baseline comes from it
+    void hwCheckReplaceBaseline();       // deliberate owner action: replaces the reference, reported as such
     void hwCheckCompare();
+    void reconnectForTesting();          // tests only: the reconnect step of rescan() without sysfs discovery
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void meterSample(const QVariantList& levels, qint64 monotonicNs); // observed status data only
@@ -103,8 +105,13 @@ private:
     bool hwCheck_{false};
     std::optional<lewitt::SettingsMessage> hwBaseline_;
     QString hwReport_;
+    int hwBaselineReplacements_{0};
+    QString hwLastWait_;
     void hwCheckLog(const QString& line);
-    void hwCheckAutoBaseline();
+    // Phase 10B.2: called with the result of a read that just happened (connect, reconnect, settings refresh).
+    // Records the baseline only from a successful read and only if none exists; never replaces one.
+    void hwCheckAfterRead(const lewitt::Status& read, const char* where);
+    void attemptReconnect();             // rescan()'s reconnect step (also after a hand-over)
     void startTimer(int ms);
     void startRealTimer();
     void armPreciseStatusTimer();
@@ -219,7 +226,9 @@ public:
     // Opt-in hardware-test snapshots (openwitty --hw-check); read-only, see DeviceWorker.
     void enableHardwareCheck();
     Q_INVOKABLE void hwCheckRecordBaseline();
+    Q_INVOKABLE void hwCheckReplaceBaseline();
     Q_INVOKABLE void hwCheckCompare();
+    void reconnectForTesting();          // tests only
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
     // Tests only, never from QML: see DeviceWorker::connectTransportForTesting().

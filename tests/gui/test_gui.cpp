@@ -1788,6 +1788,201 @@ TEST(HwSafety10B1, HardwareCheckIsOffUnlessRequested) {
     EXPECT_FALSE(panel->property("visible").toBool());
 }
 
+// ---- Phase 10B.2: the hw-check baseline comes from the first successful read, also after a hand-over ----------
+namespace {
+// A window in --hw-check mode whose fake device takes the real control lease (private runtime directory).
+struct HwCheckRig {
+    BlockRealUsb volumed;                       // private XDG_RUNTIME_DIR; its held lease = the service owns the device
+    lewitt::MockTransport mock;
+    lewitt::testing::FakeHardware* hw{nullptr};
+    std::unique_ptr<DeviceController> c;
+    QTemporaryDir proc;
+    HwCheckRig() {
+        EXPECT_TRUE(volumed.ready());
+        c = std::make_unique<DeviceController>();
+        c->enableHardwareCheck();
+        auto t = std::make_unique<lewitt::testing::FakeHardware>(&mock);
+        t->useLease = true;
+        hw = t.get();
+        c->connectTransportForTesting(std::move(t), lewitt::guiWritePolicy(false, false, true), proc.path().toStdString());
+        c->flush();
+    }
+    QVariant val(const char* k) const { return c->values().value(k); }
+    QString report() const { return val("hwcheck.report").toString(); }
+    void setLed(int v) {
+        lewitt::Bytes b = mock.settingsBytes();
+        b[lewitt::settings_off::kLedBrightness] = static_cast<std::uint8_t>(v);
+        mock.setSettingsBytes(b);
+    }
+};
+}  // namespace
+
+TEST(HwCheck10B2, ImmediateConnectRecordsTheBaselineWithoutAnySet) {
+    app();
+    BlockRealUsb isolate;
+    ASSERT_TRUE(isolate.ready());
+    isolate.lease.reset();                                     // nobody else owns the device
+    RealLike r(lewitt::guiWritePolicy(false, false, true), /*hwCheck=*/true);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("hwcheck.state").toString() == "recorded"; }));
+    EXPECT_EQ(r.c->values().value("hwcheck.baseline").toInt(), deviceLed(r));
+    EXPECT_TRUE(r.c->values().value("hwcheck.report").toString().startsWith("baseline recorded from the first successful settings read (connect)"));
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_EQ(r.hw->openCalls, 1);
+}
+
+TEST(HwCheck10B2, LeaseContentionThenHandOverRecordsTheBaselineOnlyFromASuccessfulRead) {
+    app();
+    HwCheckRig r;
+    r.setLed(35);
+    // the service holds the device: the window's first attempt fails
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.state").toString() == "waiting"; }));
+    EXPECT_NE(r.c->connection(), "Connected");
+    EXPECT_NE(r.report().indexOf("no baseline yet (connect failed"), -1) << r.report().toStdString();
+    EXPECT_FALSE(r.val("hwcheck.baseline").isValid());
+    // a retry during the hand-over also fails and asks the service to yield
+    r.c->reconnectForTesting();
+    const std::string dir = lewitt::ControlLease::currentSessionDirectory();
+    EXPECT_TRUE(lewitt::ControlLease::yieldRequestedInDirectory(dir, std::chrono::seconds(30)));
+    EXPECT_FALSE(r.val("hwcheck.baseline").isValid());
+    // the service lets go, but the first settings read after opening fails: still no baseline, no false message
+    r.volumed.lease.reset();
+    r.mock.rejectReads(lewitt::MessageId::Settings, 1);
+    r.c->reconnectForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.report().indexOf("reconnect failed") != -1; })) << r.report().toStdString();
+    EXPECT_FALSE(r.val("hwcheck.baseline").isValid());
+    EXPECT_EQ(r.report().indexOf("baseline recorded"), -1);
+    // the next attempt succeeds: the baseline comes from that read
+    r.c->reconnectForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.state").toString() == "recorded"; })) << r.report().toStdString();
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    EXPECT_TRUE(r.report().startsWith("baseline recorded from the first successful settings read (reconnect)"));
+    EXPECT_EQ(r.hw->writeCalls, 0);                            // acquiring the baseline sends nothing
+    EXPECT_TRUE(r.hw->holdsLease());                           // the window is the one owner ...
+    EXPECT_FALSE(lewitt::ControlLease::acquireForCurrentSession().ok());   // ... no competing session can open
+    EXPECT_FALSE(lewitt::ControlLease::yieldRequestedInDirectory(dir, std::chrono::seconds(30)));   // hand-over done
+    const int opens = r.hw->openCalls;
+    r.c->hwCheckCompare();                                     // comparing reuses the open session
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.report().startsWith("now vs baseline"); }));
+    EXPECT_EQ(r.hw->openCalls, opens);
+}
+
+TEST(HwCheck10B2, NoRealWriteInDiagnosticModeWhileTheBaselineIsMissing) {
+    app();
+    HwCheckRig r;                                              // stays without a baseline: the service keeps the device
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.state").toString() == "waiting"; }));
+    r.c->setValue("set.ledBrightness", 10);
+    r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    // connected without a baseline (the check switched on after connecting): writes are refused until a read
+    BlockRealUsb isolate;
+    isolate.lease.reset();
+    RealLike q(lewitt::guiWritePolicy(false, false, true));
+    const int original = deviceLed(q);
+    q.c->enableHardwareCheck();
+    q.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
+    q.c->flush();
+    ASSERT_TRUE(waitFor([&] { return q.c->values().value("write.outcome").toString() == "refused"; }));
+    EXPECT_NE(q.c->values().value("write.message").toString().indexOf("no baseline yet"), -1);
+    EXPECT_EQ(q.hw->writeCalls, 0);
+    EXPECT_EQ(deviceLed(q), original);
+    ASSERT_TRUE(waitFor([&] { q.c->flush(); return q.c->values().value("hwcheck.state").toString() == "recorded"; }));
+    q.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
+    q.c->flush();
+    ASSERT_TRUE(waitFor([&] { return q.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_EQ(q.hw->writeCalls, 1);
+    // ordinary (non-diagnostic) mode is unchanged: writes proceed at once
+    RealLike n(lewitt::guiWritePolicy(false, false, true));
+    n.c->setValue("set.ledBrightness", deviceLed(n) == 60 ? 40 : 60);
+    n.c->flush();
+    ASSERT_TRUE(waitFor([&] { return n.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_EQ(n.hw->writeCalls, 1);
+}
+
+TEST(HwCheck10B2, BaselineSurvivesThePermissionReopenAndRepeatedReconnects) {
+    app();
+    HwCheckRig r;
+    r.setLed(35);
+    r.volumed.lease.reset();
+    r.c->reconnectForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.state").toString() == "recorded"; }));
+    ASSERT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    r.setLed(55);                                              // the device differs from the baseline now
+    // permission switch: a new session is opened (the old one closed first, so the lease passes over)
+    auto t2 = std::make_unique<lewitt::testing::FakeHardware>(&r.mock);
+    t2->useLease = true;
+    auto* hw2 = t2.get();
+    r.c->connectTransportForTesting(std::move(t2), lewitt::guiWritePolicy(false, false, true), r.proc.path().toStdString());
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->connection() == "Connected"; }));
+    EXPECT_TRUE(hw2->holdsLease());
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    ASSERT_TRUE(waitFor([&] { return r.report() == "connected again (connect); baseline kept: LED brightness 35"; }))
+        << r.report().toStdString();
+    for (int v : {60, 65, 70}) {                               // repeated reconnects with other device values
+        r.setLed(v);
+        r.c->reconnectForTesting();
+        r.c->flush();
+    }
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    EXPECT_EQ(r.val("hwcheck.replacements").toInt(), 0);
+    ASSERT_TRUE(waitFor([&] { return r.report() == "connected again (reconnect); baseline kept: LED brightness 35"; }))
+        << r.report().toStdString();
+    r.c->hwCheckCompare();
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.report().startsWith("now vs baseline: LED brightness 35 -> 70"); })) << r.report().toStdString();
+    EXPECT_EQ(hw2->writeCalls, 0);
+}
+
+TEST(HwCheck10B2, ReplacingTheBaselineNeedsTheExplicitTwoStepActionAndIsReported) {
+    app();
+    HwCheckRig r;
+    r.setLed(35);
+    r.volumed.lease.reset();
+    r.c->reconnectForTesting();
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.state").toString() == "recorded"; }));
+    r.setLed(80);
+    r.c->hwCheckRecordBaseline();                              // "Record" never replaces an existing reference
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.report().startsWith("baseline kept"); }));
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    root->setProperty("showSettings", true);
+    root->findChild<QObject*>("settingsView")->setProperty("open", "device");
+    QCoreApplication::processEvents();
+    QObject* button = root->findChild<QObject*>("hwCheckBaselineButton");
+    QObject* confirm = root->findChild<QObject*>("hwCheckReplaceConfirm");
+    QObject* cancel = root->findChild<QObject*>("hwCheckReplaceCancel");
+    ASSERT_TRUE(button && confirm && cancel);
+    EXPECT_EQ(button->property("text").toString(), "Replace baseline…");
+    QMetaObject::invokeMethod(button, "clicked");              // step 1 only arms
+    QMetaObject::invokeMethod(cancel, "clicked");
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 35);
+    EXPECT_EQ(r.val("hwcheck.replacements").toInt(), 0);
+    QMetaObject::invokeMethod(button, "clicked");
+    QMetaObject::invokeMethod(confirm, "clicked");             // step 2: deliberate replacement
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.val("hwcheck.replacements").toInt() == 1; }));
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 80);
+    EXPECT_TRUE(r.report().startsWith("baseline REPLACED by owner action (#1): LED brightness 35 -> 80")) << r.report().toStdString();
+    // a failed read or no connection never replaces it
+    r.setLed(20);
+    r.mock.rejectReads(lewitt::MessageId::Settings, 1);
+    r.c->hwCheckReplaceBaseline();
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.report().startsWith("baseline NOT replaced"); }));
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 80);
+    r.c->disconnectDevice();
+    r.c->hwCheckReplaceBaseline();
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.report().startsWith("baseline NOT replaced: not connected"); }));
+    EXPECT_EQ(r.val("hwcheck.baseline").toInt(), 80);
+    EXPECT_EQ(r.val("hwcheck.replacements").toInt(), 1);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
 // ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------
 namespace {
 void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field is stored sign-inverted Q8.8

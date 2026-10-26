@@ -4,8 +4,10 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "core/DeviceSession.hpp"
+#include "transport/ControlLease.hpp"
 #include "transport/MockTransport.hpp"
 
 namespace lewitt::testing {
@@ -16,9 +18,17 @@ public:
     std::string name() const override { return "fake-hardware"; }
     Status open() override {
         ++openCalls;
+        if (useLease && !lease_) {          // like UsbTransport: the per-user control lease first
+            auto l = ControlLease::acquireForCurrentSession();
+            if (!l) return l.error();
+            lease_.emplace(std::move(l.value()));
+        }
         return m_->open();
     }
-    void close() override { m_->close(); }
+    void close() override {
+        m_->close();
+        lease_.reset();
+    }
     bool isOpen() const override { return m_->isOpen(); }
     DeviceInfo info() const override { return m_->info(); }
     Result<Bytes> read(MessageId id) override {
@@ -37,9 +47,13 @@ public:
     int writeCalls{0};
     int readCalls{0};
     int openCalls{0};
+    // Opt-in: hold the real ControlLease (in the test's private XDG_RUNTIME_DIR) while open, as UsbTransport does.
+    bool useLease{false};
+    bool holdsLease() const { return lease_.has_value(); }
 
 private:
     MockTransport* m_;
+    std::optional<ControlLease> lease_;
 };
 
 inline PollPolicy fastPoll() {

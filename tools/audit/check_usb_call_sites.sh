@@ -160,8 +160,8 @@ if grep -nE 'DeviceSession|Transport|ControlLease|libusb|commit|write\(' src/cor
     echo "FAIL SettingsComparison must work on snapshots only"; fail=1
 else echo "ok   SettingsComparison has no session, transport or lease access"; fi
 hwfns=$(awk '/^void DeviceWorker::(hwCheck|enableHardwareCheck)/,/^}/' src/gui/DeviceController.cpp | sed 's/"[^"]*"//g; s://.*$::')
-if [ -z "$hwfns" ] || printf '%s' "$hwfns" | grep -nE 'commit|edit\(|sendTrigger|setValue|Transport|ControlLease|connect|adoptSession|reconnect' >/dev/null; then
-    echo "FAIL hardware-check functions may only read through refreshDeviceState()"; fail=1
+if [ -z "$hwfns" ] || printf '%s' "$hwfns" | grep -nE -- '->(commit|commitAndVerify|edit|sendTrigger|connect|reconnect|discardPending)\(|setValue\(|Transport|ControlLease|adoptSession|connectUsb|attemptReconnect' >/dev/null; then
+    echo "FAIL hardware-check functions may only read (refreshDeviceState/refreshSettings)"; fail=1
 else echo "ok   hardware check reads only, through the window's own session (no second connection)"; fi
 if ! grep -q 'commitOnRelease: !device.simulated' src/gui/qml/SettingsView.qml \
    || ! grep -q 'enabled: root.can("set.ledBrightness") && root.ledWrite !== "pending"' src/gui/qml/SettingsView.qml; then

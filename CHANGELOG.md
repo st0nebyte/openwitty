@@ -31,7 +31,8 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Device sample rate shown from the kernel's stream state (read-only; "unknown" while no stream is open); the
   monitoring-mix knob also shows the raw device value, because the device scale is not calibrated.
 - GUI preferences (`gui.conf`): the first-run introduction is shown once, the tooltip setting is remembered.
-- `openwitty --hw-check`: read-only, in-window settings comparison for owner-approved hardware tests.
+- `openwitty --hw-check`: read-only, in-window settings comparison for owner-approved hardware tests (baseline from
+  the first successful read, also after a hand-over; never replaced silently; no device write without it).
 - Optional *vendor fallback* for a device that ignores the desktop volume — **experimental, not validated on
   hardware**.
 - `openwitty-cli`: device listing, diagnosis, read-only reads, and four opt-in single-setting write commands

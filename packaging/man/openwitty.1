@@ -50,7 +50,10 @@ Diagnostic for owner-approved hardware tests: records a settings baseline when t
 reports, on standard error and under Settings \(-> Device control, which settings changed after each
 write and on request (\(lqCompare with baseline\(rq). Read-only; it uses the window's own device
 connection, so no second program competes for the device. It prints field names and offsets and the
-LED brightness value only; no device identifiers and no raw settings. Takes effect only when the
+LED brightness value only; no device identifiers and no raw settings. The baseline comes from the first
+successful settings read (also after a hand-over from the background service) and is never replaced
+without the explicit \(lqReplace baseline\(rq confirmation; until it exists, no device write is sent.
+Takes effect only when the
 window starts.
 .SH FILES
 .TP

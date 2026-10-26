@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <string_view>
 #include <cstdlib>
 
 #include "core/Policy.hpp"
@@ -233,9 +234,10 @@ void DeviceWorker::connectMock() {
     adoptSession(std::move(m));      // resets workflow state (and mock_)
     mock_ = raw;
     session_->setSampleRateHint(static_cast<std::uint32_t>(sampleRate_));
-    report(session_->connect());
+    const Status cs = session_->connect();
+    report(cs);
     markInitialReads();
-    hwCheckAutoBaseline();
+    hwCheckAfterRead(cs, "connect");
     startTimer(40);  // ~25 Hz meters; stopped again on disconnect
     publish();
     publishMeterSample();
@@ -289,7 +291,7 @@ void DeviceWorker::connectUsb() {
     if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
     refreshDeviceRate(true);
-    hwCheckAutoBaseline();
+    hwCheckAfterRead(s, "connect");
     publish();
     publishMeterSample();
 }
@@ -304,7 +306,7 @@ void DeviceWorker::connectTransportForTesting(std::unique_ptr<IDeviceTransport> 
     if (!s) report(s);
     markInitialReads();
     refreshDeviceRate(true);
-    hwCheckAutoBaseline();
+    hwCheckAfterRead(s, "connect");
     publish();
 }
 
@@ -335,6 +337,12 @@ void DeviceWorker::rescan() {
         publish();
         return;
     }
+    attemptReconnect();
+}
+
+// One reconnect attempt, e.g. after the background service handed the device over.
+void DeviceWorker::attemptReconnect() {
+    if (!session_) return;
     freshness_.reset();
     auto s = session_->reconnect();
     const bool handover = inHandover(s);
@@ -344,15 +352,18 @@ void DeviceWorker::rescan() {
         backoffMs_ = 1000;
         lastOpenError_ = Errc::Ok;
         lastTransportError_.clear();
-        startRealTimer();
+        if (usbMode_) startRealTimer();
     } else {
         if (!handover) report(s);
         backoffMs_ = handover ? 300 : s.error().code == Errc::ControlInUse ? 1000 : std::min(backoffMs_ * 2, 8000);
-        armRescan();
+        if (usbMode_) armRescan();
     }
+    hwCheckAfterRead(s, "reconnect");
     publish();
     if (s) publishMeterSample();
 }
+
+void DeviceWorker::reconnectForTesting() { attemptReconnect(); }
 
 // If a measurement bracket is open, close it before the link goes away (only possible
 // while connected and writable; a failure is deliberately ignored).
@@ -472,8 +483,10 @@ void DeviceWorker::simulateUnplug() {
 void DeviceWorker::simulateReplug() {
     if (!mock_ || !session_) return;
     mock_->setPresent(true);
-    report(session_->reconnect());
+    const Status rs = session_->reconnect();
+    report(rs);
     markInitialReads();
+    hwCheckAfterRead(rs, "reconnect");
     if (session_->state() == ConnectionState::Connected) startTimer(40);
     publish();
     publishMeterSample();
@@ -577,6 +590,7 @@ Status DeviceWorker::refreshDeviceState(SettingsRefreshTiming* timing) {
     auto s = session_->refreshSettings(timing);
     if (!s) report(s);
     else freshness_.markSettings();
+    hwCheckAfterRead(s, "settings read");
     return s;
 }
 
@@ -736,6 +750,8 @@ void DeviceWorker::publish() {
     v["write.lockReason"] = writeLockReason_;
     v["hwcheck.enabled"] = hwCheck_;
     v["hwcheck.baseline"] = hwBaseline_ ? QVariant(int(hwBaseline_->ledBrightness())) : QVariant();
+    v["hwcheck.state"] = !hwCheck_ ? QString("off") : hwBaseline_ ? QString("recorded") : QString("waiting");
+    v["hwcheck.replacements"] = hwBaselineReplacements_;
     v["hwcheck.report"] = hwReport_;
     // `ui.state` is the sole connection-state source of truth and is what QML renders. Keep
     // write progress separate rather than creating a second, partially-overlapping status enum.
@@ -911,6 +927,15 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
         publish();
         return;
     }
+    // Phase 10B.2, diagnostic mode only (--hw-check): no real-device write before the test has its reference.
+    if (hwCheck_ && !hwBaseline_ && !session_->isSimulated()) {
+        const QString why = "the hardware check has no baseline yet; nothing was sent";
+        emit errorOccurred(why);
+        noteWriteOutcome(key, "refused", why);
+        hwCheckLog("write " + key + " refused: no baseline yet");
+        publish();
+        return;
+    }
     // Real hardware: one volume change may raise an output by at most kMaxOutputIncreaseDb (same rule
     // as openwitty-volumed); a far slider jump is applied in bounded steps. Non-finite values pass
     // through unchanged so the setter rejects them. Simulation is unrestricted.
@@ -1063,28 +1088,73 @@ void DeviceWorker::hwCheckLog(const QString& line) {
 
 void DeviceWorker::enableHardwareCheck() {
     hwCheck_ = true;
-    hwCheckLog("enabled: read-only snapshots through this window's device session (no second connection)");
-    hwCheckAutoBaseline();
+    // The baseline comes from the first successful settings read after this point - not from a snapshot that may
+    // already be in memory.
+    hwCheckLog("enabled: read-only snapshots through this window's device session (no second connection); "
+               "no baseline yet - device writes are blocked until one is recorded");
     publish();
 }
 
-void DeviceWorker::hwCheckAutoBaseline() {
-    if (!hwCheck_ || hwBaseline_ || !session_ || session_->state() != ConnectionState::Connected || !session_->settings())
+void DeviceWorker::hwCheckAfterRead(const Status& read, const char* where) {
+    if (!hwCheck_) return;
+    if (hwBaseline_) {
+        // A new connection never replaces the reference; say so (not for every routine poll read).
+        if (read && std::string_view(where) != "settings read")
+            hwCheckLog(QString("connected again (%1); baseline kept: LED brightness %2")
+                           .arg(where).arg(int(hwBaseline_->ledBrightness())));
         return;
-    hwBaseline_ = *session_->settings();
-    hwCheckLog(QString("baseline recorded at connect: LED brightness %1").arg(int(hwBaseline_->ledBrightness())));
-}
-
-// One fresh settings GET on the open session (the same call the regular poll makes), then the snapshot is kept.
-void DeviceWorker::hwCheckRecordBaseline() {
-    if (!hwCheck_ || !session_) return;
-    if (auto s = refreshDeviceState(); !s || !session_->settings()) {
-        hwCheckLog("baseline not recorded: no fresh settings read");
-        publish();
+    }
+    const bool ok = read && session_ && session_->state() == ConnectionState::Connected && session_->settings();
+    if (!ok) {
+        // Explicit, but only once per distinct reason (a hand-over retries every few hundred ms).
+        const QString why = read ? QString("not connected") : QString::fromStdString(read.error().message);
+        const QString line = QString("no baseline yet (%1 failed: %2); device writes stay blocked").arg(where, why);
+        if (line != hwLastWait_) { hwLastWait_ = line; hwCheckLog(line); }
         return;
     }
     hwBaseline_ = *session_->settings();
-    hwCheckLog(QString("baseline recorded: LED brightness %1").arg(int(hwBaseline_->ledBrightness())));
+    hwLastWait_.clear();
+    hwCheckLog(QString("baseline recorded from the first successful settings read (%1): LED brightness %2")
+                   .arg(where).arg(int(hwBaseline_->ledBrightness())));
+}
+
+// Only while there is no baseline: one ordinary settings GET on the open session; a success records the baseline
+// (in hwCheckAfterRead). An existing baseline is never replaced here.
+void DeviceWorker::hwCheckRecordBaseline() {
+    if (!hwCheck_ || !session_) return;
+    if (hwBaseline_) {
+        hwCheckLog("baseline kept (a reference already exists); replacing it needs the explicit Replace action");
+        publish();
+        return;
+    }
+    if (session_->state() == ConnectionState::Connected) (void)refreshDeviceState();
+    else hwCheckAfterRead(makeError(Errc::Disconnected, "not connected"), "manual read");
+    publish();
+}
+
+// Deliberate owner action (two-step in the GUI): a fresh read becomes the new reference; reported with old and new.
+void DeviceWorker::hwCheckReplaceBaseline() {
+    if (!hwCheck_ || !session_) return;
+    if (session_->state() != ConnectionState::Connected) {
+        hwCheckLog("baseline NOT replaced: not connected; the previous reference is kept");
+        publish();
+        return;
+    }
+    const auto previous = hwBaseline_;
+    if (auto s = session_->refreshSettings(); !s || !session_->settings()) {
+        report(s);
+        hwCheckLog("baseline NOT replaced: the settings read failed; the previous reference is kept");
+        publish();
+        return;
+    }
+    freshness_.markSettings();
+    hwBaseline_ = *session_->settings();
+    ++hwBaselineReplacements_;
+    hwCheckLog(QString("baseline REPLACED by owner action (#%1): LED brightness %2 -> %3; earlier comparisons refer to "
+                       "the previous reference")
+                   .arg(hwBaselineReplacements_)
+                   .arg(previous ? QString::number(int(previous->ledBrightness())) : QString("none"))
+                   .arg(int(hwBaseline_->ledBrightness())));
     publish();
 }
 
@@ -1213,7 +1283,11 @@ void DeviceController::trigger(const QString& n) {
 }
 void DeviceController::enableHardwareCheck() { QMetaObject::invokeMethod(worker_, "enableHardwareCheck"); }
 void DeviceController::hwCheckRecordBaseline() { QMetaObject::invokeMethod(worker_, "hwCheckRecordBaseline"); }
+void DeviceController::hwCheckReplaceBaseline() { QMetaObject::invokeMethod(worker_, "hwCheckReplaceBaseline"); }
 void DeviceController::hwCheckCompare() { QMetaObject::invokeMethod(worker_, "hwCheckCompare"); }
+void DeviceController::reconnectForTesting() {
+    QMetaObject::invokeMethod(worker_, [this] { worker_->reconnectForTesting(); }, Qt::BlockingQueuedConnection);
+}
 void DeviceController::setValue(const QString& k, const QVariant& v) {
     // Coalesced: while a request for this control waits (e.g. a write is in flight), newer values replace it.
     if (worker_->queueValue(k, v)) QMetaObject::invokeMethod(worker_, "applyQueuedValue", Q_ARG(QString, k));

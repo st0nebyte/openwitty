@@ -80,6 +80,12 @@ An independent review of the HW-1 plan found three problems; all are fixed offli
   nothing more until the permission is turned off and on. Simulation keeps the live slider.
   Measured with fake hardware: a drag of 1,803 pointer moves → **1 SET**; 30 rapid clicks → **1 SET**; 100 requests
   during an in-flight write → **2 SETs** (the first and the latest).
+* **Phase 10B.2 — late baseline after a hand-over.** The baseline was taken only right after the first connect
+  attempt; when the service still held the device, the window took over later (reconnect) without recording
+  one. Now the baseline comes from the first *successful* settings read (connect, reconnect after hand-over or a
+  later poll), never from a failed read or a stale snapshot; it is kept across the permission reopen and every
+  reconnect (logged as "baseline kept"); in `--hw-check` mode no device write is sent until it exists; a manual
+  replacement is a two-step, logged owner action. Ordinary use without `--hw-check` is unchanged.
 * **No stable-snapshot check in the GUI.** GUI writes on real hardware now use `requireStableSnapshot`: two
   matching reads immediately before the SET, otherwise nothing is sent ("Not sent"). Byte-37 authorization,
   the full-struct write guard, read-back verification and no-retry are unchanged; the background service's mirror
@@ -228,11 +234,18 @@ only — no device identifiers, no raw settings. It cannot write (audit rule; no
    `openwitty --help` lists `--hw-check`. The background service and tray may keep running (the service hands
    the device to the window and takes it back afterwards).
 4. **Baseline.** Start the window from a terminal: `openwitty --hw-check --show settings-device 2>&1 | tee hw1.log`.
-   Expect `hw-check: baseline recorded at connect: LED brightness N` (N = the original value) the banner
-   "CONTROL LINK, READ-ONLY" and, on the page, "Currently allowed: nothing (display only)". Press **Compare with baseline**: expect `changed: none; unexpected: none`.
+   While the background service still holds the device, the log says `no baseline yet (connect failed: … in use …)`
+   and the page "No baseline yet"; that is the normal hand-over. Within a few seconds expect
+   `hw-check: baseline recorded from the first successful settings read (connect|reconnect): LED brightness N`
+   (N = the original value; the page shows it). If "no baseline yet" persists for more than about 30 s: **stop**.
+   Without a baseline the window refuses every device write in this mode. Then expect the banner
+   "CONTROL LINK, READ-ONLY" and, on the page, "Currently allowed: nothing (display only)". Press **Compare with
+   baseline**: expect `changed: none; unexpected: none`.
 5. **Enable LED brightness only**, through the switch and its confirmation dialog. The window reconnects (it keeps
-   the device: the service is asked to stay away during the reopen). Banner: "REAL DEVICE — can change: LED brightness. All other controls are display-only." Press
-   **Compare with baseline**: still `changed: none`.
+   the device: the service is asked to stay away during the reopen). Expect
+   `connected again (connect)` (or `(reconnect)`) `; baseline kept: LED brightness N` — the same N as in step 4; a reconnect never
+   replaces the reference. Banner: "REAL DEVICE — can change: LED brightness. All other controls are
+   display-only." Press **Compare with baseline**: still `changed: none`.
 6. **One deliberate change.** Settings → LEDs: drag the brightness slider to a clearly different value and
    release. Dragging only previews ("release to send"); the release sends **one** settings SET at most; the slider
    is disabled until the result is shown.
@@ -245,6 +258,9 @@ only — no device identifiers, no raw settings. It cannot write (audit rule; no
 11. **Afterwards**: repeat the read-only checks of step 1. Desktop sync, vendor fallback, the service state and the
     tray entry must be as recorded. The settings file is rewritten by the switch (the obsolete `output_control`
     line disappears); `led_brightness_control` must read `false` or be absent.
+
+**Do not use "Replace baseline…"** during HW-1. Replacing needs a second confirmation and is logged as
+`baseline REPLACED by owner action (#k)`; if it appears in the log, the run is void — stop and start again.
 
 **On a timeout, an ambiguous or "Not confirmed" result, an unexpected offset, a USB error or anything
 unexpected: stop.** Do not retry the SET and do not "restore" by sending another SET. OpenWitty itself stops

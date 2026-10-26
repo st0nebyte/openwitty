@@ -107,6 +107,9 @@ Rectangle {
                   value: root.v("set.ledBrightness", 0)
                   onMoved: (nv) => device.setValue("set.ledBrightness", nv)
                   onCommitted: (nv) => root.commitLed(nv) }
+        Text { objectName: "ledHwCheckWaiting"; width: 330; wrapMode: Text.WordWrap; font.pixelSize: 10; color: Theme.warn
+               visible: device.values["hwcheck.state"] === "waiting" && !device.simulated
+               text: "Hardware check: no baseline yet — changes are not sent until one is recorded (Settings → Device control)." }
         Text { objectName: "ledWriteStatus"; width: 330; wrapMode: Text.WordWrap; font.pixelSize: 10
                visible: text !== ""; text: root.ledWriteText()
                color: root.ledWrite === "verified" || root.ledWrite === "unchanged" ? Theme.textDim
@@ -312,15 +315,31 @@ Rectangle {
                    text: "Device writes stopped: " + (device.values["write.lockReason"] || "") + "." }
             // Opt-in (openwitty --hw-check): read-only snapshots for an owner-approved hardware test.
             Column {
+                id: hwPanel
                 objectName: "hwCheckPanel"; visible: device.values["hwcheck.enabled"] === true; width: 310; spacing: 4
+                readonly property bool hasBaseline: device.values["hwcheck.state"] === "recorded"
+                property bool replaceArmed: false
                 Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                        text: "Hardware check (read-only, this window's own device connection). Baseline LED brightness: "
-                           + (device.values["hwcheck.baseline"] === undefined ? "not recorded" : device.values["hwcheck.baseline"] + " %") }
-                Row { spacing: 6
-                    ToggleButton { objectName: "hwCheckBaselineButton"; width: 110; height: 20; text: "Record baseline"
-                                   onClicked: device.hwCheckRecordBaseline() }
+                           + (hwPanel.hasBaseline ? device.values["hwcheck.baseline"] + " %"
+                              + (device.values["hwcheck.replacements"] > 0 ? " (replaced " + device.values["hwcheck.replacements"] + "×)" : "")
+                              : "not recorded") }
+                Text { objectName: "hwCheckNoBaseline"; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                       visible: !hwPanel.hasBaseline
+                       text: "No baseline yet: device writes are blocked until the first successful settings read is recorded." }
+                Row { spacing: 6; visible: !hwPanel.replaceArmed
+                    ToggleButton { objectName: "hwCheckBaselineButton"; width: 110; height: 20
+                                   text: hwPanel.hasBaseline ? "Replace baseline…" : "Record baseline"
+                                   onClicked: { if (hwPanel.hasBaseline) hwPanel.replaceArmed = true; else device.hwCheckRecordBaseline(); } }
                     ToggleButton { objectName: "hwCheckCompareButton"; width: 130; height: 20; text: "Compare with baseline"
-                                   onClicked: device.hwCheckCompare() } }
+                                   enabled: hwPanel.hasBaseline; onClicked: device.hwCheckCompare() } }
+                Row { spacing: 6; visible: hwPanel.replaceArmed
+                    Text { width: 150; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                           text: "Replace the test's reference with the device's current settings?" }
+                    ToggleButton { objectName: "hwCheckReplaceConfirm"; width: 70; height: 20; text: "Replace"; primary: true
+                                   onClicked: { hwPanel.replaceArmed = false; device.hwCheckReplaceBaseline(); } }
+                    ToggleButton { objectName: "hwCheckReplaceCancel"; width: 60; height: 20; text: "Cancel"
+                                   onClicked: hwPanel.replaceArmed = false } }
                 Text { objectName: "hwCheckReport"; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                        text: device.values["hwcheck.report"] || "" }
             }
