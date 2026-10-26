@@ -1668,3 +1668,11 @@ Offline analysis and passive evidence only (no mixer access, no stream, no USB r
 `docs/PHASE10E_GAIN_CONTROL_PATH.md`. Passive journal check: the current boot again logs FU 5 "broken mixer GET_CUR (0/18432/256
 => 6912)". Non-service accesses to the vendor interface in this boot correspond to OpenWitty windows (HW-1 and later window
 starts outside the assistant's commands); the test suite's last run produced none (test transports are simulated).
+
+## 22. GAIN-1 step 1 — read-only comparison, 2026-10-26 22:21–22:23
+
+Owner-approved; no write of any kind (all OpenWitty permissions off; no mixer, route, profile or stream change).
+Kernel cache: FU 5 `Mic Capture Volume` 72,72,0,0 dB, `Mic Capture Switch` off,off. PipeWire route: 1.0 ×4, muted.
+Device (OpenWitty window, vendor read): microphone 27 dB muted, instrument 14 dB muted. Probe GET_CUR: 27.00 dB. The service
+took the device back at 22:22:50 (same process). Interpretation and limits: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 1 result).
+The window saved its GUI preference `onboarding_done = true` when the owner dismissed the first-start introduction.

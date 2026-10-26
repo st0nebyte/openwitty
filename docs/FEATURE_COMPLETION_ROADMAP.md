@@ -362,7 +362,7 @@ channels 1–2; channels 3–4 reject writes); nothing proves FU 5 is the preamp
 software mute/volume on top; the ALSA/PipeWire FU 5 values are the kernel's cache of its own last write, never the
 device's gain; at every probe the kernel writes 0 dB to FU 5 (after test writes of 0/+72 dB). Likely: WirePlumber writes
 +72 dB and mute at login; the loopback channels have no mute in this path. Unknown: whether FU 5 reaches the preamp or the
-device mute; what External Gain Lock does. That plan supersedes the outline below.
+device mute; what External Gain Lock does. That plan supersedes the outline below. **GAIN-1 step 1 done (2026-10-26):** kernel cache +72 dB/muted vs device 27 dB/14 dB, muted — consistent with FU 5 volume not driving the preamp, causality unproven; step 3 revised so no request exceeds the device's reported gain.
 
 **GAIN-1 proposal (outline from 10D; superseded by the Phase 10E plan):**
 1. *Read-only correlation:* one vendor settings read through the OpenWitty window (it takes the device over from the

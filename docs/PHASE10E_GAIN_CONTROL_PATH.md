@@ -125,6 +125,30 @@ own microphone/instrument gain.
 
 Abort: any OpenWitty error, any setting change seen in the window's compare, any audible event. Nothing to restore.
 
+### Step 1 — result (2026-10-26, owner-approved, read-only)
+
+| Time | Source (class) | Observation |
+|---|---|---|
+| 21:04:38 (boot probe) | kernel journal (P) | FU 5 "broken mixer GET_CUR (0/18432/256 => 6912)": the device answered GET_CUR with 27.00 dB |
+| 22:21:09 | PipeWire route, WirePlumber state (P) | `analog-input-mic` volumes 1.0 ×4, mute true; node software mute off; no stream open |
+| 22:21:17 | `amixer cget` of the two FU 5 controls (C) | `Mic Capture Volume` = 72,72,0,0 dB; `Mic Capture Switch` = off,off (muted); no kernel message |
+| 22:21:36–22:22:50 | OpenWitty window `--hw-check`, all permissions off (V) | took the device over from the service; device reports **microphone 27 dB, muted; instrument 14 dB, muted** (input strips, owner screenshot); no write, no error |
+| 22:22:50 | service journal | the service took the device back (`device connected`), same process, no restart |
+
+What this establishes: in this boot the kernel's cache holds +72 dB for FU 5 ch 1–2 — by the kernel code the cache is
+reset at probe (0 dB) and changes only on a *successful* SET_CUR, so an FU 5 volume SET of +72 dB was accepted by the
+device after 21:04:38. At 22:21 the device reported 27 dB (mic) and 14 dB (instrument). The mute states agree (all muted).
+The probe-time GET_CUR answer (27.00 dB) equals the mic gain the device reported.
+
+What it does **not** establish: whether that SET changed the preamp at all, for a time, or was overridden later; when it
+was sent; what External Gain Lock was set to; whether GET_CUR reports the real mic gain. Consistent with "FU 5 volume
+does not drive the preamp", but **causality is unproven** without a controlled before/after write.
+
+**Safety consequence for later writes:** the PipeWire route stands at 1.0 = +72 dB while the device reports 27 dB. Any
+FU 5 volume write from that state — including a nominal "decrease" such as `wpctl set-volume … 0.97` — requests ≈ +71 dB,
+i.e. **far above the device's current gain**, and restoring the saved route (1.0) requests +72 dB. Step 3 below is revised
+accordingly.
+
 ### Step 2 — one source mute/unmute cycle (later, separate approval)
 
 Safety: speakers off/down, headphones off the head, direct monitoring of mic/instrument **off** (device), nothing
@@ -134,14 +158,19 @@ compare and the input-strip mute), ALSA switch cache, route state. Procedure: `w
 set-mute <source> 1`, read. Abort: any other byte changes, any sound, any error → stop; restore only the PipeWire mute
 to true (one command) if it is not already. Restoration condition: route mute back to true, bytes 2/12 as before.
 
-### Step 3 — one small input-volume decrease and restoration (later, separate approval)
+### Step 3 — one controlled FU 5 volume request below the device's gain (later, separate approval; revised after step 1)
 
-Safety as step 2, plus device mic/instrument mute on. Possible writes: SET_CUR FU 5 volume ch 1–4 (ch 3–4 STALL ×10
-each, expected and harmless per traces) to a lower value, then back to the saved value. Use `wpctl set-volume <source>
-0.97` (wpctl's cubic scale: 0.97³ ≈ 0.913 linear ≈ −0.8 dB, i.e. ≈ +71.2 dB requested on FU 5) and then the exact saved
-value `1.0`. Before/after: vendor gain bytes 0–1/10–11,
-ALSA cache, route. Abort: any increase beyond the saved value, any gain change other than the expected, any error.
-Restoration condition: route 1.0 as before (WirePlumber saves it), device gain as before.
+The request must stay **at or below the gain the device reports** (step 1: mic 27 dB), never relative to PipeWire's
+saved 1.0. Safety as step 2, plus device mic and instrument mute on, outputs physically off/down, headphones off.
+1. Fresh vendor read (window) → current mic gain G (dB).
+2. One FU 5 request of G − 1 dB: route linear volume = 10^((G−1−72)/20); for `wpctl` (cubic scale) the value is the cube
+   root of that (for G = 27: 10^(−46/20) ≈ 0.00501 linear → `wpctl set-volume <source> 0.171`).
+   Possible USB writes: SET_CUR FU 5 volume ch 1–4 (ch 3–4 STALL ×10, expected).
+3. Vendor read: does the mic gain change to G − 1 (FU 5 drives the preamp) or stay G (it does not, in this state)?
+4. Restoration depends on the outcome and needs the owner's decision: if the gain did not change, return the route to
+   its saved value 1.0 (one command; WirePlumber saves it); if it did change, do **not** return to 1.0 (that would request
+   +72 dB) — request G instead and keep the route there, documenting the new saved state.
+Abort: any gain above G, any other byte change, any error, any sound.
 
 ### Step 4 — External Gain Lock (after its own byte-57 write step)
 
