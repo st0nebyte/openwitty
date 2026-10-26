@@ -144,33 +144,71 @@ What it does **not** establish: whether that SET changed the preamp at all, for 
 was sent; what External Gain Lock was set to; whether GET_CUR reports the real mic gain. Consistent with "FU 5 volume
 does not drive the preamp", but **causality is unproven** without a controlled before/after write.
 
-**Safety consequence for later writes:** the PipeWire route stands at 1.0 = +72 dB while the device reports 27 dB. Any
-FU 5 volume write from that state — including a nominal "decrease" such as `wpctl set-volume … 0.97` — requests ≈ +71 dB,
-i.e. **far above the device's current gain**, and restoring the saved route (1.0) requests +72 dB. Step 3 below is revised
-accordingly.
+**Safety consequence for later writes:** the PipeWire route stands at 1.0 = +72 dB while the device reports 27 dB (mic)
+and 14 dB (instrument). Any FU 5 volume write from that state — including a nominal "decrease" such as `wpctl set-volume … 0.97`
+— requests ≈ +71 dB, i.e. **far above both channels' current gains**, and restoring the saved route (1.0) requests +72 dB.
+Step 3 below is revised accordingly (Phase 10E.1: bound by the lower of both gains; restoration decided in advance).
 
 ### Step 2 — one source mute/unmute cycle (later, separate approval)
 
-Safety: speakers off/down, headphones off the head, direct monitoring of mic/instrument **off** (device), nothing
-connected to the instrument input, microphone pointing away from speakers, no recording application open.
-Possible writes: SET_CUR FU 5 mute ch 1–2 (unmute, then mute). Before/after: vendor bytes 2/12 (window `--hw-check`
-compare and the input-strip mute), ALSA switch cache, route state. Procedure: `wpctl set-mute <source> 0`, read, `wpctl
-set-mute <source> 1`, read. Abort: any other byte changes, any sound, any error → stop; restore only the PipeWire mute
-to true (one command) if it is not already. Restoration condition: route mute back to true, bytes 2/12 as before.
+**Code trace of `wpctl set-mute <source> 0` and `… 1` (installed WirePlumber 0.5.18 / PipeWire 1.6.10; upstream sources
+at those tags; distribution patches not checked):**
 
-### Step 3 — one controlled FU 5 volume request below the device's gain (later, separate approval; revised after step 1)
+| Stage | Behaviour | Status |
+|---|---|---|
+| `wpctl` (`src/tools/wpctl.c`) | builds a dictionary with **only `mute`** and emits the mixer API's `set-volume` | established (code) |
+| mixer API (`modules/module-mixer-api.c`) | for a node on a device route builds a Route param with `index`, `device`, `save = true` and props containing **only `mute`**; `channelVolumes` is added only when the caller passes a volume | established (code) |
+| PipeWire `alsa-acp-device.c` `impl_set_param(Route)` | calls `acp_device_set_port()` for the same port, then `apply_device_props()`; `acp_device_set_volume()` is called only for `volume`/`channelVolumes` props, `acp_device_set_mute()` only for `mute` | established (code) |
+| `acp.c` `acp_device_set_port()` | the port is already active → returns before `sync_mixer()` (no path re-selection, no volume/mute re-write) | established (code); "already active" = the current route, A-sys |
+| `acp.c` `acp_device_set_mute()` → `set_mute()` | no-op if unchanged; otherwise, because the path has a mute switch (`has_mute`), `pa_alsa_path_set_mute()` writes **only the capture switch** (`snd_mixer_selem_set_capture_switch_all`); the volume-as-mute branch (`has_volume_mute`) requires *no* mute switch and a −99999.99 dB minimum — not this path (route advertises `hw-mute=true`, minimum 0 dB) | established (code + metadata) |
+| kernel `mixer_ctl_feature_put()` | `Mic Capture Switch` (ch 1–2): SET_CUR (mute control) per channel whose cached value differs; no volume request | established (code) |
+| ALSA event → ACP `mixer_callback` → `read_volume()`/`read_mute()` | **reads** the kernel cache (no USB, no write); may update PipeWire's volume view | established (code) |
+| WirePlumber `state-routes.lua` | for an already-active route a Route change is **stored** (`save = true`), not re-applied; re-applying stored mute *and* channel volumes happens only on `select-routes` (profile change, newly active route — `apply-routes.lua`) | established (code) |
 
-The request must stay **at or below the gain the device reports** (step 1: mic 27 dB), never relative to PipeWire's
-saved 1.0. Safety as step 2, plus device mic and instrument mute on, outputs physically off/down, headphones off.
-1. Fresh vendor read (window) → current mic gain G (dB).
-2. One FU 5 request of G − 1 dB: route linear volume = 10^((G−1−72)/20); for `wpctl` (cubic scale) the value is the cube
-   root of that (for G = 27: 10^(−46/20) ≈ 0.00501 linear → `wpctl set-volume <source> 0.171`).
-   Possible USB writes: SET_CUR FU 5 volume ch 1–4 (ch 3–4 STALL ×10, expected).
-3. Vendor read: does the mic gain change to G − 1 (FU 5 drives the preamp) or stay G (it does not, in this state)?
-4. Restoration depends on the outcome and needs the owner's decision: if the gain did not change, return the route to
-   its saved value 1.0 (one command; WirePlumber saves it); if it did change, do **not** return to 1.0 (that would request
-   +72 dB) — request G instead and keep the route there, documenting the new saved state.
-Abort: any gain above G, any other byte change, any error, any sound.
+So the mute cycle is expected to send only FU 5 **mute** SET_CUR requests (ch 1–2) and to leave the stored +72 dB volume
+untouched. **Needs the hardware test:** what the firmware does with the FU 5 mute (bytes 2/12 or nothing); whether the
+re-read after the mixer event changes the stored route volume (compare `default-routes` and the route params before and
+after); that no profile change/route re-selection happens during the test (journal: no WirePlumber "restoring route" /
+"setting route" lines). Not covered: KDE's own mute button (goes through `pipewire-pulse`, a different entry point) — not
+used in this test.
+
+Safety: speakers off/down, headphones off the head, direct monitoring of mic/instrument **off** on the device, nothing
+connected to the instrument input, microphone pointing away from speakers, no recording application open, owner hands
+off the device. Possible USB writes: FU 5 mute SET_CUR, ch 1–2 (unmute, then mute). Procedure: passive record (route,
+`default-routes`, `usbmixer`, journal) → `wpctl set-mute <source-id> 0` → vendor read (OpenWitty window `--hw-check`,
+read-only) → `wpctl set-mute <source-id> 1` → vendor read → passive record. Abort: any byte other than 2/12 changes, any
+volume change in the route or stored state, any WirePlumber route re-application in the journal, any sound, any error —
+then set the PipeWire mute back to true (one `wpctl set-mute <id> 1`) if it is not already, and stop. Restoration
+condition: route mute true, stored volumes unchanged (1.0 ×4), bytes 2/12 as before.
+
+### Step 3 — one controlled FU 5 volume request (later, separate approval; revised in Phase 10E.1)
+
+**Per-channel mapping (offline evidence):** FU 5 sits on the 4-channel *Microphone* input terminal; the official channel
+order is 1 microphone, 2 instrument, 3/4 loopback; channel names exist only as an unread string descriptor; the kernel
+exposes one control with one range (0…72 dB, taken from the first channel) for all four channels, which differs from the
+instrument's official 0…60 dB. So FU 5 channel 2 **likely** corresponds to the instrument path, but whether it acts on
+the instrument preamp — and with which scale — is **unknown**. ACP writes the same value to all channels (route channel
+volumes are equal; `volume = merge`).
+
+**Bound:** a request must not exceed **either** channel's device-reported gain: at most min(G_mic, G_inst) − 1 dB, from a
+fresh vendor read immediately before (step 1: 27 dB and 14 dB → at most **13 dB**). For 13 dB: linear 10^((13−72)/20) ≈
+0.001122; `wpctl` cubic value ≈ 0.1039 (`wpctl set-volume <source> 0.104`; re-compute from the fresh read). If FU 5 drives
+the preamps, the effect is a decrease on both (mic 27→13, instrument 14→13). Device mic and instrument mute on, outputs
+physically off/down, headphones off, monitoring off. Possible USB writes: FU 5 volume SET_CUR ch 1–4 (ch 3–4 STALL ×10,
+expected). Abort: any reported gain above its value before the request, any other byte change, any error, any sound.
+
+**Restoration (decided by the owner before the test, not afterwards):** returning the route to its saved 1.0 requests
+**+72 dB** and is never treated as safe because an earlier step showed no change. Options:
+* **R-A (recommended): end in the safe direction.** Leave the FU 5 request at the tested value (≤ both device gains).
+  WirePlumber stores it, so later logins request that value instead of +72 dB; if FU 5 acts on the preamps in any state,
+  the worst case is a lower gain (quieter), visible in OpenWitty and correctable on the device. Visible side effect: the
+  desktop shows the CONNECT 2 input at a low volume. Changes the stored WirePlumber state persistently — needs explicit
+  approval.
+* **R-B: return to 1.0** only with the owner's explicit acceptance of a +72 dB request, under the step-3 safety conditions,
+  followed at once by a vendor read; if a gain changed, the owner restores it with the device's own controls (OpenWitty has
+  no gain write permission); never automated.
+* Never: an automatic "restore" to 1.0, a per-channel ALSA write (`amixer cset`) without its own plan, or any request
+  above a reported gain.
 
 ### Step 4 — External Gain Lock (after its own byte-57 write step)
 
