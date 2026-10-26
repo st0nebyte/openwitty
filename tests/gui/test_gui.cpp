@@ -1255,8 +1255,9 @@ struct RealLike {
     lewitt::testing::FakeHardware* hw{nullptr};
     std::unique_ptr<DeviceController> c;
     QTemporaryDir proc;                                    // fixture /proc/asound (empty: no sound card)
-    explicit RealLike(lewitt::WritePolicy p) {
+    explicit RealLike(lewitt::WritePolicy p, bool hwCheck = false) {
         c = std::make_unique<DeviceController>();
+        if (hwCheck) c->enableHardwareCheck();               // as openwitty --hw-check: before connecting
         auto t = std::make_unique<lewitt::testing::FakeHardware>(&mock);
         hw = t.get();
         c->connectTransportForTesting(std::move(t), std::move(p), proc.path().toStdString());
@@ -1508,18 +1509,34 @@ TEST(Permissions10B, LedBrightnessAloneWritesOnlyByte37AndRestoresTheOriginal) {
     EXPECT_FALSE(r.c->values().value("pending.spk.mute").toBool());
 }
 
-TEST(Permissions10B, AnAmbiguousLedWriteIsNeverRetriedAutomatically) {
+TEST(Permissions10B, AnUnconfirmedLedWriteStopsAllFurtherWritesUntilANewSession) {
     app();
     RealLike r(lewitt::guiWritePolicy(false, false, true));
     r.hw->dropWrites = true;                                  // the device acknowledges but ignores the SET
     const int original = r.c->values().value("set.ledBrightness").toInt();
     r.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
     r.c->flush();
-    ASSERT_TRUE(waitFor([&] { return r.c->values().value("pending.set.ledBrightness").toBool(); }));
-    const int writes = r.hw->writeCalls;
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.locked").toBool(); }));
+    EXPECT_EQ(r.c->values().value("write.outcome").toString(), "unconfirmed");
+    EXPECT_EQ(r.hw->writeCalls, 1);
+    EXPECT_FALSE(r.c->values().value("pending.set.ledBrightness").toBool());   // not kept for a later SET
+    EXPECT_EQ(r.c->values().value("set.ledBrightness").toInt(), original);      // shows what the device reports
+    EXPECT_FALSE(r.can("set.ledBrightness"));                                   // control disabled
+    r.hw->dropWrites = false;
     for (int i = 0; i < 5; ++i) r.c->flush();                 // polls only
-    EXPECT_EQ(r.hw->writeCalls, writes);                      // no automatic retry
+    r.c->setValue("set.ledBrightness", 10);                   // a further request (e.g. queued) is refused
+    r.c->retryPending();
+    r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls, 1);                           // never a second SET
+    EXPECT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "refused"; }));
     EXPECT_EQ(lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value().ledBrightness(), original);
+    // only a new session (the permission turned off and on reconnects) lifts the stop
+    auto t2 = std::make_unique<lewitt::testing::FakeHardware>(&r.mock);
+    auto* hw2 = t2.get();
+    r.c->connectTransportForTesting(std::move(t2), lewitt::guiWritePolicy(false, false, true), r.proc.path().toStdString());
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return !r.c->values().value("write.locked").toBool() && r.can("set.ledBrightness"); }));
+    EXPECT_EQ(hw2->writeCalls, 0);
 }
 
 TEST(Permissions10B, SpeakerIncreasesStayBoundedTo10dBPerStep) {
@@ -1541,6 +1558,234 @@ TEST(Permissions10B, SpeakerIncreasesStayBoundedTo10dBPerStep) {
     ASSERT_TRUE(waitFor([&] { return r.c->values().value("spk.volume").toDouble() > start; }));
     EXPECT_LE(r.c->values().value("spk.volume").toDouble(), start + 10.0 + 1e-6);   // -30 dB, not 0 dB
     EXPECT_GE(r.c->values().value("spk.volume").toDouble(), start + 10.0 - 0.01);
+}
+
+// ---- Phase 10B.1: one deliberate LED change = at most one SET; stable snapshots; read-only hardware check ----
+#include <QMouseEvent>
+#include <atomic>
+#include <thread>
+namespace {
+void setDeviceLed(RealLike& r, int v) {
+    lewitt::Bytes b = r.mock.settingsBytes();
+    b[lewitt::settings_off::kLedBrightness] = static_cast<std::uint8_t>(v);
+    r.mock.setSettingsBytes(b);
+    EXPECT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.ledBrightness").toInt() == v; }));
+}
+int deviceLed(RealLike& r) { return r.mock.settingsBytes()[lewitt::settings_off::kLedBrightness]; }
+// Main.qml in a shown offscreen window, Settings > LEDs open, the real brightness slider found.
+struct LedPage {
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root;
+    QQuickWindow* w{nullptr};
+    QQuickItem* fader{nullptr};
+    QObject* status{nullptr};
+    explicit LedPage(DeviceController& c) {
+        root = loadMain(c, engine);
+        w = qobject_cast<QQuickWindow*>(root.get());
+        EXPECT_TRUE(w);
+        if (!w) return;
+        w->resize(1008, 566);
+        w->show();
+        root->setProperty("showSettings", true);
+        QObject* sv = root->findChild<QObject*>("settingsView");
+        EXPECT_TRUE(sv);
+        if (sv) sv->setProperty("open", "leds");
+        for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+        fader = root->findChild<QQuickItem*>("ledBrightnessFader");
+        status = root->findChild<QObject*>("ledWriteStatus");
+        EXPECT_TRUE(fader && status);
+    }
+    void mouse(QEvent::Type type, double fraction) {
+        const QPointF scene = fader->mapToScene(QPointF(fader->width() * fraction, fader->height() / 2));
+        QMouseEvent e(type, scene, scene, w->mapToGlobal(scene.toPoint()), Qt::LeftButton,
+                      type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QGuiApplication::sendEvent(w, &e);
+    }
+    void click(double f) { mouse(QEvent::MouseButtonPress, f); mouse(QEvent::MouseButtonRelease, f); }
+    QString text() const { return status->property("text").toString(); }
+};
+}  // namespace
+
+TEST(HwSafety10B1, LongDragOnTheRealDeviceSendsExactlyOneSetOnRelease) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    setDeviceLed(r, 20);
+    LedPage page(*r.c);
+    ASSERT_TRUE(page.fader);
+    ASSERT_TRUE(page.fader->isEnabled());
+    EXPECT_TRUE(page.fader->property("commitOnRelease").toBool());
+    const lewitt::Bytes before = deviceBytes(r);
+    const int w0 = r.hw->writeCalls;
+    page.mouse(QEvent::MouseButtonPress, 0.20);
+    int moves = 0;
+    for (int i = 0; i <= 600; ++i) {                          // 0.2 -> 0.95 -> 0.5 -> 0.8, 1803 pointer moves
+        page.mouse(QEvent::MouseMove, 0.20 + 0.75 * i / 600.0); ++moves;
+        if (i % 50 == 0) QCoreApplication::processEvents();
+    }
+    for (int i = 0; i <= 600; ++i) { page.mouse(QEvent::MouseMove, 0.95 - 0.45 * i / 600.0); ++moves; }
+    for (int i = 0; i <= 600; ++i) { page.mouse(QEvent::MouseMove, 0.50 + 0.30 * i / 600.0); ++moves; }
+    for (int i = 0; i < 10; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls, w0) << "previewing must not touch the device";
+    EXPECT_EQ(deviceLed(r), 20);
+    EXPECT_TRUE(page.fader->property("dragging").toBool());
+    EXPECT_EQ(page.fader->property("previewValue").toInt(), 80);
+    page.mouse(QEvent::MouseButtonRelease, 0.80);
+    ASSERT_TRUE(waitFor([&] { return page.text().startsWith("Verified"); })) << page.text().toStdString();
+    for (int i = 0; i < 5; ++i) r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls - w0, 1) << moves << " pointer moves";
+    EXPECT_EQ(deviceLed(r), 80);
+    EXPECT_EQ(changedOffsets(before, deviceBytes(r)), (std::vector<std::size_t>{lewitt::settings_off::kLedBrightness}));
+    std::printf("[ info ] long drag: %d pointer moves, %d settings SET(s)\n", moves, r.hw->writeCalls - w0);
+}
+
+TEST(HwSafety10B1, BindingUpdatesClicksAtTheCurrentValueAndReturningDragsSendNothing) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    setDeviceLed(r, 30);
+    const int w0 = r.hw->writeCalls;
+    LedPage page(*r.c);
+    ASSERT_TRUE(page.fader);
+    for (int v : {45, 10, 30}) {                              // changes on the device itself rebind the slider
+        setDeviceLed(r, v);
+        ASSERT_TRUE(waitFor([&] { return std::lround(page.fader->property("value").toDouble()) == v; }));
+    }
+    page.click(0.30);                                         // the value it already has
+    page.mouse(QEvent::MouseButtonPress, 0.30);               // away and back again
+    for (int i = 0; i <= 100; ++i) page.mouse(QEvent::MouseMove, 0.30 + 0.4 * i / 100.0);
+    for (int i = 0; i <= 100; ++i) page.mouse(QEvent::MouseMove, 0.70 - 0.4 * i / 100.0);
+    page.mouse(QEvent::MouseButtonRelease, 0.30);
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls, w0);
+    EXPECT_EQ(page.text(), "");
+}
+
+TEST(HwSafety10B1, RapidRepeatedClicksSendOneSetThenTheControlWaitsForTheResult) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    setDeviceLed(r, 50);
+    LedPage page(*r.c);
+    ASSERT_TRUE(page.fader);
+    const int w0 = r.hw->writeCalls;
+    for (int i = 0; i < 30; ++i) page.click(i % 2 ? 0.30 : 0.70);   // no event processing in between
+    EXPECT_FALSE(page.fader->isEnabled()) << "disabled while the change is being sent";
+    EXPECT_EQ(page.text(), "Sending to the device…");
+    ASSERT_TRUE(waitFor([&] { return page.text().startsWith("Verified"); })) << page.text().toStdString();
+    for (int i = 0; i < 5; ++i) r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    EXPECT_EQ(deviceLed(r), 70);
+    EXPECT_TRUE(page.fader->isEnabled());
+    page.click(0.70);                                          // duplicate: nothing to send
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+}
+
+TEST(HwSafety10B1, ManyRequestsWhileAWriteIsInFlightBecomeOneFollowUp) {
+    app();
+    std::atomic<bool> hold{true}, entered{false};             // outlive the controller (declared first)
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    setDeviceLed(r, 50);
+    r.mock.setReadHook([&] {                                  // stays installed: a no-op once released
+        entered = true;
+        while (hold.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    const int w0 = r.hw->writeCalls;
+    r.c->setValue("set.ledBrightness", 10);                    // starts; blocks in its pre-write read
+    ASSERT_TRUE(waitFor([&] { return entered.load(); }));
+    for (int v = 11; v <= 110; ++v) r.c->setValue("set.ledBrightness", std::min(v, 99));
+    hold = false;
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return deviceLed(r) == 99; }));
+    for (int i = 0; i < 5; ++i) r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls - w0, 2) << "the first request, then only the latest of the 100 waiting ones";
+}
+
+TEST(HwSafety10B1, ADeviceChangeBetweenTheTwoPreWriteReadsSendsNothing) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    setDeviceLed(r, 50);
+    const int w0 = r.hw->writeCalls;
+    r.mock.injectExternalSettingsChange(1, lewitt::settings_off::kSpeakerMute, 1);   // a press on the device
+    r.c->setValue("set.ledBrightness", 20);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "not-sent"; }));
+    EXPECT_EQ(r.hw->writeCalls, w0);
+    EXPECT_EQ(deviceLed(r), 50);
+    EXPECT_EQ(r.mock.settingsBytes()[lewitt::settings_off::kSpeakerMute], 1);       // not overwritten
+    EXPECT_FALSE(r.c->values().value("write.locked").toBool());                    // nothing was sent
+    EXPECT_FALSE(r.c->values().value("pending.set.ledBrightness").toBool());       // not kept for later
+    EXPECT_TRUE(r.c->values().value("spk.mute").toBool());
+    EXPECT_NE(r.c->values().value("write.message").toString().indexOf("changed while preparing"), -1);
+}
+
+TEST(HwSafety10B1, SimulatedSliderStaysLiveWhileDragging) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("set.ledBrightness"); }));
+    LedPage page(c);
+    ASSERT_TRUE(page.fader);
+    EXPECT_FALSE(page.fader->property("commitOnRelease").toBool());
+    page.mouse(QEvent::MouseButtonPress, 0.10);
+    for (int i = 0; i <= 40; ++i) page.mouse(QEvent::MouseMove, 0.10 + 0.4 * i / 40.0);
+    ASSERT_TRUE(waitFor([&] { return c.values().value("set.ledBrightness").toInt() == 50; }));   // before release
+    page.mouse(QEvent::MouseButtonRelease, 0.50);
+    EXPECT_EQ(page.text(), "");
+}
+
+TEST(HwSafety10B1, HardwareCheckUsesTheOpenSessionReadsOnlyAndReportsChangedOffsets) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true), /*hwCheck=*/true);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("hwcheck.baseline").isValid(); }));
+    const int original = deviceLed(r);
+    EXPECT_EQ(r.c->values().value("hwcheck.baseline").toInt(), original);
+    EXPECT_EQ(r.hw->openCalls, 1);
+    const int target = original == 60 ? 40 : 60;
+    r.c->setValue("set.ledBrightness", target);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_NE(r.c->values().value("hwcheck.report").toString().indexOf("changed: 37 (LED brightness); unexpected: none"), -1)
+        << r.c->values().value("hwcheck.report").toString().toStdString();
+    const int writes = r.hw->writeCalls, reads = r.hw->readCalls;
+    r.c->hwCheckCompare();
+    r.c->flush();
+    auto report = [&] { return r.c->values().value("hwcheck.report").toString(); };
+    ASSERT_TRUE(waitFor([&] { return report().startsWith("now vs baseline"); }));
+    const QString after = report();
+    EXPECT_EQ(after, QString("now vs baseline: LED brightness %1 -> %2; changed: 37 (LED brightness); unexpected: none")
+                         .arg(original).arg(target));
+    EXPECT_EQ(r.hw->writeCalls, writes);                      // read-only
+    EXPECT_EQ(r.hw->openCalls, 1);                            // no second connection
+    EXPECT_GE(r.hw->readCalls - reads, 1);                    // its own GET on the same transport (plus flush's poll)
+    r.c->setValue("set.ledBrightness", original);             // restore
+    r.c->hwCheckCompare();
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return report().endsWith("changed: none; unexpected: none"); })) << report().toStdString();
+    lewitt::Bytes b = r.mock.settingsBytes();                 // something else changes on the device
+    b[lewitt::settings_off::kSpeakerMute] ^= 1;
+    r.mock.setSettingsBytes(b);
+    r.c->hwCheckCompare();
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return report().endsWith("unexpected: 22 (speaker mute)"); })) << report().toStdString();
+    const QString unexpected = report();
+    for (const char* s : {"29c2", "USB", "serial", "0x"}) EXPECT_EQ(unexpected.indexOf(s), -1) << s;
+    EXPECT_EQ(r.hw->openCalls, 1);
+}
+
+TEST(HwSafety10B1, HardwareCheckIsOffUnlessRequested) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, true));
+    EXPECT_FALSE(r.c->values().value("hwcheck.enabled").toBool());
+    const int reads = r.hw->readCalls;
+    r.c->hwCheckRecordBaseline();
+    r.c->hwCheckCompare();
+    QMetaObject::invokeMethod(r.c.get(), [] {}, Qt::QueuedConnection);
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    EXPECT_EQ(r.hw->readCalls, reads);
+    EXPECT_FALSE(r.c->values().value("hwcheck.baseline").isValid());
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    QObject* panel = root->findChild<QObject*>("hwCheckPanel");
+    ASSERT_TRUE(panel);
+    EXPECT_FALSE(panel->property("visible").toBool());
 }
 
 // ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------

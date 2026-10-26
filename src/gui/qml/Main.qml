@@ -73,6 +73,11 @@ Window {
         Rectangle { x: 0; y: 345; width: parent.width; height: 28; color: Theme.footer }
         Text { x: 10; y: 345; height: 28; verticalAlignment: Text.AlignVCenter; color: "#f0f0f0"
                font.pixelSize: 13; text: Hint.text }   // control hints live in the status bar, as in the original
+        Text {  // Phase 10B.1: a real-device write was sent but not confirmed; nothing more is sent in this session
+            objectName: "writeLockedFooter"; visible: device.values["write.locked"] === true && !win.hasPending
+            anchors.right: parent.right; anchors.rightMargin: 8; y: 345; height: 28; verticalAlignment: Text.AlignVCenter
+            color: Theme.warn; font.pixelSize: 11
+            text: "Last change not confirmed — device writes stopped (see Settings → Device control)" }
         Row {   // unsent edits: never silently dropped; user decides
             visible: win.hasPending; anchors.right: parent.right; anchors.rightMargin: 8; y: 349; spacing: 6
             Text { color: Theme.warn; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter

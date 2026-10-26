@@ -113,6 +113,8 @@ public:
     // not silently accepted or overwritten.
     WriteResult commitAndVerify(PollPolicy pp = {});
     Status sendTrigger(Trigger t);
+    // Number of settings SETs handed to the transport by this session (monotonic; for result bookkeeping).
+    std::uint64_t settingsWriteAttempts() const { return settingsWriteAttempts_; }
 
 private:
     Status fail(Error e);
@@ -129,6 +131,7 @@ private:
     Status handshake();       // open + api version + capability checks (no settings)
     void noteResult(const Status& s);
     std::uint32_t sampleRate_{0};
+    std::uint64_t settingsWriteAttempts_{0};
 };
 
 }  // namespace lewitt

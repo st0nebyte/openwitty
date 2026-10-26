@@ -62,6 +62,29 @@ A decoded field is not proof that writing it is safe. A W-cli result is not proo
 * **Defects fixed:** after a successful write `write.state` stayed "prepared" (now "verified"); a fractional
   `hw_params` rate was accepted as an integer (now requires an exact ratio).
 
+## Phase 10B.1 (offline, no hardware writes): corrections before the first GUI write
+
+An independent review of the HW-1 plan found three problems; all are fixed offline.
+
+* **Competing device owner in the test plan.** The plan read the device with `openwitty-cli` while the window
+  owned it (and omitted the CLI's `--interface auto`). Now all snapshots go through the window's own session:
+  `openwitty --hw-check` (see the procedure). Tests show it uses the already-open transport (no second open, no
+  write) and reports changed offsets without raw values. Also fixed: reopening the session after a permission
+  change briefly released the control lease, so the background service could have taken the device in between;
+  the window now asks the service to stay away before it reopens.
+* **Many SETs per drag.** The LED slider sent a full 128-byte settings SET on press and on every pointer
+  movement. On the real device it now previews while dragging and sends at most one SET per release, nothing for
+  a release at the starting value or for value rebinding, and nothing while a previous change is being sent.
+  Requests for one control that arrive while a write is in flight are merged into one. After a write that may have
+  been sent but was not confirmed, the edit is discarded (never re-sent with a later change) and the session sends
+  nothing more until the permission is turned off and on. Simulation keeps the live slider.
+  Measured with fake hardware: a drag of 1,803 pointer moves → **1 SET**; 30 rapid clicks → **1 SET**; 100 requests
+  during an in-flight write → **2 SETs** (the first and the latest).
+* **No stable-snapshot check in the GUI.** GUI writes on real hardware now use `requireStableSnapshot`: two
+  matching reads immediately before the SET, otherwise nothing is sent ("Not sent"). Byte-37 authorization,
+  the full-struct write guard, read-back verification and no-retry are unchanged; the background service's mirror
+  path is unaffected.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
@@ -162,7 +185,7 @@ any unexpected audible change; restore the original value at the end.
 
 | Step | Field (only) | Preconditions / owner actions | Expected | Read-back | Abort | Restore | Safeguards |
 |---|---|---|---|---|---|---|---|
-| **HW-1** LED brightness via the GUI | 37 | *LED brightness* confirmed (exists since 10B), speaker/headphone control off; owner watches the LEDs | LEDs dim to the chosen value; GUI shows "verified" | byte 37 = value, all other bytes unchanged | any other byte differs; no visible change; error; ambiguous result | original brightness | cosmetic; no audio risk; procedure below |
+| **HW-1** LED brightness via the GUI | 37 | *LED brightness* confirmed (since 10B), speaker/headphone control and vendor fallback off; window started with `--hw-check`; owner watches the LEDs, hands off the device | LEDs change; GUI shows "Verified" | in-window compare: `changed: 37 (LED brightness); unexpected: none` | any other offset; no visible change; error; not confirmed / not sent | original brightness, one separate deliberate action | cosmetic; no audio risk; procedure below |
 | **HW-2** Speaker mute via the GUI | 22 | speakers turned down / amp off; *speaker control* confirmed, headphone control off | speaker muted / unmuted | byte 22 | anything else changes | original mute state | mute before unmute |
 | **HW-3** Speaker volume via the GUI (decreases first) | 20–21 | as HW-2; desktop volume untouched | level follows the fader | bytes 20–21 | an increase beyond 10 dB; other bytes | original level with the knob | decreases only first; then one small increase |
 | **HW-4** Headphone mute, then volume via the GUI | 29, then 27–28 | headphones **off the head**; *headphone control* confirmed, speaker control off; first-ever headphone SET | as above | bytes 29 / 27–28 | as above | original | decreases first |
@@ -179,22 +202,62 @@ any unexpected audible change; restore the original value at the end.
 
 Excluded: firmware update, factory reset, device-mode switching, mobile streaming (until reverse-engineered).
 
-### HW-1 procedure (LED brightness, first GUI write)
+### HW-1 procedure (LED brightness, first GUI write) — corrected in Phase 10B.1
 
-1. Owner approval for HW-1 only. Install the build under test (it replaces the running installation: stop the
-   window first; the background service and tray may stay — the service yields the device to the window).
-2. Settings → Device control: turn on **LED brightness** only and confirm. The banner must read "can change: LED
-   brightness"; every other control display-only.
-3. Capture the original state: `openwitty-cli read settings` (full settings bytes; note byte 37).
-4. Make **one** change on the LED brightness control to a clearly different value. Expect the LEDs to change and
-   the GUI write status "verified".
-5. Read back with the CLI: byte 37 = the chosen value, every other byte identical to step 3.
-6. Restore: set the original brightness in the GUI once, read back again, compare with step 3.
-7. Turn LED brightness off again.
+**Not run yet.** Each numbered step is done by the owner, or by the assistant with the owner present. No step
+sends anything to the device except step 6 and step 9, each a single deliberate GUI action.
 
-Abort on any other byte changing, a USB error, a "failed" status or no visible change. After an **ambiguous**
-result (timeout, "unverified", disconnect during the write) do **not** retry automatically or by hand: read the
-device first, record the state, and stop for analysis.
+**Why no `openwitty-cli` reads.** While the window is open it owns the device (exclusive control lease); a CLI
+read would compete with it, and when the window closes the background service takes the device back. So every
+before/after snapshot is taken **inside the window**, through its own session and serialized transport, with
+the opt-in `openwitty --hw-check`: it records a baseline when the device connects, logs every GUI write with
+its outcome, and on request ("Compare with baseline", Settings → Device control) does one ordinary settings GET
+and reports which offsets differ from the baseline. It prints field names, offsets and the LED brightness value
+only — no device identifiers, no raw settings. It cannot write (audit rule; no session or transport access in
+`core/SettingsComparison`).
+
+1. **Revision and configuration.** Record `git rev-parse HEAD` of the build under test. Record, read-only:
+   `grep -E '^(desktop_volume_sync|vendor_fallback|speaker_control|headphone_control|led_brightness_control|output_control)' ~/.config/openwitty/openwitty.conf`,
+   `systemctl --user is-enabled openwitty-volumed.service; systemctl --user is-active openwitty-volumed.service`,
+   and whether `~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop` exists.
+2. **Preconditions.** Speaker control, headphone control and vendor fallback must be off (missing keys = off; the
+   legacy `output_control` grants nothing). Nothing is played; the owner does not touch the device (knob, buttons)
+   from step 4 to step 10 — any physical change would show up as an unexpected offset.
+3. **Install — only after a separate, explicit approval.** Close the OpenWitty window first. Install the build;
+   confirm with `sha256sum` that the installed `openwitty` matches the build output and that
+   `openwitty --help` lists `--hw-check`. The background service and tray may keep running (the service hands
+   the device to the window and takes it back afterwards).
+4. **Baseline.** Start the window from a terminal: `openwitty --hw-check --show settings-device 2>&1 | tee hw1.log`.
+   Expect `hw-check: baseline recorded at connect: LED brightness N` (N = the original value) the banner
+   "CONTROL LINK, READ-ONLY" and, on the page, "Currently allowed: nothing (display only)". Press **Compare with baseline**: expect `changed: none; unexpected: none`.
+5. **Enable LED brightness only**, through the switch and its confirmation dialog. The window reconnects (it keeps
+   the device: the service is asked to stay away during the reopen). Banner: "REAL DEVICE — can change: LED brightness. All other controls are display-only." Press
+   **Compare with baseline**: still `changed: none`.
+6. **One deliberate change.** Settings → LEDs: drag the brightness slider to a clearly different value and
+   release. Dragging only previews ("release to send"); the release sends **one** settings SET at most; the slider
+   is disabled until the result is shown.
+7. **Verify.** Status line "Verified: the device reports M %"; the LEDs visibly change; the log shows
+   `write set.ledBrightness: verified; SET sent: yes` and `since baseline: LED brightness N -> M; changed: 37 (LED brightness); unexpected: none`.
+8. **Only byte 37.** Press **Compare with baseline**: exactly `changed: 37 (LED brightness); unexpected: none`.
+9. **Restore** with a second, separate deliberate action: drag back to N and release. Expect "Verified" again.
+10. **Verify restoration**: **Compare with baseline** → `LED brightness N -> N; changed: none; unexpected: none`.
+    Then turn **LED brightness off** (no confirmation needed) and close the window.
+11. **Afterwards**: repeat the read-only checks of step 1. Desktop sync, vendor fallback, the service state and the
+    tray entry must be as recorded. The settings file is rewritten by the switch (the obsolete `output_control`
+    line disappears); `led_brightness_control` must read `false` or be absent.
+
+**On a timeout, an ambiguous or "Not confirmed" result, an unexpected offset, a USB error or anything
+unexpected: stop.** Do not retry the SET and do not "restore" by sending another SET. OpenWitty itself stops
+sending in that session (the control is disabled, "Device writes stopped"). Inspect the device only through the
+open window (**Compare with baseline**, which reads), record the report and the log, and ask the owner for a new
+decision. A "Not sent" result (the device changed while the write was being prepared) means nothing reached
+the device; it is still a stop for HW-1.
+
+**Remaining race (acknowledged).** The device's settings SET carries the whole 128-byte struct. OpenWitty reads
+the settings twice immediately before the SET and refuses to send unless both reads match, then verifies by
+read-back. That narrows the window in which a physical change on the device could be overwritten by the SET; it
+cannot close it — a change landing between the second read and the SET's arrival would be overwritten and then
+reported as Ambiguous at best. This is why the owner keeps hands off the device during the test.
 
 ## Dependencies
 

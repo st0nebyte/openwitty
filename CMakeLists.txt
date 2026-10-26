@@ -83,7 +83,8 @@ add_library(lewitt_core STATIC
     src/core/DeviceManager.cpp
     src/core/OutputControl.cpp
     src/core/VolumeSync.cpp
-    src/core/ControlCapabilities.cpp)
+    src/core/ControlCapabilities.cpp
+    src/core/SettingsComparison.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 # The user settings file on its own (no USB, no ALSA): shared by the core and the tray companion.
 add_library(lewitt_config STATIC src/core/UserConfig.cpp)
@@ -219,6 +220,7 @@ if(LEWITT_BUILD_TESTS)
                                         tests/cpp/test_trigger_policy.cpp      # Phase 10A trigger authorization
                                         tests/cpp/test_control_capabilities.cpp # Phase 10A per-control capabilities
                                         tests/cpp/test_device_sample_rate.cpp  # Phase 10B real sample rate
+                                        tests/cpp/test_settings_comparison.cpp  # Phase 10B.1 hw-check, SET bookkeeping
                                         tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)

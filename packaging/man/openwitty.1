@@ -31,7 +31,7 @@ releases the device; the background service, if enabled, keeps running.
 Start with the simulated device.
 .TP
 .BI \-\-show " page"
-Open settings, settings-desktop, wizard or onboarding at start.
+Open settings, settings-device, settings-desktop, wizard or onboarding at start.
 .TP
 .BI \-\-screenshot " file"
 Render one frame to a PNG and exit (offscreen use).
@@ -44,6 +44,14 @@ Diagnostic: use the former 2 Hz settings / 4 Hz status polling.
 .TP
 .BI \-\-quit\-after\-seconds " n"
 Diagnostic: quit normally after n seconds.
+.TP
+.B \-\-hw\-check
+Diagnostic for owner-approved hardware tests: records a settings baseline when the device connects and
+reports, on standard error and under Settings \(-> Device control, which settings changed after each
+write and on request (\(lqCompare with baseline\(rq). Read-only; it uses the window's own device
+connection, so no second program competes for the device. It prints field names and offsets and the
+LED brightness value only; no device identifiers and no raw settings. Takes effect only when the
+window starts.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/openwitty/openwitty.conf

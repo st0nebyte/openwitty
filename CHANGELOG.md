@@ -31,6 +31,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Device sample rate shown from the kernel's stream state (read-only; "unknown" while no stream is open); the
   monitoring-mix knob also shows the raw device value, because the device scale is not calibrated.
 - GUI preferences (`gui.conf`): the first-run introduction is shown once, the tooltip setting is remembered.
+- `openwitty --hw-check`: read-only, in-window settings comparison for owner-approved hardware tests.
 - Optional *vendor fallback* for a device that ignores the desktop volume — **experimental, not validated on
   hardware**.
 - `openwitty-cli`: device listing, diagnosis, read-only reads, and four opt-in single-setting write commands
@@ -54,6 +55,11 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - After a successful write the GUI write status stayed "prepared"; it now reads "verified".
 - Triggers (e.g. Autogain) could have been sent under the speaker/headphone permission; triggers now need their
   own authorization, which no control has.
+- The LED brightness slider sent a full settings write on every pointer movement. On the real device it now sends
+  at most one write per release and shows sending / verified / not confirmed.
+- Real-device GUI writes now require two identical settings reads right before the write and stop all further
+  writes in that session after a write that was not confirmed; unconfirmed edits are no longer kept.
+- Reopening the device after a permission change could let the background service take the device in between.
 
 ### Known limitations
 

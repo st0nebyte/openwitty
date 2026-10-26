@@ -232,6 +232,7 @@ Status DeviceSession::commit() {
                                      " is not authorized for hardware writes in this build/session");
         }
     }
+    ++settingsWriteAttempts_;
     if (auto s = transport_->write(MessageId::Settings, bytes); !s) { auto st = fail(s.error()); noteResult(st); return st; }
     failures_ = 0;
     return refreshSettings();
@@ -274,7 +275,9 @@ WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
     const auto expected = diffOffsets(before, target);
 
     r.state = WriteState::Submitted;
+    const std::uint64_t attemptsBefore = settingsWriteAttempts_;
     Status s = commit();   // existing, tested: guard checks, write, one re-read
+    r.submitted = settingsWriteAttempts_ != attemptsBefore;
     if (!s) {
         r.state = WriteState::Failed;
         r.error = s.error();

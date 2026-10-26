@@ -17,6 +17,7 @@
 #include "core/UserConfig.hpp"
 #include "core/RetryPolicy.hpp"
 #include "transport/ControlLease.hpp"
+#include "core/SettingsComparison.hpp"
 #ifdef LEWITT_HAVE_ALSA
 #include "desktop/AlsaDesktopMixer.hpp"
 #include "desktop/DeviceSampleRate.hpp"
@@ -174,6 +175,8 @@ void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t, WritePolicy
     auto ser = std::make_unique<SerializedTransport>(std::move(t));
     serialized_ = ser.get();
     session_ = std::make_unique<DeviceSession>(std::move(ser), std::move(policy));
+    writeLocked_ = false;                // a new session starts from a fresh read; the lock belonged to the old one
+    writeLockReason_.clear();
     std::lock_guard lk(activeM_);
     active_ = serialized_;
 }
@@ -232,6 +235,7 @@ void DeviceWorker::connectMock() {
     session_->setSampleRateHint(static_cast<std::uint32_t>(sampleRate_));
     report(session_->connect());
     markInitialReads();
+    hwCheckAutoBaseline();
     startTimer(40);  // ~25 Hz meters; stopped again on disconnect
     publish();
     publishMeterSample();
@@ -239,6 +243,11 @@ void DeviceWorker::connectMock() {
 
 void DeviceWorker::connectUsb() {
     intentionalDisconnect_ = true;   // the old session ends by our choice, not by link loss
+    // Phase 10B.1: reopening (e.g. a permission changed) briefly releases the control lease. Ask the
+    // background service to stay away first, so it cannot take the device in between; the request is cleared
+    // as soon as this window owns the device again (noteOpenFailure) and goes stale by itself otherwise.
+    if (usbMode_ && session_ && !session_->isSimulated() && session_->state() == ConnectionState::Connected)
+        (void)ControlLease::requestYieldInDirectory(ControlLease::currentSessionDirectory());
     endMeasurementSessionBestEffort();
     if (session_) session_->disconnect();
     if (timer_) timer_->stop();
@@ -280,6 +289,7 @@ void DeviceWorker::connectUsb() {
     if (session_->state() == ConnectionState::Connected) startRealTimer();
     else armRescan();                    // absent / not openable: keep looking, cheaply
     refreshDeviceRate(true);
+    hwCheckAutoBaseline();
     publish();
     publishMeterSample();
 }
@@ -294,6 +304,7 @@ void DeviceWorker::connectTransportForTesting(std::unique_ptr<IDeviceTransport> 
     if (!s) report(s);
     markInitialReads();
     refreshDeviceRate(true);
+    hwCheckAutoBaseline();
     publish();
 }
 
@@ -597,8 +608,15 @@ void DeviceWorker::retryPending() {
     // commitAndVerify() blocks - it's never externally observable as true with the current
     // synchronous wiring; "Pending verification" becoming genuinely live would need an async
     // (QTimer-driven) PollPolicy instead of a blocking sleeper, which is future work, not done here.
+    if (!session_->isSimulated()) {
+        // Real device: unconfirmed edits are never kept (finishRealWrite), so there is nothing to retry; a lock
+        // after an unconfirmed write is never lifted by a retry.
+        noteWriteOutcome(QString(), "refused", writeLocked_ ? writeLockReason_ : QString("nothing to send"));
+        publish();
+        return;
+    }
     verifying_ = true;
-    auto r = session_->commitAndVerify();
+    auto r = session_->commitAndVerify(guiPollPolicy());
     verifying_ = false;
     if (r.state == WriteState::Verified) pendingKeys_.clear();
     reportWrite(r);
@@ -710,6 +728,15 @@ void DeviceWorker::publish() {
     v["desktop.volumeNotice"] = link_ ? QString::fromStdString(link_->notice()) : QString();
     v["write.state"] = QString::fromUtf8(writeStateName(lastWriteState_));
     v["write.verifying"] = verifying_;
+    v["write.seq"] = writeSeq_;
+    v["write.key"] = writeKey_;
+    v["write.outcome"] = writeOutcome_;
+    v["write.message"] = writeMessage_;
+    v["write.locked"] = writeLocked_;
+    v["write.lockReason"] = writeLockReason_;
+    v["hwcheck.enabled"] = hwCheck_;
+    v["hwcheck.baseline"] = hwBaseline_ ? QVariant(int(hwBaseline_->ledBrightness())) : QVariant();
+    v["hwcheck.report"] = hwReport_;
     // `ui.state` is the sole connection-state source of truth and is what QML renders. Keep
     // write progress separate rather than creating a second, partially-overlapping status enum.
     // `ui.detail` is optional human detail only; write.state/write.verifying remain authoritative
@@ -741,7 +768,8 @@ void DeviceWorker::publish() {
         const bool connected = session_ && cs == ConnectionState::Connected;
         for (const auto& k : controlKeys())
             v["can." + QString::fromStdString(k)] =
-                connected && session_->writesEnabled() && controlWritable(k, session_->policy(), session_->isSimulated());
+                connected && session_->writesEnabled() && !(writeLocked_ && !session_->isSimulated()) &&
+                controlWritable(k, session_->policy(), session_->isSimulated());
     }
     if (session_ && session_->effectiveSettings()) {
         const auto s = *session_->effectiveSettings();   // user's unconfirmed edits shown on top
@@ -855,9 +883,34 @@ void DeviceWorker::trigger(const QString& name) {
     publish();
 }
 
+bool DeviceWorker::queueValue(const QString& key, const QVariant& v) {
+    std::lock_guard lk(queuedM_);
+    const bool fresh = !queued_.contains(key);
+    queued_[key] = v;
+    return fresh;
+}
+
+void DeviceWorker::applyQueuedValue(const QString& key) {
+    QVariant v;
+    {
+        std::lock_guard lk(queuedM_);
+        auto it = queued_.find(key);
+        if (it == queued_.end()) return;
+        v = it.value();
+        queued_.erase(it);
+    }
+    setValue(key, v);
+}
+
 void DeviceWorker::setValue(const QString& key, const QVariant& v) {
     if (!session_) return;
-    if (refuseUnauthorized(key)) return;
+    if (refuseUnauthorized(key)) { noteWriteOutcome(key, "refused", "not authorized; nothing was sent"); publish(); return; }
+    if (writeLocked_ && !session_->isSimulated()) {
+        emit errorOccurred(writeLockReason_);
+        noteWriteOutcome(key, "refused", writeLockReason_);
+        publish();
+        return;
+    }
     // Real hardware: one volume change may raise an output by at most kMaxOutputIncreaseDb (same rule
     // as openwitty-volumed); a far slider jump is applied in bounded steps. Non-finite values pass
     // through unchanged so the setter rejects them. Simulation is unrestricted.
@@ -916,17 +969,135 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
         return makeError(Errc::NotSupported, "unknown or unsupported control " + key.toStdString());
     };
     auto e = session_->edit(fn);
-    if (!e) { report(e); return; }         // invalid value: nothing staged, nothing sent
-    if (!session_->dirty()) { session_->discardPending(); publish(); return; }   // no-op edit
+    if (!e) {                               // invalid value: nothing staged, nothing sent
+        report(e);
+        noteWriteOutcome(key, "refused", QString::fromStdString(e.error().message));
+        publish();
+        return;
+    }
+    if (!session_->dirty()) {               // no-op edit: the device already has this value
+        session_->discardPending();
+        noteWriteOutcome(key, "unchanged", QString());
+        publish();
+        return;
+    }
     // Single publish() at the end, same reasoning as retryPending() above.
     verifying_ = true;
-    auto r = session_->commitAndVerify();
+    auto r = session_->commitAndVerify(guiPollPolicy());
     verifying_ = false;
+    if (!session_->isSimulated()) {
+        finishRealWrite(key, r);
+        publish();
+        return;
+    }
     // Phase 10B: every outcome is recorded (write.state), so a confirmed write is shown as verified too; a failed
     // one keeps the edit for retry/discard and reports the error.
     reportWrite(r);
     if (r.state == WriteState::Verified) pendingKeys_.remove(key);
     else pendingKeys_.insert(key);
+    noteWriteOutcome(key, r.state == WriteState::Verified ? QString("verified")
+                          : r.submitted ? QString("unconfirmed") : QString("not-sent"),
+                     QString::fromStdString(r.error.message));
+    publish();
+}
+
+// Phase 10B.1: real-device GUI writes need two identical settings snapshots immediately before the SET (the SET
+// carries the whole 128-byte struct; this narrows, but cannot close, the window in which a change made on the
+// device itself would be overwritten). The background service's mirror path has its own policy and is unaffected.
+PollPolicy DeviceWorker::guiPollPolicy() const {
+    PollPolicy pp;
+    pp.requireStableSnapshot = session_ && !session_->isSimulated();
+    return pp;
+}
+
+void DeviceWorker::noteWriteOutcome(const QString& key, const QString& outcome, const QString& message) {
+    ++writeSeq_;
+    writeKey_ = key;
+    writeOutcome_ = outcome;
+    writeMessage_ = message;
+}
+
+// Real device: an edit that was not confirmed is never kept for a later SET (it would ride along with the next
+// change of any control). Anything that may have reached the device without confirmation stops further writes.
+void DeviceWorker::finishRealWrite(const QString& key, const WriteResult& r) {
+    reportWrite(r);
+    pendingKeys_.remove(key);
+    if (r.state == WriteState::Verified) {
+        noteWriteOutcome(key, r.submitted ? "verified" : "unchanged", QString());
+    } else {
+        session_->discardPending();         // the display falls back to what the device reports
+        pendingKeys_.clear();
+        const QString why = r.state == WriteState::Ambiguous ? QString("another setting changed during the write")
+                          : r.state == WriteState::VerificationTimedOut ? QString("the device did not confirm the change in time")
+                          : QString::fromStdString(r.error.message);
+        if (r.submitted) {
+            writeLocked_ = true;
+            writeLockReason_ = "a change was sent but not confirmed (" + why +
+                               "); OpenWitty sends nothing more in this session - check the device, then turn the "
+                               "permission off and on again to continue";
+            noteWriteOutcome(key, "unconfirmed", why);
+        } else {
+            noteWriteOutcome(key, "not-sent", why);
+        }
+    }
+    if (hwCheck_) {
+        QString line = QString("write %1: %2; SET sent: %3; verification reads: %4")
+                           .arg(key, writeOutcome_, r.submitted ? "yes" : "no").arg(r.pollAttempts);
+        if (!r.unexpectedOffsets.empty()) {
+            QStringList o;
+            for (auto off : r.unexpectedOffsets) o << QString("%1 (%2)").arg(off).arg(QString::fromStdString(settingsFieldName(off)));
+            line += "; changed outside the request: " + o.join(", ");
+        }
+        if (!writeMessage_.isEmpty()) line += "; " + writeMessage_;
+        hwCheckLog(line);
+        if (hwBaseline_ && session_->settings())
+            hwCheckLog("since baseline: " + QString::fromStdString(describeComparison(compareSettings(
+                           *hwBaseline_, *session_->settings(), {settings_off::kLedBrightness}))));
+    }
+}
+
+void DeviceWorker::hwCheckLog(const QString& line) {
+    hwReport_ = line;
+    std::fprintf(stderr, "hw-check: %s\n", line.toUtf8().constData());
+}
+
+void DeviceWorker::enableHardwareCheck() {
+    hwCheck_ = true;
+    hwCheckLog("enabled: read-only snapshots through this window's device session (no second connection)");
+    hwCheckAutoBaseline();
+    publish();
+}
+
+void DeviceWorker::hwCheckAutoBaseline() {
+    if (!hwCheck_ || hwBaseline_ || !session_ || session_->state() != ConnectionState::Connected || !session_->settings())
+        return;
+    hwBaseline_ = *session_->settings();
+    hwCheckLog(QString("baseline recorded at connect: LED brightness %1").arg(int(hwBaseline_->ledBrightness())));
+}
+
+// One fresh settings GET on the open session (the same call the regular poll makes), then the snapshot is kept.
+void DeviceWorker::hwCheckRecordBaseline() {
+    if (!hwCheck_ || !session_) return;
+    if (auto s = refreshDeviceState(); !s || !session_->settings()) {
+        hwCheckLog("baseline not recorded: no fresh settings read");
+        publish();
+        return;
+    }
+    hwBaseline_ = *session_->settings();
+    hwCheckLog(QString("baseline recorded: LED brightness %1").arg(int(hwBaseline_->ledBrightness())));
+    publish();
+}
+
+void DeviceWorker::hwCheckCompare() {
+    if (!hwCheck_ || !session_) return;
+    if (!hwBaseline_) { hwCheckLog("no baseline yet"); publish(); return; }
+    if (auto s = refreshDeviceState(); !s || !session_->settings()) {
+        hwCheckLog("compare failed: no fresh settings read");
+        publish();
+        return;
+    }
+    hwCheckLog("now vs baseline: " + QString::fromStdString(describeComparison(compareSettings(
+                   *hwBaseline_, *session_->settings(), {settings_off::kLedBrightness}))));
     publish();
 }
 
@@ -1040,8 +1211,12 @@ void DeviceController::simulatePanicMute() { QMetaObject::invokeMethod(worker_, 
 void DeviceController::trigger(const QString& n) {
     QMetaObject::invokeMethod(worker_, "trigger", Q_ARG(QString, n));
 }
+void DeviceController::enableHardwareCheck() { QMetaObject::invokeMethod(worker_, "enableHardwareCheck"); }
+void DeviceController::hwCheckRecordBaseline() { QMetaObject::invokeMethod(worker_, "hwCheckRecordBaseline"); }
+void DeviceController::hwCheckCompare() { QMetaObject::invokeMethod(worker_, "hwCheckCompare"); }
 void DeviceController::setValue(const QString& k, const QVariant& v) {
-    QMetaObject::invokeMethod(worker_, "setValue", Q_ARG(QString, k), Q_ARG(QVariant, v));
+    // Coalesced: while a request for this control waits (e.g. a write is in flight), newer values replace it.
+    if (worker_->queueValue(k, v)) QMetaObject::invokeMethod(worker_, "applyQueuedValue", Q_ARG(QString, k));
 }
 void DeviceController::traceQmlObserved() {
     if (!traceEnabled_ || !activeTraceSequence_ || activeQmlNs_) return;

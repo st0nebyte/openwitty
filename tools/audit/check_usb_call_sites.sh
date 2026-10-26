@@ -150,6 +150,23 @@ if grep -rn 'connectTransportForTesting' src --include='*.cpp' --include='*.qml'
    || grep -n 'connectTransportForTesting' src/gui/qml/*.qml >/dev/null; then
     echo "FAIL connectTransportForTesting used outside tests"; fail=1
 else echo "ok   test-only transport injection unused by the application"; fi
+# Phase 10B.1: GUI writes on real hardware need two identical snapshots before the SET; every GUI commit goes
+# through guiPollPolicy(); the hardware check can only read; the LED slider commits once on release on real hardware.
+if grep -nE -- '->commitAndVerify\(\)' src/gui/*.cpp >/dev/null \
+   || ! grep -A3 'PollPolicy DeviceWorker::guiPollPolicy' src/gui/DeviceController.cpp | grep -q 'requireStableSnapshot = session_ && !session_->isSimulated()'; then
+    echo "FAIL GUI commits must use guiPollPolicy() (stable snapshot on real hardware)"; fail=1
+else echo "ok   GUI commits use guiPollPolicy(): two matching snapshots before a real-device SET"; fi
+if grep -nE 'DeviceSession|Transport|ControlLease|libusb|commit|write\(' src/core/SettingsComparison.hpp src/core/SettingsComparison.cpp >/dev/null; then
+    echo "FAIL SettingsComparison must work on snapshots only"; fail=1
+else echo "ok   SettingsComparison has no session, transport or lease access"; fi
+hwfns=$(awk '/^void DeviceWorker::(hwCheck|enableHardwareCheck)/,/^}/' src/gui/DeviceController.cpp | sed 's/"[^"]*"//g; s://.*$::')
+if [ -z "$hwfns" ] || printf '%s' "$hwfns" | grep -nE 'commit|edit\(|sendTrigger|setValue|Transport|ControlLease|connect|adoptSession|reconnect' >/dev/null; then
+    echo "FAIL hardware-check functions may only read through refreshDeviceState()"; fail=1
+else echo "ok   hardware check reads only, through the window's own session (no second connection)"; fi
+if ! grep -q 'commitOnRelease: !device.simulated' src/gui/qml/SettingsView.qml \
+   || ! grep -q 'enabled: root.can("set.ledBrightness") && root.ledWrite !== "pending"' src/gui/qml/SettingsView.qml; then
+    echo "FAIL LED brightness slider must commit once on release on real hardware and wait for the result"; fail=1
+else echo "ok   LED brightness slider: one commit per release on real hardware, disabled while sending"; fi
 # destructive trigger words must be referenced only by the guard, the enum/messages and tests
 chk "FactoryReset only in guard/messages/mock-sim" 'Trigger::FactoryReset' '^src/protocol/(WriteGuard|Messages)\.(cpp|hpp)'
 [ $fail -eq 0 ] && echo "USB CALL-SITE AUDIT: PASS" || echo "USB CALL-SITE AUDIT: FAIL"

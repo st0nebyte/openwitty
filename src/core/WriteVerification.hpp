@@ -55,6 +55,9 @@ struct WriteResult {
     // Populated only when state == Ambiguous: settings-struct offsets that changed but were not
     // part of the intended write.
     std::vector<std::size_t> unexpectedOffsets;
+    // True when a settings SET was handed to the transport (it may have reached the device even if the
+    // result is Failed). False = nothing was sent, e.g. the stable-snapshot check or a read failed first.
+    bool submitted{false};
     // Populated only when state == Failed.
     Error error;
 };

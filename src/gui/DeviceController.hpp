@@ -5,6 +5,7 @@
 #include <QThread>
 #include <QSet>
 #include <QTimer>
+#include <QHash>
 #include <QVariantMap>
 #include <memory>
 #include <optional>
@@ -47,6 +48,13 @@ public slots:
     void simulateExternalChange(const QString& key, const QVariant& v);  // simulation only
     void simulatePanicMute();                                     // simulation only
     void applyUserConfig();                                       // Settings > Desktop integration changed
+    void applyQueuedValue(const QString& key);                    // takes the latest value queued for `key`
+    // Phase 10B.1, opt-in (openwitty --hw-check): read-only snapshots through this window's own session, for
+    // owner-approved hardware tests. Each does one ordinary settings GET on the session already open (same
+    // serialized transport, same control lease); nothing here can stage or send a write.
+    void enableHardwareCheck();
+    void hwCheckRecordBaseline();
+    void hwCheckCompare();
 signals:
     void stateChanged(const QVariantMap& changed);  // only keys whose value changed
     void meterSample(const QVariantList& levels, qint64 monotonicNs); // observed status data only
@@ -57,6 +65,10 @@ signals:
 public:
     // Thread-safe, non-blocking: abort the in-flight transport request (used on shutdown).
     void cancelAll();
+    // Thread-safe (GUI thread): remember the latest requested value for `key`. Returns true if no request for
+    // that key was waiting, i.e. the caller must schedule applyQueuedValue(key); otherwise the waiting request
+    // simply takes the newer value. Many requests for one control while a write is in flight become one.
+    bool queueValue(const QString& key, const QVariant& v);
     void connectTransportForTesting(std::unique_ptr<lewitt::IDeviceTransport> t, lewitt::WritePolicy p,
                                     std::string procRoot = "/proc/asound");
     void refreshRateForTesting() { refreshDeviceRate(true); publish(); }
@@ -75,6 +87,24 @@ private:
     lewitt::Status refreshDeviceState(lewitt::SettingsRefreshTiming* timing = nullptr);
     void report(const lewitt::Status& s);
     void reportWrite(const lewitt::WriteResult& r);
+    // Phase 10B.1: the outcome of one write request, for the control that asked (write.seq/key/outcome/message):
+    // verified | unchanged (nothing needed sending) | not-sent | unconfirmed | refused.
+    void noteWriteOutcome(const QString& key, const QString& outcome, const QString& message);
+    void finishRealWrite(const QString& key, const lewitt::WriteResult& r);
+    lewitt::PollPolicy guiPollPolicy() const;
+    quint64 writeSeq_{0};
+    QString writeKey_, writeOutcome_, writeMessage_;
+    // A real-device write that may have been sent but was not confirmed stops all further GUI writes in this
+    // session (no automatic or queued follow-up SET); only a new session (permission off/on) clears it.
+    bool writeLocked_{false};
+    QString writeLockReason_;
+    std::mutex queuedM_;
+    QHash<QString, QVariant> queued_;
+    bool hwCheck_{false};
+    std::optional<lewitt::SettingsMessage> hwBaseline_;
+    QString hwReport_;
+    void hwCheckLog(const QString& line);
+    void hwCheckAutoBaseline();
     void startTimer(int ms);
     void startRealTimer();
     void armPreciseStatusTimer();
@@ -186,6 +216,10 @@ public:
     Q_INVOKABLE void simulateExternalChange(const QString& key, const QVariant& v);
     Q_INVOKABLE void simulatePanicMute();
     Q_INVOKABLE void applyUserConfig();
+    // Opt-in hardware-test snapshots (openwitty --hw-check); read-only, see DeviceWorker.
+    void enableHardwareCheck();
+    Q_INVOKABLE void hwCheckRecordBaseline();
+    Q_INVOKABLE void hwCheckCompare();
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
     // Tests only, never from QML: see DeviceWorker::connectTransportForTesting().

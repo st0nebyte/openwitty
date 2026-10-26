@@ -13,6 +13,32 @@ Rectangle {
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
     function can(k) { return root.interactive && device.values["can." + k] === true; }
     property string open: "audio"
+    // Phase 10B.1: outcome of the last deliberate LED brightness change on the real device
+    // ("" | pending | verified | unchanged | not-sent | unconfirmed | refused).
+    property string ledWrite: ""
+    property var ledWriteSeq: 0
+    readonly property var writeSeqNow: device.values["write.seq"]
+    onWriteSeqNowChanged: {
+        if (ledWrite === "pending" && writeSeqNow !== ledWriteSeq && device.values["write.key"] === "set.ledBrightness")
+            ledWrite = device.values["write.outcome"] || "";
+    }
+    function commitLed(nv) {
+        ledWriteSeq = device.values["write.seq"];
+        ledWrite = "pending";
+        device.setValue("set.ledBrightness", nv);
+    }
+    function ledWriteText() {
+        var msg = device.values["write.message"] || "";
+        switch (ledWrite) {
+        case "pending": return "Sending to the device…";
+        case "verified": return "Verified: the device reports " + root.v("set.ledBrightness", 0) + " %.";
+        case "unchanged": return "The device already has this value; nothing was sent.";
+        case "not-sent": return "Not sent: " + msg;
+        case "unconfirmed": return "Not confirmed: " + msg + ". Nothing more is sent; check the device.";
+        case "refused": return "Refused: " + msg;
+        }
+        return "";
+    }
     function authorizedSummary() {
         var groups = [["speaker volume", "spk.volume"], ["speaker mute", "spk.mute"], ["headphone volume", "hp.volume"],
                       ["headphone mute", "hp.mute"], ["LED brightness", "set.ledBrightness"]];
@@ -69,9 +95,22 @@ Rectangle {
     Column {
         visible: root.open === "leds"
         x: 16; y: 222; width: 330; spacing: 10
-        Text { color: Theme.text; font.pixelSize: 12; text: "Brightness: " + root.v("set.ledBrightness", 0) + " %" }
-        Fader_h { objectName: "ledBrightnessFader"; width: 330; enabled: root.can("set.ledBrightness"); value: root.v("set.ledBrightness", 0)
-                  onMoved: (nv) => device.setValue("set.ledBrightness", nv) }
+        Text { color: Theme.text; font.pixelSize: 12
+               text: ledFader.dragging && ledFader.commitOnRelease
+                     ? "Brightness: " + ledFader.previewValue + " % (release to send; device: " + root.v("set.ledBrightness", 0) + " %)"
+                     : "Brightness: " + root.v("set.ledBrightness", 0) + " %" }
+        // Simulated device: live while dragging. Real device: one change per release (one settings SET at most),
+        // nothing while a change is being sent.
+        Fader_h { id: ledFader; objectName: "ledBrightnessFader"; width: 330
+                  enabled: root.can("set.ledBrightness") && root.ledWrite !== "pending"
+                  commitOnRelease: !device.simulated
+                  value: root.v("set.ledBrightness", 0)
+                  onMoved: (nv) => device.setValue("set.ledBrightness", nv)
+                  onCommitted: (nv) => root.commitLed(nv) }
+        Text { objectName: "ledWriteStatus"; width: 330; wrapMode: Text.WordWrap; font.pixelSize: 10
+               visible: text !== ""; text: root.ledWriteText()
+               color: root.ledWrite === "verified" || root.ledWrite === "unchanged" ? Theme.textDim
+                    : root.ledWrite === "pending" ? Theme.text : Theme.warn }
         Repeater {
             model: [{k: "icons", t: "Icons"}, {k: "mute", t: "Mute"}, {k: "parameter", t: "Parameter"},
                     {k: "metering", t: "Metering"}, {k: "gainReduction", t: "Gain reduction"}]
@@ -268,6 +307,23 @@ Rectangle {
             Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "Each permission is separate, off by default and changes only its own setting. Every change is "
                        + "read back; volume increases are limited to 10 dB per step. Separate from desktop sync." }
+            Text { objectName: "writeLockedNotice"; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                   visible: device.values["write.locked"] === true
+                   text: "Device writes stopped: " + (device.values["write.lockReason"] || "") + "." }
+            // Opt-in (openwitty --hw-check): read-only snapshots for an owner-approved hardware test.
+            Column {
+                objectName: "hwCheckPanel"; visible: device.values["hwcheck.enabled"] === true; width: 310; spacing: 4
+                Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                       text: "Hardware check (read-only, this window's own device connection). Baseline LED brightness: "
+                           + (device.values["hwcheck.baseline"] === undefined ? "not recorded" : device.values["hwcheck.baseline"] + " %") }
+                Row { spacing: 6
+                    ToggleButton { objectName: "hwCheckBaselineButton"; width: 110; height: 20; text: "Record baseline"
+                                   onClicked: device.hwCheckRecordBaseline() }
+                    ToggleButton { objectName: "hwCheckCompareButton"; width: 130; height: 20; text: "Compare with baseline"
+                                   onClicked: device.hwCheckCompare() } }
+                Text { objectName: "hwCheckReport"; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                       text: device.values["hwcheck.report"] || "" }
+            }
 
         }
     }

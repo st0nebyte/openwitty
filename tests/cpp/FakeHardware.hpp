@@ -14,7 +14,10 @@ class FakeHardware final : public IDeviceTransport {
 public:
     explicit FakeHardware(MockTransport* inner) : m_(inner) {}
     std::string name() const override { return "fake-hardware"; }
-    Status open() override { return m_->open(); }
+    Status open() override {
+        ++openCalls;
+        return m_->open();
+    }
     void close() override { m_->close(); }
     bool isOpen() const override { return m_->isOpen(); }
     DeviceInfo info() const override { return m_->info(); }
@@ -33,6 +36,7 @@ public:
     bool dropWrites{false};
     int writeCalls{0};
     int readCalls{0};
+    int openCalls{0};
 
 private:
     MockTransport* m_;

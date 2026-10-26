@@ -39,6 +39,11 @@ int main(int argc, char** argv) {
     QCommandLineOption quitAfterSeconds("quit-after-seconds",
         "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
     p.addOption(quitAfterSeconds);
+    QCommandLineOption hwCheck("hw-check",
+        "DIAGNOSTIC, for owner-approved hardware tests: record a settings baseline at connect and report, on stderr and on "
+        "Settings > Device control, which settings changed after each write or on request. Read-only; uses this "
+        "window's own device connection; prints no device identifiers and no raw settings.");
+    p.addOption(hwCheck);
     p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();
     p.addVersionOption();
@@ -64,6 +69,9 @@ int main(int argc, char** argv) {
         switch (instance->claimOrForward(encodeGuiActivation(request))) {
             case InstanceChannel::Role::Forwarded:
                 std::puts("OpenWitty is already open: its window was brought to the front.");
+                if (p.isSet(hwCheck))
+                    std::fprintf(stderr, "openwitty: --hw-check was NOT applied: it only takes effect when the window "
+                                         "starts; close the open window first\n");
                 return 0;
             case InstanceChannel::Role::Failed:
                 std::fprintf(stderr, "openwitty: not starting a second window: %s\n", qPrintable(instance->lastError()));
@@ -138,6 +146,7 @@ int main(int argc, char** argv) {
             std::fflush(stdout);
         });
     }
+    if (p.isSet(hwCheck)) controller.enableHardwareCheck();   // before connecting: the baseline is taken at connect
     if (p.isSet(mock)) controller.connectMock();
     else controller.connectUsb();  // read-only; reports "not found" if absent
     if (p.isSet(sizeOpt) && !engine.rootObjects().isEmpty()) {
