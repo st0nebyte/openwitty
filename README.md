@@ -63,6 +63,11 @@ Optional and limited:
 
 Not implemented or not validated:
 
+- **Audio streams are handled by Linux, not by OpenWitty.** The CONNECT 2 is a USB Audio Class 2 device: playback
+  (L/R) and four capture channels (microphone, instrument, loopback L, loopback R) work through the kernel and
+  PipeWire/JACK. Channel identity, the hardware loopback and DAW workflows have **not yet been validated with
+  signal**; PipeWire currently labels the four inputs as "Surround 4.0", so a stereo application may mix them.
+  This is not the Windows ASIO driver. Plan: `docs/FEATURE_COMPLETION_ROADMAP.md` (feature parity).
 - Most other controls (low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom button, autogain/
   autosetup, sample-rate selection) work in the **simulated device** only; on the real device
   they are shown, not changed.

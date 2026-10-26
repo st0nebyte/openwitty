@@ -59,6 +59,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 20 | GUI device control (speaker, headphone, LED brightness) on hardware | **NOT DONE** — no GUI control has written to the real device yet; first step HW-1 (LED) in `docs/FEATURE_COMPLETION_ROADMAP.md` |
 | 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
 | 20c | First-GUI-write safety (Phase 10B.1): one SET per deliberate change, stable snapshot before a real SET, stop after an unconfirmed write, in-window read-only `--hw-check` | PASS (offline tests); HW-1 itself not run |
+| 20d | Four-channel capture identity and hardware loopback with signal (LB-1/LB-2) | **NOT DONE** — channels present (read-only observation); PipeWire labels them as 4.0 surround; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20e | DAW/JACK workflows (Ardour, REAPER, Audacity, JACK API) | **NOT DONE** — test matrix DAW-1…DAW-10 planned |
 | 20a | GUI permissions match the write policy (Phase 10A: per-control capabilities; triggers need their own authorization) | PASS (offline tests) |
 
 **Open decisions**
