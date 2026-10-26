@@ -181,6 +181,45 @@ volume change in the route or stored state, any WirePlumber route re-application
 then set the PipeWire mute back to true (one `wpctl set-mute <id> 1`) if it is not already, and stop. Restoration
 condition: route mute true, stored volumes unchanged (1.0 ×4), bytes 2/12 as before.
 
+### Step 2 — result (2026-10-26, owner-approved): STOPPED on an unexplained automatic re-mute
+
+Physical conditions confirmed by the owner; OpenWitty window `--hw-check`, all permissions off; source id 65 verified.
+
+| Time | Observation |
+|---|---|
+| 23:21:22 | route `analog-input-mic` mute **true**, volumes 1.0 ×4; node mute false, softMute false; saved state 1.0 ×4, mute true; no stream |
+| 23:28:27–23:28:29 | window took the device over from the service; baseline from the first successful read (LED 100) |
+| before the write | device (input strips): mic **27 dB, muted**; instrument **14 dB, muted**; loopback muted; headphones muted |
+| 23:29:23 | **one** `wpctl set-mute 65 0` (rc 0). Immediately after: route mute **false**; route/node volumes **[0.99995, 0.99995, 0.000251, 0.000251]** (= +72, +72, 0, 0 dB = the kernel cache values) — PipeWire's re-read, not a 1.0 re-application; profile unchanged; no kernel message |
+| 23:29:24.69 | WirePlumber saved the route: **mute true**, volumes [0.99995, 0.99995, 0.000251, 0.000251] |
+| 23:29:50 | route mute **true** again, node mute **true**, node **softMute true** — without a second command |
+| 23:32 | window compare: `changed: none; unexpected: none`; device mic 27 dB muted, instrument 14 dB muted (bytes 2/12 unchanged vs. baseline) |
+| 23:33:06/07 | window closed; the service took the device back (same process, no restart) |
+
+The planned re-mute (`wpctl set-mute 65 1`) was **not** sent: the input was already muted and the event was unexplained.
+
+**Inferred USB operations** (not observed on the wire): at most one FU 5 *mute* SET_CUR per channel 1–2 (unmute) from the
+`wpctl` command (code trace above). Unknown: whether it succeeded (a rejection would be hidden by `ignore_ctl_error`), and
+what produced the re-mute ~1 s later.
+
+**Not established:** whether the device ever unmuted (the compare ran after the re-mute; a sub-second transient would not
+show). Hypotheses for the re-mute: (a) the device rejected the mute SET_CUR, the kernel kept "muted" in its cache, and
+ACP's event-driven `read_mute()` flipped PipeWire back; (b) WirePlumber treated the route as newly active and re-applied
+the stored props (mute true + volumes) via `apply-routes.lua` — which for channels 1–2 would request +72 dB, equal to the
+cached value, so no new volume SET_CUR is expected there, and channels 3–4 reject writes; (c) another client. The journal
+has no WirePlumber/PipeWire messages at the current log level. The change of the node's `softMute` from false to true
+is also unexplained.
+
+**State left behind (owner decision needed, nothing restored):** route and node muted (safe direction); the saved
+WirePlumber route changed from 1.0 ×4 to [0.99995, 0.99995, 0.000251, 0.000251] — at the next login this requests
+≈ +72 dB on channels 1–2 (as before) and 0 dB on channels 3–4 (rejected by the device). Restoring the exact old saved
+value would need a volume write (requests +72 dB) or an edit of WirePlumber's state file — neither authorized.
+
+**Next diagnosis (each needs separate approval):** (1) class-C read of `Mic Capture Switch` to see the kernel cache
+(on/off) — distinguishes (a) from (b) partly; (2) a repeat of the single unmute with WirePlumber/PipeWire debug logging
+for the duration (`wpctl set-log-level` or environment, reverted afterwards) and a usbmon capture of EP0 for the CONNECT 2
+(kernel debug interface; passive on the bus), so the SET_CUR result and the re-mute's origin are observed directly.
+
 ### Step 3 — one controlled FU 5 volume request (later, separate approval; revised in Phase 10E.1)
 
 **Per-channel mapping (offline evidence):** FU 5 sits on the 4-channel *Microphone* input terminal; the official channel

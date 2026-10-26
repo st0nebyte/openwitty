@@ -1676,3 +1676,11 @@ Kernel cache: FU 5 `Mic Capture Volume` 72,72,0,0 dB, `Mic Capture Switch` off,o
 Device (OpenWitty window, vendor read): microphone 27 dB muted, instrument 14 dB muted. Probe GET_CUR: 27.00 dB. The service
 took the device back at 22:22:50 (same process). Interpretation and limits: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 1 result).
 The window saved its GUI preference `onboarding_done = true` when the owner dismissed the first-start introduction.
+
+## 23. GAIN-1 step 2 — input mute/unmute, 2026-10-26 23:21–23:33: STOPPED
+
+Owner-approved, physical safety confirmed. One `wpctl set-mute 65 0` at 23:29:23; the PipeWire input showed unmuted, then
+was muted again within about 1.3 s without a second command (saved by WirePlumber at 23:29:24.69; node softMute became
+true). Route/saved volumes changed to the kernel-cache view [+72, +72, 0, 0 dB]. Device compare afterwards: no settings change
+(mic 27 dB muted, instrument 14 dB muted). The re-mute command was not sent; nothing restored. The service took the device
+back at 23:33:07. Details, hypotheses and next diagnosis: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 result).
