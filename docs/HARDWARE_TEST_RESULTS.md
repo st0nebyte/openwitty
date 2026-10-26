@@ -1653,3 +1653,11 @@ three explicit keys). Service enabled/active, same process, no restarts; tray ru
 service unit unchanged (checksums). The service process still runs the binary loaded before the install and logs
 "unknown key … ignored" for the three new keys (harmless; it does not use them); the new binary loads at the next
 login.
+
+## 20. Phase 10D — passive Linux audio inventory, 2026-10-26
+
+No device access beyond what the kernel and PipeWire already hold (procfs/sysfs, cached descriptors, PipeWire
+registry); no stream, mixer, profile, volume, mute or rate change; no vendor request. Findings (A-sys) in
+`docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`: no stream open (device rate unknown), PipeWire graph 48 kHz with only
+48 kHz allowed, capture terminal *Microphone* with 4 channels and no declared positions, default source muted at its
+hardware route bound to UAC2 Feature Unit 5 (0…+72 dB). No A-live or A-daw evidence.

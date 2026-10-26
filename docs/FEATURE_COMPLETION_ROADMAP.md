@@ -277,7 +277,7 @@ reported as Ambiguous at best. This is why the owner keeps hands off the device 
 
 ## Dependencies
 
-* HW-1…HW-4: WP-B done (10B) — only owner approval and the HW procedure remain.
+* HW-1 passed (2026-10-26). HW-2…HW-4: WP-B done (10B) — owner approval and the HW procedure remain.
 * HW-9 (mix) needs a calibrated mix mapping for writes (WP-C showed the raw value only). HW-10 (mix-to-speakers) needs the `OutputSource` value set (RE).
 * HW-13 needs per-trigger authorization (exists since 10A) plus a verified autogain completion/result model.
 * HW-14 needs every component step. Denoise as the official feature needs HW-13's denoise measurement.
@@ -290,7 +290,7 @@ reported as Ambiguous at best. This is why the owner keeps hands off the device 
 | **A** (done in 10A) | per-control capabilities, trigger authorization, refused edits not staged, banner | none |
 | **B** (done in 10B) | narrow GUI authorizations: a confirmed *LED control* (byte 37, later 38–52/53) and splitting *Speaker/headphone control* into speaker and headphone; each persisted in the settings file, off by default, own confirmation; tests | none |
 | **C** (done in 10B, except the firmware-version decode) | offline corrections: mix mapping (−100…0), `dsp.available` from the real rate (unknown → hint), sample-rate display from PipeWire/ALSA, onboarding/tooltips persistence, firmware-version decode attempt | none |
-| **D** | live validation HW-1 (LED via GUI) | owner-approved |
+| **D** (done 2026-10-26) | live validation HW-1 (LED via GUI) — PASS | owner-approved |
 | **E** | live validation HW-2…HW-4 (outputs via GUI, one field at a time) | owner-approved |
 | **F** | input mute/gain (HW-5/HW-6), cosmetic (HW-7) | owner-approved |
 | **G** | processing and monitoring (HW-8…HW-10) | owner-approved |
@@ -336,16 +336,52 @@ anything (kernel 7.3, PipeWire 1.6, WirePlumber 0.5):
 |---|---|---|
 | USB Audio Class | UAC2, high speed; playback interface 1, capture interface 2, both 24-bit in S32_LE, 44.1/48/96 kHz | class-compliant streaming needs no OpenWitty code |
 | Playback | 2 channels, kernel map `FL FR` | matches the official "Outputs L/R" |
-| Capture | **4 channels**, kernel map from the device descriptor **`FL FR FC LFE`** | the device labels mic/instrument/loopback L/loopback R as front-left/front-right/**centre/LFE** |
+| Capture | **4 channels**; the input terminal is typed *Microphone* with **no channel positions** (`bmChannelConfig = 0`); the kernel shows its default map `FL FR FC LFE` (corrected in Phase 10D) | the surround labels are Linux defaults, not device semantics |
 | Clocking | playback is asynchronous with **implicit feedback from the capture endpoint** (sync EP 0x82) | playback and capture share one clock and one rate; a rate change affects both directions |
 | PipeWire default profile | `output:analog-stereo+input:analog-surround-40`; the source is "Analog Surround 4.0", map **`FL FR RL RR`** | PipeWire relabels the same four channels as 4.0 surround; neither label says microphone/instrument/loopback |
 | Other profiles | analog-stereo out only, IEC958 variants, input-only, **Pro Audio**, off | Pro Audio would expose unlabelled `AUX0…AUX3` (not checked; profile not switched) |
-| Source state | the 4.0 source was muted in PipeWire at inspection (software state, left unchanged) | a muted source records silence: a likely first-use pitfall |
+| Source state | the 4.0 source is the default source and is **muted at its hardware route** (`analog-input-mic`, `route.hw-mute/hw-volume = true` → ALSA `Mic Capture Switch/Volume` = UAC2 Feature Unit 5); node software mute off (corrected in Phase 10D) | a muted source records silence; unmuting/moving it may act on the device (GAIN-1) |
+| Graph rate | PipeWire `clock.rate 48000`, `clock.allowed-rates [ 48000 ]`; no stream open, so the device's current rate is unknown | PipeWire clients run the device at 48 kHz only under this configuration |
 
 **Linux-specific risk (to verify, A-live):** a mono or stereo client recording from the 4.0 source gets PipeWire's
 channel mix. With the 4.0 labels that can merge the microphone with loopback L and the instrument with loopback R
 (rear → front downmix), or drop channels — exactly the silent merging this project must never make the default.
 OpenWitty must not "fix" this by hiding channels: the full four-channel source stays the reference interface.
+
+### Phase 10D — passive audio inventory (A-sys)
+
+Full record: `docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`. Summary: no stream open (device rate unknown); graph 48 kHz
+with only 48 kHz allowed; capture terminal *Microphone*, 4 channels, no declared positions (kernel default `FL FR FC
+LFE`, PipeWire `FL FR RL RR`); default profile `output:analog-stereo+input:analog-surround-40`; alternatives
+declared but not activated (`pro-audio`, IEC958 variants that have no S/PDIF terminal in the descriptors, output- or
+input-only, off); the default source's mute/volume are hardware controls bound to **Feature Unit 5** (0…+72 dB, mute on
+channels 1–2; channels 3–4 reject writes); nothing proves FU 5 is the preamp gain.
+
+**GAIN-1 proposal (later, separately approved; no step yet):**
+1. *Read-only correlation:* one vendor settings read through the OpenWitty window (it takes the device over from the
+   service; `openwitty-cli read settings --interface auto` only if no OpenWitty process owns the device) plus the
+   passive `usbmixer`/PipeWire state; compare mic/instrument gain and mute with FU 5 and the route. No writes.
+2. *Single FU 5 mute test* (inputs quiet, monitoring off, speakers off, headphones off the head): toggle the PipeWire
+   source mute once via `wpctl set-mute` and back; vendor read after each; expected evidence: whether bytes 2/12 follow.
+3. *Single FU 5 volume step, decreasing only*: one small decrease of the source volume, vendor read, restore; abort on
+   any increase or on monitoring.
+4. *External Gain Lock (byte 57)* only after its write step: repeat 3 with the lock on.
+5. *AGC observation*: a browser/WebRTC test page with AGC on, monitoring off, vendor reads before/after.
+Pass/abort criteria as for HW steps; restore the original PipeWire route state exactly; record WirePlumber's
+restore behaviour (`wpctl inspect` of the route before/after).
+
+**First LB-1/LB-2 proposal (later, separately approved; device read-only, no settings writes):**
+* Preconditions: speakers off or down, headphones off the head, device monitoring of the loopback **off**, nothing
+  else playing; the PipeWire source unmuted **only if GAIN-1 step 2 has shown what that does** — otherwise record via
+  the Pro Audio profile or a direct ALSA `hw:` capture after the owner approves the profile switch / PipeWire
+  suspension (each a separate decision).
+* LB-2 first (no physical input needed): play a 10 s file with an L-only 1 kHz tone then an R-only 2 kHz tone at
+  −30 dBFS to the CONNECT 2 sink; record all four capture channels raw (4-channel WAV, no channel mixing); pass: tone
+  1 only in ch 3, tone 2 only in ch 4, ch 1/2 at noise floor; record the level and the sample offset.
+* LB-1: then a short spoken phrase into the mic and a DI signal into the instrument input (gains unchanged); pass:
+  only ch 1 resp. ch 2 carry them.
+* Evidence: the WAV files' per-channel RMS/peak (computed offline), PipeWire profile/route/rate before and after,
+  settings comparison before/after (no change).
 
 ### Categories
 
@@ -503,9 +539,9 @@ and backend. Anything else is documented as "not validated".
 
 ### Recommended ordering
 
-1. **HW-1** (LED via GUI) as planned — unchanged.
-2. **Read-only audio inventory**: SR-1, profile/channel-map facts per profile (documentation of what each PipeWire
-   profile exposes, from `pactl` without switching), GAIN-1 observation.
+1. **HW-1** (LED via GUI) — **passed 2026-10-26**.
+2. **Read-only audio inventory** — **done passively in Phase 10D** (SR-1 only as far as possible without a stream:
+   rate unknown); GAIN-1 step 1 (read-only correlation) next.
 3. **LB-1/LB-2** channel identity and loopback content (core; no device writes).
 4. **B-category design**: channel naming and optional split sources as an opt-in configuration with tests (offline),
    then LB-5.

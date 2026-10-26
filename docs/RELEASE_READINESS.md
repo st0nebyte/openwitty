@@ -58,7 +58,7 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
 | 20 | GUI device control (speaker, headphone, LED brightness) on hardware | **PARTLY DONE** — LED brightness PASS (HW-1, 2026-10-26, `docs/HARDWARE_TEST_RESULTS.md` §19); speaker/headphone via the GUI not yet (HW-2…HW-4) |
 | 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
-| 20c | First-GUI-write safety (Phase 10B.1): one SET per deliberate change, stable snapshot before a real SET, stop after an unconfirmed write, in-window read-only `--hw-check` | PASS (offline tests); HW-1 itself not run |
+| 20c | First-GUI-write safety (Phase 10B.1): one SET per deliberate change, stable snapshot before a real SET, stop after an unconfirmed write, in-window read-only `--hw-check` | PASS (offline tests) and used in HW-1 (PASS, 2026-10-26) |
 | 20d | Four-channel capture identity and hardware loopback with signal (LB-1/LB-2) | **NOT DONE** — channels present (read-only observation); PipeWire labels them as 4.0 surround; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |
 | 20e | DAW/JACK workflows (Ardour, REAPER, Audacity, JACK API) | **NOT DONE** — test matrix DAW-1…DAW-10 planned |
 | 20a | GUI permissions match the write policy (Phase 10A: per-control capabilities; triggers need their own authorization) | PASS (offline tests) |
@@ -77,8 +77,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 * On the real device most controls are display-only; only the speaker volume/mute, the headphone volume/mute and the LED
   brightness can be changed from the GUI, each only after its own confirmed opt-in. Low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom
   button, autogain/autosetup and sample-rate selection work with the simulated device only.
-* **Experimental:** vendor fallback (not validated on hardware), GUI device control (not exercised
-  on hardware), CLI write commands (`instrument-mute` never executed).
+* **Experimental:** vendor fallback (not validated on hardware), GUI speaker/headphone control (not
+  exercised on hardware; LED brightness passed HW-1), CLI write commands (`instrument-mute` never executed).
 * The kernel compatibility quirk is specific to the CONNECT 2 and was needed on Linux 7.3.0; other kernels have
   not been checked. It is never installed by OpenWitty or its packages.
 * With the kernel quirk, a graphical login screen's own audio service sets the CONNECT 2 speaker to its default
