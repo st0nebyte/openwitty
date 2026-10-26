@@ -220,6 +220,56 @@ value would need a volume write (requests +72 dB) or an edit of WirePlumber's st
 for the duration (`wpctl set-log-level` or environment, reverted afterwards) and a usbmon capture of EP0 for the CONNECT 2
 (kernel debug interface; passive on the bus), so the SET_CUR result and the re-mute's origin are observed directly.
 
+### Step 2 follow-up — cache-only diagnosis (2026-10-26 23:50, no writes)
+
+**The authorized `amixer cget` of `Mic Capture Switch` was not executed.** Re-reading the kernel source
+(`sound/usb/mixer.c`) found a path not covered in the earlier analysis: the device's audio-control **interrupt endpoint**
+(EP 0x83). A UAC2 status interrupt for a unit makes the kernel clear that control's cache (`clear_bit(channel,
+info->cached)` / `bitmap_zero`, skipped only for controls flagged `get_cur_broken` — not the mute switch) and notify
+userspace; the next read then goes to the **device** (`get_cur_mix_raw`), and a failed read is masked by
+`ignore_ctl_error`, the reported value falling back to the control's minimum (for the switch: off = muted). The CONNECT 2
+does use this endpoint for mute (Phase 8H: its Mute button updates `PCM Playback Switch` with no OpenWitty involved). So
+the cache bit of `Mic Capture Switch` may currently be clear and the read would not be cache-only; and every hypothesis
+below predicts "off", so the read could not discriminate. Stopped before executing it, as required.
+
+Current state (passive, 23:50): route `analog-input-mic` **mute true**, `save` **true**, volumes [0.99995, 0.99995,
+0.000251, 0.000251]; node 65 mute true, **softMute true**; saved WirePlumber route: mute true, same volumes, file written
+23:29:24.69; output route `analog-output` `save` false; no WirePlumber/PipeWire journal messages 23:29–23:30; no audio
+mixer GUI process besides the Plasma shell.
+
+Code facts (PipeWire 1.6.10 `acp.c`, `alsa-acp-device.c`; WirePlumber 0.5.18 scripts), all **established**:
+* `mixer_callback()` runs on every ALSA value event of the path's elements and calls `read_volume()` *and* `read_mute()`.
+  The immediate volume change after the unmute (to the cache view +72/+72/0/0 dB) is this re-read.
+* The kernel emits a value event for a put only when the put reports a change; a failed SET is turned into "no change"
+  by `ignore_ctl_error` (no event). The immediate re-read therefore **fits a successful FU 5 mute SET** (or a coinciding
+  device notification) — it is not proof.
+* `on_mute_changed()` emits node Props with `mute` **and `softMute` set to the same value** — `softMute=true` is a
+  consequence of an ACP mute-changed event to "muted", not an independent software-only change.
+* ACP's mute-changed event has two sources: `acp_device_set_mute()` (a Route/Props set from a client or WirePlumber) and
+  `read_mute()` after a mixer event.
+* The Route param's `save` field is the port's `ACP_PORT_SAVE` flag, and **every** Route set overwrites it
+  (`p->port.flags = ACP_PORT_ACTIVE | flags`, also for the active port). WirePlumber's re-application (`apply-routes.lua`)
+  uses `save = false` (the output route shows that state from login); `wpctl`'s mixer API uses `save = true`.
+
+| Hypothesis | Evidence for | Evidence against | Status |
+|---|---|---|---|
+| (b) WirePlumber re-applied the stored route (mute + volumes) | would re-mute and set softMute | input route `save = true` now — a WirePlumber re-application would have left `false` | **contradicted** (unless a later save=true set followed, of which there is no sign) |
+| (c) another client set the mute (`save = true`, e.g. via pipewire-pulse) | fits the save flag and softMute | no client active, owner hands off, no such application running | unlikely, not excluded |
+| (d) device notification: the CONNECT 2 reported unit 5 on its interrupt endpoint, the kernel dropped the cache, ACP's re-read found "muted" (device answer, or a masked read failure) | mechanism in kernel code; the device uses this endpoint for mute (8H); fits softMute, save = true, no journal lines; device mute bytes 2/12 unchanged afterwards | not observed | **plausible, unverified** |
+| (a) the USB unmute itself was rejected | — | a masked rejection produces no value event, yet a re-read happened at once | less likely than (d), not excluded |
+
+**23:29:23–23:29:24.69, what the records establish:** the unmute command returned 0; within the same second PipeWire
+showed the route unmuted with the cache-view volumes; by 23:29:24.69 WirePlumber had saved mute true. Nothing establishes
+the device's transient mute state, whether the device ever unmuted, or the order of USB transactions.
+
+**Instrumented reproduction:** justified before any further FU 5 work, because the result decides whether the desktop input
+mute is meaningful on this device. It would need, each separately approved: the same physical safety conditions; a
+usbmon capture of the CONNECT 2's EP0 *and* interrupt EP 0x83 (root/debugfs, passive on the bus); PipeWire/WirePlumber
+debug logging for the test window only (log level changed and reverted); an ALSA event monitor that only prints events
+(`alsactl monitor`, no value reads); one `wpctl set-mute 65 0`, the observation, then the decision on re-muting with the
+owner. Expected discriminators: a SET_CUR mute status (success/STALL), an interrupt packet for unit 5, a GET_CUR answer,
+and which component logged the mute change.
+
 ### Step 3 — one controlled FU 5 volume request (later, separate approval; revised in Phase 10E.1)
 
 **Per-channel mapping (offline evidence):** FU 5 sits on the 4-channel *Microphone* input terminal; the official channel

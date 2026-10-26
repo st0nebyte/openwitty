@@ -1684,3 +1684,11 @@ was muted again within about 1.3 s without a second command (saved by WirePlumbe
 true). Route/saved volumes changed to the kernel-cache view [+72, +72, 0, 0 dB]. Device compare afterwards: no settings change
 (mic 27 dB muted, instrument 14 dB muted). The re-mute command was not sent; nothing restored. The service took the device
 back at 23:33:07. Details, hypotheses and next diagnosis: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 result).
+
+## 24. GAIN-1 step 2 follow-up — cache-only diagnosis, 2026-10-26 23:50 (no writes, no device read)
+
+The authorized `amixer cget` of `Mic Capture Switch` was not run: the kernel clears that control's cache on a device status
+interrupt (EP 0x83), so the read might reach the device, and all hypotheses predict "off". Passive state: input route muted,
+`save = true`, node softMute true, saved route muted. Source analysis: softMute follows any ACP mute-changed event; the
+`save = true` flag contradicts a WirePlumber route re-application; a device notification on the interrupt endpoint is the
+most plausible unverified cause. Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 follow-up).
