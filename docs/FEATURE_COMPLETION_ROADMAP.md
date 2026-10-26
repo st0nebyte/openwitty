@@ -5,7 +5,7 @@ after Phase 10A (2026-10-25); Phase 10B changes (2026-10-26) are marked. Superse
 itself is in `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md` and `PROTOCOL.md`.
 
 **Bottom line:** OpenWitty reads and displays the CONNECT 2 well (validated live), and its desktop integration is
-validated. **No GUI control has ever written to the real device.** Real writes so far went through the CLI (LED
+validated. **The first GUI write passed on 2026-10-26: LED brightness (HW-1, W-gui).** No other GUI control has written to the real device. Real writes so far went through the CLI (LED
 brightness; speaker volume/mute) or the kernel path (desktop volume). Most controls are implemented against the
 simulated device only.
 
@@ -148,7 +148,7 @@ device)** · **Mock** · **HW read** · **HW write** · **GUI end to end** · **
 | High-volume speakers | confirm → `set.highVolume` | 24 | none | ✔ | R-dec | — | — | **High**: louder speakers | — | P3 |
 | Mobile streaming | disabled | 67 | none | read | R-dec | — | — | routing change | semantics unknown | X (until RE) |
 | macOS streaming | sim only | trigger 0x104/0x105 | refused on hardware | ✔ | — | — | — | device restart | — | X |
-| LED brightness | `Fader_h` → `set.ledBrightness` (one SET per release, 10B.1) | 37 | *LED brightness* permission (10B) | ✔ | R-hw | **W-cli** (6C/6D) | write — (HW-1) | **Low** (cosmetic) | — | **P0** |
+| LED brightness | `Fader_h` → `set.ledBrightness` (one SET per release, 10B.1) | 37 | *LED brightness* permission (10B) | ✔ | R-hw | **W-cli** (6C/6D), **W-gui** (HW-1) | ✔ write + restore (HW-1 PASS) | **Low** (cosmetic) | — | **P0** |
 | LED colours (5 elements) | swatches → `set.led.*` | 38–52 RGB | none | ✔ | R-dec | — | — | Low (cosmetic, persistent) | — | P1 |
 | Reset LED colours | — (no GUI) | trigger 0x103 | persistent-change policy | ✔ | — | — | — | Low | not in the GUI | P3 |
 | Custom button | radio → `set.customButton` | 53 enum | none | ✔ | R-dec | — | — | Low (button behaviour) | long-press config (54–56?) unknown | P1 |
@@ -210,7 +210,7 @@ Excluded: firmware update, factory reset, device-mode switching, mobile streamin
 
 ### HW-1 procedure (LED brightness, first GUI write) — corrected in Phase 10B.1
 
-**Not run yet.** Each numbered step is done by the owner, or by the assistant with the owner present. No step
+**Run on 2026-10-26: PASS** (`docs/HARDWARE_TEST_RESULTS.md` §19). Kept as the template for later GUI write steps. Each numbered step is done by the owner, or by the assistant with the owner present. No step
 sends anything to the device except step 6 and step 9, each a single deliberate GUI action.
 
 **Why no `openwitty-cli` reads.** While the window is open it owns the device (exclusive control lease); a CLI

@@ -27,7 +27,8 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Settings → Device control: three separate, separately confirmed permissions — speaker control, headphone
   control, LED brightness — each scoped to its own bytes (volume ≤ 10 dB louder per step; every write read back,
   never retried). All other real-device controls are display-only and say so per control. The vendor write path
-  is verified on hardware; the GUI permissions have not been exercised on hardware.
+  is verified on hardware; the LED brightness permission passed its first GUI hardware test (HW-1); speaker and
+  headphone via the GUI have not been exercised on hardware.
 - Device sample rate shown from the kernel's stream state (read-only; "unknown" while no stream is open); the
   monitoring-mix knob also shows the raw device value, because the device scale is not calibrated.
 - GUI preferences (`gui.conf`): the first-run introduction is shown once, the tooltip setting is remembered.

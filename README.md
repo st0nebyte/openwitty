@@ -54,7 +54,8 @@ Optional and limited:
   confirmed on its own): *speaker control* (speaker volume and mute), *headphone control* (headphone volume
   and mute) and *LED brightness*. Each switch lets OpenWitty's own control write only its own bytes; volume at
   most 10 dB louder per step; every write is read back and never retried. The underlying vendor write path
-  is verified on hardware (via the CLI); the GUI switches have not been exercised on hardware yet. All other
+  is verified on hardware (via the CLI); the LED brightness switch passed its first GUI hardware test (HW-1);
+  speaker and headphone via the GUI have not been exercised on hardware yet. All other
   controls on the real device stay display-only.
 - **CLI writes** (`openwitty-cli write …`, explicit opt-in variables): LED brightness and speaker
   volume/mute were verified on hardware; instrument mute is prepared but never executed.

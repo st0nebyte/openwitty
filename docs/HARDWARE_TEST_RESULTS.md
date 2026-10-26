@@ -1624,3 +1624,32 @@ previously accepted same-scheduler hardware runs. The GUI exited normally,
 released the control lease, and CONNECT 2 remained visible in USB, ALSA,
 and PipeWire. No USB SET, reset, driver detach, DFU, firmware action, or
 audio-routing change was performed.
+
+## 19. HW-1 — first GUI hardware write (LED brightness), 2026-10-26
+
+Owner-approved, owner present; procedure `docs/FEATURE_COMPLETION_ROADMAP.md` (HW-1, Phase 10B.2 version).
+Build `06106bc` (code as of `1d4cd94`) installed user-local; installed `openwitty` checksum identical to the build
+output. Kernel 7.3.0, KDE Plasma 6 (Wayland), PipeWire 1.6, WirePlumber 0.5. Safety conditions confirmed by the owner
+before the window was started: no audio playing, monitors off/down, headphones off the head, device untouched.
+Speaker control, headphone control and vendor fallback off throughout; desktop sync `mirror` unchanged.
+
+| Step | Observation (window started with `--hw-check`) |
+|---|---|
+| Start | first connect refused (`control already in use` — the background service owned the device); hand-over; baseline from the first successful read after the reconnect: **LED brightness 100** |
+| Compare | `changed: none; unexpected: none` |
+| LED permission on (confirmed) | session reopened directly (`connected again (connect)`), service stayed away; baseline kept (100); compare `changed: none` |
+| Change: one drag, one release to 50 % | **1 settings SET**; outcome *verified* after 1 read-back; LEDs visibly dimmed (owner); GUI "Verified" |
+| Compare | `LED brightness 100 -> 50; changed: 37 (LED brightness); unexpected: none` |
+| Restore: one release at 100 % | **1 settings SET**; *verified* after 1 read-back |
+| Compare | `LED brightness 100 -> 100; changed: none; unexpected: none` |
+| LED permission off; window closed | reconnected read-only, baseline kept; window exit 0; the service took the device back (`device connected`) |
+
+**Result: PASS.** Two settings SETs in total (change + restore), each verified; only byte 37 changed; no USB
+error, no unexpected offset, no retry. Evidence class for LED brightness via the GUI: **W-gui**.
+
+Afterwards: settings file `led_brightness_control = false`, speaker/headphone control off, vendor fallback off, desktop
+sync `mirror` (the file was rewritten by the switch; the obsolete `output_control = false` line was replaced by the
+three explicit keys). Service enabled/active, same process, no restarts; tray running; tray autostart entry and the
+service unit unchanged (checksums). The service process still runs the binary loaded before the install and logs
+"unknown key … ignored" for the three new keys (harmless; it does not use them); the new binary loads at the next
+login.
