@@ -1661,3 +1661,10 @@ registry); no stream, mixer, profile, volume, mute or rate change; no vendor req
 `docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`: no stream open (device rate unknown), PipeWire graph 48 kHz with only
 48 kHz allowed, capture terminal *Microphone* with 4 channels and no declared positions, default source muted at its
 hardware route bound to UAC2 Feature Unit 5 (0…+72 dB). No A-live or A-daw evidence.
+
+## 21. Phase 10E — gain-control path analysis, 2026-10-26
+
+Offline analysis and passive evidence only (no mixer access, no stream, no USB request). Record and GAIN-1 plan:
+`docs/PHASE10E_GAIN_CONTROL_PATH.md`. Passive journal check: the current boot again logs FU 5 "broken mixer GET_CUR (0/18432/256
+=> 6912)". Non-service accesses to the vendor interface in this boot correspond to OpenWitty windows (HW-1 and later window
+starts outside the assistant's commands); the test suite's last run produced none (test transports are simulated).

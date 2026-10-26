@@ -357,7 +357,14 @@ declared but not activated (`pro-audio`, IEC958 variants that have no S/PDIF ter
 input-only, off); the default source's mute/volume are hardware controls bound to **Feature Unit 5** (0…+72 dB, mute on
 channels 1–2; channels 3–4 reject writes); nothing proves FU 5 is the preamp gain.
 
-**GAIN-1 proposal (later, separately approved; no step yet):**
+**Phase 10E (offline):** the full control path, the kernel's broken-read-back handling and the GAIN-1 plan are in
+`docs/PHASE10E_GAIN_CONTROL_PATH.md`. Established: the default source's mute/volume are FU 5 hardware controls with no
+software mute/volume on top; the ALSA/PipeWire FU 5 values are the kernel's cache of its own last write, never the
+device's gain; at every probe the kernel writes 0 dB to FU 5 (after test writes of 0/+72 dB). Likely: WirePlumber writes
++72 dB and mute at login; the loopback channels have no mute in this path. Unknown: whether FU 5 reaches the preamp or the
+device mute; what External Gain Lock does. That plan supersedes the outline below.
+
+**GAIN-1 proposal (outline from 10D; superseded by the Phase 10E plan):**
 1. *Read-only correlation:* one vendor settings read through the OpenWitty window (it takes the device over from the
    service; `openwitty-cli read settings --interface auto` only if no OpenWitty process owns the device) plus the
    passive `usbmixer`/PipeWire state; compare mic/instrument gain and mute with FU 5 and the route. No writes.
