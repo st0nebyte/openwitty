@@ -116,6 +116,32 @@ change, read-back, no automatic retries, physical safety confirmed by the owner 
 source, gain decreases); session 2 outputs (HW-2…HW-4); session 3 audio (LB-1/LB-2, then DAW-1…DAW-4); session 4 high-risk
 (48 V, high-volume, high-impedance, autogain).
 
+### Phase 11B session 1 — low-risk settings via the GUI (procedure)
+
+Owner present; speakers physically off or fully down, headphones off the head, nothing on the instrument input,
+microphone pointing away from the speakers, nobody touching the device. Build installed user-local; window started with
+`openwitty --hw-check --show settings-device`; baseline recorded from the first successful read. Permissions turned on,
+each with its dialog: *LED colours and custom button*, *Input gain and mute*, *Input processing*, *Monitoring* (not
+speaker, headphone, 48 V, output modes or autogain). Each step is **one** GUI action, then the log line
+(`write <key>: verified; SET sent: yes` and `since baseline: … unexpected: none; values: …`), then the restore action.
+
+| # | Action | Expected bytes | Restore |
+|---|---|---|---|
+| 1 | Custom button: another function | 53 | the original function |
+| 2 | LED colour of one element (only if its current colour is one of the swatches) | 3 bytes of that element | the original swatch |
+| 3 | Gain lock on | 57 | off |
+| 4 | Mic low-cut, Clipguard, Comp toggles; mic preamp Clean | 3, 4, 9, 6 | toggles back; Vivid |
+| 5 | Instrument preamp Clean | 15 | Vivid |
+| 6 | Dim on, Mono on | 32, 33 | off |
+| 7 | Monitoring source: microphone button off | 34 | on |
+| 8 | Mix knob to about −30 | 35–36 | fully right (0) |
+| 9 | Instrument unmute, mic unmute | 12, 2 | mute |
+| 10 | Mic gain: three wheel notches down | 0–1 | three notches up (≤ 6 dB per write) |
+
+End: **Compare with baseline** → `changed: none`; all four permissions off; window closed; service takes the device
+back. Abort on any unexpected byte, "not confirmed", USB error or audible event; no retries. Evidence class per step:
+W-gui (device accepted and reports the value); audible behaviour (low-cut, Comp, Dim …) needs A-live in session 3.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
