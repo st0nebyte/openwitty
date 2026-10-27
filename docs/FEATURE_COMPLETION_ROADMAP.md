@@ -142,6 +142,18 @@ End: **Compare with baseline** → `changed: none`; all four permissions off; wi
 back. Abort on any unexpected byte, "not confirmed", USB error or audible event; no retries. Evidence class per step:
 W-gui (device accepted and reports the value); audible behaviour (low-cut, Comp, Dim …) needs A-live in session 3.
 
+**Session 1, part 1 (2026-10-27, owner present, safety conditions confirmed):**
+- Step 1 PASS: custom button 53: 2→12→2, one verified SET each, unexpected: none.
+- Step 2 PASS (Icons row): 7 swatch clicks, only bytes 38–40 changed, back to white (255,255,255).
+- Finding: with Settings open, a wheel turn on an empty part of the page reached the instrument gain knob underneath
+  (byte 11: 14→11 dB, a decrease); the owner restored it (11→13→14), final compare changed: none. Fixed in
+  `dbc51c3` (overlays accept every click and the wheel; tests `Overlay11B.*`). Same commit: visible selection ring
+  and an eighth "device colour" swatch for a non-swatch colour, so it can be restored exactly.
+- Note: each permission switch reconnects the session with the new policy (by design); the baseline is kept.
+- Paused before step 3; all permissions off, window closed. Next: restart with the fixed build, step 2b (map every LED
+  row to the physical LEDs: Mute, Parameter, Metering, Gain reduction; Mute/Parameter/Gain reduction showed no
+  selected swatch, so they hold non-swatch colours → restore with the device-colour swatch), then steps 3–10.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
