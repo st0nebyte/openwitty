@@ -270,6 +270,150 @@ debug logging for the test window only (log level changed and reverted); an ALSA
 owner. Expected discriminators: a SET_CUR mute status (success/STALL), an interrupt packet for unit 5, a GET_CUR answer,
 and which component logged the mute change.
 
+### Step 2R — instrumented reproduction plan (Phase 10E.2; prepared 2026-10-27, NOT executed)
+
+One repeat of the single unmute, fully instrumented, to tell apart: **A** a successful FU 5 unmute followed by a device
+notification and cache invalidation; **B** a failed FU 5 unmute masked by `ignore_ctl_error`; **C** a WirePlumber/PipeWire
+route re-application; **D** another client setting the mute. Needs the owner's separate approval; nothing below has been
+enabled, loaded, mounted or started.
+
+#### Facilities (checked passively 2026-10-27)
+
+| Item | State | Use |
+|---|---|---|
+| CONNECT 2 identity | `29c2:0004`, sysfs `3-2`, bus 3, device 2 (re-derived at test time) | capture/correlation |
+| Other devices on that bus | none (root hub only) | a per-bus capture contains no unrelated device |
+| usbmon | built as module (`CONFIG_USB_MON=m`), **not loaded**; debugfs mounted at `/sys/kernel/debug` (root only); no capture tool installed — the kernel text interface is used | capture |
+| PipeWire daemon log | `settings` metadata `log.level = 2` (subject 0), no environment overrides | optional raise, exact restore to 2 |
+| WirePlumber log | default (`F E W N` = level 2; no `WIREPLUMBER_DEBUG`, no config) | temporary raise via its own client ID |
+| `alsactl monitor` 1.2.16 | source: only `snd_ctl_open/subscribe_events/poll/read(events)/close`; never reads, lists or queries control values | passive event log, user privileges |
+| `pw-mon` | PipeWire registry/param monitor client; Route/Props come from ACP state, no mixer read | passive timeline |
+| PipeWire clients now | desktop (plasmashell, kded6, portals, kwin), WirePlumber (2 connections), **Steam incl. "Steam Voice Settings"** | Steam is a candidate for D — must be quit before the test |
+
+Logging facts (installed versions, source): WirePlumber's `module-log-settings` applies `settings` metadata `log.level`
+only for its **own** client ID and falls back to `"2"` when the entry is deleted (exact restore, no restart).
+`wpctl set-log-level LEVEL` **without** an ID writes the entry for *every* client — not used. The PipeWire daemon applies
+`log.level` only for subject 0. Other clients (e.g. `pipewire-pulse`) ignore runtime entries, so D is identified
+indirectly (below). ACP — the ALSA card code that logs `Set hardware mute: N` (set path) and `mixer changed` (re-read
+path) at info level — runs inside WirePlumber; WirePlumber's route scripts log `new active route found`,
+`restoring route`, `storing route(...) props` (info) and `setting route(...)` (debug, topic `s-device`).
+
+#### Operations by kind
+
+| Operation | Kind | Root | Undo |
+|---|---|---|---|
+| `modprobe usbmon` | temporary diagnostic configuration (kernel module) | yes | `modprobe -r usbmon` (it is not loaded today) |
+| `cat /sys/kernel/debug/usb/usbmon/<bus>u` | passive bus monitor (copies URBs on that bus; no request of its own) | yes | stop the process |
+| `pw-metadata -n settings <WP-ID> log.level "I,s-device:D"` | temporary diagnostic configuration | no | `pw-metadata -n settings -d <WP-ID> log.level` (→ default `2`) |
+| `pw-metadata -n settings 0 log.level 3` (optional) | temporary diagnostic configuration | no | `pw-metadata -n settings 0 log.level 2` (the existing value) |
+| `alsactl monitor hw:<card>`, `pw-mon`, `pw-dump`, `journalctl`, sysfs/procfs reads | passive monitoring | no | stop the process |
+| OpenWitty window `--hw-check` (permissions off) | vendor read (same as steps 1–2) | no | close the window |
+| `wpctl set-mute <id> 0` | **the test write** (FU 5 mute SET_CUR ch 1–2 expected) | no | see restoration |
+| `wpctl set-mute <id> 1` | **restoration write**, only under the conditions below | no | — |
+
+Not used: `amixer` (any form), `wpctl set-volume`, `wpctl set-log-level` without ID, service restarts, profile switches,
+USB resets/re-enumeration, any edit of WirePlumber's state files.
+
+#### Capture filter (keeps only standard audio-control requests and the interrupt endpoint)
+
+Applied *before* anything is written to disk; vendor requests (`bRequest 0x03`, `wIndex 0x33xx` — OpenWitty's service/window
+polling with proprietary payloads) and all other endpoints are dropped. Saved as
+`<scratch>/fu5filter.py` (not in the repository) and run as the normal user, reading the root `cat` from a pipe:
+
+```python
+import sys, time
+dev = sys.argv[1]                              # e.g. "3:002" (bus:device, zero-padded device number)
+keep = set()
+for line in sys.stdin:
+    f = line.split()
+    if len(f) < 4 or (":%s:" % dev) not in f[3]:
+        continue
+    ep = f[3].rsplit(":", 1)[1]
+    stamp = time.strftime("%H:%M:%S") + ".%06d" % (time.time() % 1 * 1e6)
+    if ep == "3":                                # interrupt EP 0x83: UAC2 status messages
+        print(stamp, line.rstrip(), flush=True); continue
+    if ep != "0":
+        continue
+    tag, kind = f[0], f[2]
+    if kind == "S" and len(f) > 8 and f[4] == "s":
+        breq, windex = f[6], f[8]
+        if breq in ("01", "02") and not windex.startswith("33"):   # UAC2 CUR/RANGE, not vendor
+            keep.add(tag); print(stamp, line.rstrip(), flush=True)
+    elif tag in keep:
+        keep.discard(tag); print(stamp, line.rstrip(), flush=True)
+```
+
+Reading the result: a setup `21 01 0101 0500` / `21 01 0102 0500` is SET_CUR mute ch 1 / ch 2 of entity 5; its completion
+status (`0` or `-32` = STALL, repeated up to 10 times by the kernel) follows; `a1 01 0101 0500` is GET_CUR mute with the
+1-byte answer (`01` = muted). An `Ii:…:3` completion carries the 6-byte UAC2 interrupt message `bInfo bAttribute wValue(lo
+hi) wIndex(lo hi)`: `bAttribute 01` = CUR change, `wValue` hi byte = control selector (01 mute, 02 volume), lo byte = channel,
+`wIndex` hi byte = **entity** (05 = FU 5, 02 = FU 2, 29 = clock 41), lo byte = interface. An interrupt is attributed to FU 5
+only if its entity byte is 05.
+
+#### Procedure (command by command; owner present throughout)
+
+Preparation
+1. Owner confirms the physical conditions of step 2 (speakers off/down, headphones off the head, direct monitoring off, nothing
+   on the instrument input, microphone away from speakers, no recording/conferencing application, hands off the device) **and
+   quits Steam completely**.
+2. `pw-dump > <scratch>/r0-dump.json` — list PipeWire clients; stop if any unexpected client remains (record which).
+3. Verify: CONNECT 2 source ID (expected 65 — re-derive), active profile `output:analog-stereo+input:analog-surround-40`, route
+   `analog-input-mic` **mute true**, `save` value, route/saved volumes **[0.99995, 0.99995, 0.000251, 0.000251]**; record
+   `~/.local/state/wireplumber/default-routes` line and mtime. Stop on any difference.
+4. Derive bus/device from sysfs (`for d in /sys/bus/usb/devices/*; …` matching `29c2:0004` → `busnum`, `devnum`); card index
+   from `/sys/class/sound/card*` (as in Phase 10D).
+5. Derive WirePlumber's client IDs from `pw-dump` (`application.name` "WirePlumber" and "WirePlumber [client]",
+   `wireplumber.daemon=true`).
+
+Start instrumentation (terminals A–D; root only in A)
+6. A (owner, root): `sudo modprobe usbmon` then
+   `sudo cat /sys/kernel/debug/usb/usbmon/<bus>u | python3 -I <scratch>/fu5filter.py <bus>:<dev3> > <scratch>/r-usb.txt`.
+7. B: `alsactl monitor hw:<card> | while read l; do echo "$(date +%T.%N) $l"; done > <scratch>/r-alsa.txt`.
+8. C: `pw-mon 2>&1 | while read l; do echo "$(date +%T.%N) $l"; done > <scratch>/r-pwmon.txt`.
+9. `pw-metadata -n settings <WP-ID> log.level "I,s-device:D"` for each WirePlumber client ID; optionally
+   `pw-metadata -n settings 0 log.level 3`. D: `journalctl --user -f -o short-precise -u wireplumber -u pipewire -u pipewire-pulse > <scratch>/r-journal.txt`.
+10. Start `openwitty --hw-check --show settings-device` (all permissions off); wait for the baseline line; owner reads mic/
+    instrument gain and mute (expected 27/14 dB, muted); press **Compare with baseline** (expect none).
+11. Quiet period ≥ 30 s: record what the monitors show with nothing happening (expected: no FU 5 requests, possibly
+    interrupts for other reasons).
+
+Test
+12. Note the time; **exactly one** `wpctl set-mute <id> 0`.
+13. Observe ≥ 60 s without any action: route/node state every 5 s (passive `pw-dump` extract), all monitors running.
+14. **Compare with baseline** in the window (device bytes 2/12; mute offsets are expected differences here — the tool
+    lists only LED byte 37 as "expected", so inspect the changed offsets: only 2 and/or 12 are permitted).
+
+Restoration
+15. If the input is muted again by itself: no command. If it is **still unmuted** after step 13: exactly one
+    `wpctl set-mute <id> 1`, **only if** no profile change, no route re-application, no volume change beyond the known
+    cache view and no other anomaly were seen, and the physical conditions still hold; then 30 s observation and a
+    compare. Otherwise no software write: keep the physical safety, record, and ask the owner.
+
+Cleanup and verification
+16. Close the window (service takes the device back — check its journal line).
+17. `pw-metadata -n settings -d <WP-ID> log.level` (each ID); if raised: `pw-metadata -n settings 0 log.level 2`; check with
+    `pw-metadata -n settings` that only `0 log.level 2` remains.
+18. Stop D, C, B; stop A; `sudo modprobe -r usbmon`; `lsmod | grep usbmon` empty.
+19. Final passive record as in step 3; saved route volumes unchanged; route muted; OpenWitty settings unchanged.
+20. Summaries only go into the repository (timestamps, request types, statuses, entity/channel, log message kinds); raw
+    traces and dumps stay in the scratchpad (they contain the device serial in node names).
+
+Abort at any point (then: no further software write; ensure physical safety; record; owner decides): any gain or other
+settings byte changes; profile or route changes other than the mute; a re-application of the stored volume; any USB error
+other than the documented channel-3/4 STALLs; any sound; an unexpected client; a monitor failing.
+
+#### Discriminating evidence
+
+| Case | usbmon | `alsactl monitor` | WirePlumber log | Route after |
+|---|---|---|---|---|
+| A | SET_CUR mute ch 1–2, status 0; later an interrupt with entity 05 (mute); a GET_CUR mute answering `01` | event on `Mic Capture Switch` at the write and again at the notification | `Set hardware mute: 0`, later `mixer changed`, mute change **without** `Set hardware mute: 1` | `save` true |
+| B | SET_CUR mute with status −32 (×10), no success | **no** event at the write | `Set hardware mute: 0`, later state flip via re-read | `save` true |
+| C | a later SET_CUR mute `01` | event | `new active route found` / `restoring route` / `setting route` before `Set hardware mute: 1` | `save` **false** |
+| D | a later SET_CUR mute `01` | event | `Set hardware mute: 1` without route-script lines; `pw-mon` shows a Route/Props change | `save` true (mixer API/pulse) |
+
+A successful SET_CUR does not prove the device's own mute changed — only the vendor compare (bytes 2/12) speaks to that,
+and only at its sampling time. An interrupt is attributed to FU 5 only by its entity byte.
+
 ### Step 3 — one controlled FU 5 volume request (later, separate approval; revised in Phase 10E.1)
 
 **Per-channel mapping (offline evidence):** FU 5 sits on the 4-channel *Microphone* input terminal; the official channel
