@@ -42,7 +42,8 @@ int main(int argc, char** argv) {
     QCommandLineOption hwCheck("hw-check",
         "DIAGNOSTIC, for owner-approved hardware tests: record a settings baseline at connect and report, on stderr and on "
         "Settings > Device control, which settings changed after each write or on request. Read-only; uses this "
-        "window's own device connection; prints no device identifiers and no raw settings.");
+        "window's own device connection; prints field names and the old/new values of changed bytes only, no device "
+        "identifiers.");
     p.addOption(hwCheck);
     p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();

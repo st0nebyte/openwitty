@@ -11,6 +11,7 @@ SettingsComparison compareSettings(const SettingsMessage& first, const SettingsM
     for (std::size_t i = 0; i < SettingsMessage::kSize; ++i) {
         if (first.byteAt(i) == second.byteAt(i)) continue;
         c.changed.push_back(i);
+        c.values.emplace_back(first.byteAt(i), second.byteAt(i));
         if (std::find(expected.begin(), expected.end(), i) == expected.end()) c.unexpected.push_back(i);
     }
     c.ledBrightnessFirst = first.ledBrightness();
@@ -54,8 +55,15 @@ std::string list(const std::vector<std::size_t>& offs) {
 }  // namespace
 
 std::string describeComparison(const SettingsComparison& c) {
-    return "LED brightness " + std::to_string(c.ledBrightnessFirst) + " -> " + std::to_string(c.ledBrightnessSecond) +
-           "; changed: " + list(c.changed) + "; unexpected: " + list(c.unexpected);
+    std::string s = "LED brightness " + std::to_string(c.ledBrightnessFirst) + " -> " + std::to_string(c.ledBrightnessSecond) +
+                    "; changed: " + list(c.changed) + "; unexpected: " + list(c.unexpected);
+    if (!c.changed.empty()) {
+        s += "; values:";
+        for (std::size_t i = 0; i < c.changed.size() && i < c.values.size(); ++i)
+            s += " " + std::to_string(c.changed[i]) + " " + std::to_string(c.values[i].first) + "->" +
+                 std::to_string(c.values[i].second);
+    }
+    return s;
 }
 
 }  // namespace lewitt

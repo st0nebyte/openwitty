@@ -1750,8 +1750,8 @@ TEST(HwSafety10B1, HardwareCheckUsesTheOpenSessionReadsOnlyAndReportsChangedOffs
     auto report = [&] { return r.c->values().value("hwcheck.report").toString(); };
     ASSERT_TRUE(waitFor([&] { return report().startsWith("now vs baseline"); }));
     const QString after = report();
-    EXPECT_EQ(after, QString("now vs baseline: LED brightness %1 -> %2; changed: 37 (LED brightness); unexpected: none")
-                         .arg(original).arg(target));
+    EXPECT_EQ(after, QString("now vs baseline: LED brightness %1 -> %2; changed: 37 (LED brightness); unexpected: none; "
+                             "values: 37 %1->%2").arg(original).arg(target));
     EXPECT_EQ(r.hw->writeCalls, writes);                      // read-only
     EXPECT_EQ(r.hw->openCalls, 1);                            // no second connection
     EXPECT_GE(r.hw->readCalls - reads, 1);                    // its own GET on the same transport (plus flush's poll)
@@ -1764,7 +1764,7 @@ TEST(HwSafety10B1, HardwareCheckUsesTheOpenSessionReadsOnlyAndReportsChangedOffs
     r.mock.setSettingsBytes(b);
     r.c->hwCheckCompare();
     r.c->flush();
-    ASSERT_TRUE(waitFor([&] { return report().endsWith("unexpected: 22 (speaker mute)"); })) << report().toStdString();
+    ASSERT_TRUE(waitFor([&] { return report().indexOf("unexpected: 22 (speaker mute); values:") != -1; })) << report().toStdString();
     const QString unexpected = report();
     for (const char* s : {"29c2", "USB", "serial", "0x"}) EXPECT_EQ(unexpected.indexOf(s), -1) << s;
     EXPECT_EQ(r.hw->openCalls, 1);
@@ -2254,7 +2254,7 @@ TEST(Permissions11AGui, HardwareCheckExpectsTheBytesOfWrittenControlsOnly) {
     auto report = [&] { return r.c->values().value("hwcheck.report").toString(); };
     ASSERT_TRUE(waitFor([&] { return report().startsWith("now vs baseline"); }));
     EXPECT_NE(report().indexOf("changed: 2 (mic mute), 29 (headphone mute)"), -1) << report().toStdString();
-    EXPECT_TRUE(report().endsWith("unexpected: 29 (headphone mute)")) << report().toStdString();
+    EXPECT_NE(report().indexOf("unexpected: 29 (headphone mute); values: 2 0->1 29 "), -1) << report().toStdString();
 }
 
 TEST(Permissions11AGui, TriggersStopAfterAnUnconfirmedWriteLikeSettingsWrites) {

@@ -5,6 +5,7 @@
 #pragma once
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "protocol/Messages.hpp"
@@ -13,6 +14,7 @@ namespace lewitt {
 
 struct SettingsComparison {
     std::vector<std::size_t> changed;      // offsets that differ between the two snapshots
+    std::vector<std::pair<int, int>> values;   // per changed offset: byte value first -> second (Phase 11A)
     std::vector<std::size_t> unexpected;   // changed offsets that are not in `expected`
     int ledBrightnessFirst{0};
     int ledBrightnessSecond{0};
@@ -23,7 +25,9 @@ SettingsComparison compareSettings(const SettingsMessage& first, const SettingsM
                                    const std::vector<std::size_t>& expected);
 // Coarse field name for a settings offset ("LED brightness", "speaker volume", ...; "offset N" if unknown).
 std::string settingsFieldName(std::size_t offset);
-// One line, e.g. "LED brightness 60 -> 40; changed: 37 (LED brightness); unexpected: none".
+// One line, e.g. "LED brightness 60 -> 40; changed: 37 (LED brightness); unexpected: none; values: 37 60->40".
+// The values segment (byte values of the changed offsets, needed to restore a setting exactly) appears only when
+// something changed; it holds settings values, no identifiers.
 std::string describeComparison(const SettingsComparison& c);
 
 }  // namespace lewitt

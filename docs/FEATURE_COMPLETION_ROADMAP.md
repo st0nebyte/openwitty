@@ -243,8 +243,8 @@ read would compete with it, and when the window closes the background service ta
 before/after snapshot is taken **inside the window**, through its own session and serialized transport, with
 the opt-in `openwitty --hw-check`: it records a baseline when the device connects, logs every GUI write with
 its outcome, and on request ("Compare with baseline", Settings → Device control) does one ordinary settings GET
-and reports which offsets differ from the baseline. It prints field names, offsets and the LED brightness value
-only — no device identifiers, no raw settings. It cannot write (audit rule; no session or transport access in
+and reports which offsets differ from the baseline. It prints field names, offsets and (since Phase 11A) the old and
+new values of the changed bytes only — no device identifiers, no full settings dump. It cannot write (audit rule; no session or transport access in
 `core/SettingsComparison`).
 
 1. **Revision and configuration.** Record `git rev-parse HEAD` of the build under test. Record, read-only:

@@ -51,18 +51,19 @@ TEST(SettingsComparison, LedChangeIsExpectedAnythingElseIsUnexpected) {
     EXPECT_EQ(c.ledBrightnessFirst, 60);
     EXPECT_EQ(c.ledBrightnessSecond, 40);
     EXPECT_EQ(describeComparison(c),
-              "LED brightness 60 -> 40; changed: 22 (speaker mute), 37 (LED brightness); unexpected: 22 (speaker mute)");
+              "LED brightness 60 -> 40; changed: 22 (speaker mute), 37 (LED brightness); unexpected: 22 (speaker mute); "
+              "values: 22 0->1 37 60->40");
 }
 
-TEST(SettingsComparison, ReportCarriesNoRawValuesOtherThanLedBrightness) {
+TEST(SettingsComparison, ReportNamesTheFieldsAndGivesOnlyTheChangedBytesValues) {
     const auto a = base();
     const auto b = withByte(withByte(a, settings_off::kSpeakerVolume, 0xAB), 100, 0xCD);   // unknown offset 100
     const std::string d = describeComparison(compareSettings(a, b, {}));
-    EXPECT_EQ(d.find("171"), std::string::npos);    // 0xAB
-    EXPECT_EQ(d.find("205"), std::string::npos);    // 0xCD
-    EXPECT_EQ(d.find("ab"), std::string::npos);
     EXPECT_NE(d.find("20 (speaker volume)"), std::string::npos);
     EXPECT_NE(d.find("100 (offset 100)"), std::string::npos);
+    const std::string values = d.substr(d.find("; values:"));
+    EXPECT_EQ(values, "; values: 20 0->171 100 0->205");                 // exactly the changed bytes, nothing else
+    EXPECT_EQ(describeComparison(compareSettings(a, a, {})).find("values"), std::string::npos);
 }
 
 TEST(WriteBookkeeping, VerifiedWriteWasSubmittedOnce) {
