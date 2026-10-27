@@ -414,6 +414,45 @@ other than the documented channel-3/4 STALLs; any sound; an unexpected client; a
 A successful SET_CUR does not prove the device's own mute changed — only the vendor compare (bytes 2/12) speaks to that,
 and only at its sampling time. An interrupt is attributed to FU 5 only by its entity byte.
 
+### Step 2R — result (2026-10-27 07:52–08:04, owner-approved, one run): device-initiated re-mute (case A)
+
+Conditions: physical safety confirmed by the owner immediately before; Steam quit (its two PipeWire clients gone; a
+Battle.net launcher under Proton was running but was never a PipeWire client); state as documented (source 65, profile
+`output:analog-stereo+input:analog-surround-40`, route muted, `save` false after login, saved volumes [0.99995, 0.99995,
+0.000251, 0.000251]); all OpenWitty permissions off; instrumentation live before the write (usbmon heartbeat, `alsactl
+monitor` attached to the card's control device, `pw-mon`, WirePlumber at info via its own client IDs, wall-clock and usbmon
+timestamps). No optional PipeWire daemon log change. Quiet period ~30 s before the write: no UAC2 request, no interrupt,
+no ALSA event. Device before: mic 27 dB muted, instrument 14 dB muted; compare `changed: none`.
+
+| Time (wall clock) | Source | Observation |
+|---|---|---|
+| 08:01:00.5344 | WirePlumber (ACP) | `Set hardware mute: 0` — the single `wpctl set-mute 65 0` (rc 0) |
+| 08:01:00.5345 | USB EP0 | SET_CUR `21 01 0101 0500`, data `00` (FU 5 mute ch 1 = unmute) → completion status **0** |
+| 08:01:00.5346 | USB EP0 | SET_CUR `21 01 0102 0500`, data `00` (FU 5 mute ch 2) → status **0** |
+| 08:01:00.5347, .5350 | ALSA | two `Mic Capture Switch` VALUE events (the two channel writes) |
+| 08:01:00.5355 | WirePlumber | `storing route(analog-input-mic) props` (unmuted) |
+| 08:01:00.8313 (+297 ms) | USB EP 0x83 | interrupt `00 01 01 01 00 05` = bAttribute CUR, control 1 (mute), **channel 1**, interface 0, **entity 5** |
+| 08:01:00.8313 | ALSA, USB EP0 | VALUE event; GET_CUR `a1 01 0101 0500` → device answers **`01`** (muted) |
+| 08:01:00.8315 | WirePlumber (ACP) | `mixer changed`, `New hardware muted: 1`, mute changed, route stored (muted) |
+| 08:01:01.3433 (+809 ms) | USB EP 0x83 | interrupt `00 01 02 01 00 05` = mute, **channel 2**, entity 5 |
+| 08:01:01.3433 | ALSA, USB EP0 | VALUE event; GET_CUR `a1 01 0102 0500` → **`01`** (muted); `mixer changed` |
+| 08:01:05 … 08:01:55 | PipeWire (sampled every 5 s) | route mute true, `save` true, volumes unchanged, node mute/softMute true, profile unchanged |
+
+Absent: any FU 5 volume request (incl. channels 3/4), any other UAC2 request, `Set hardware mute: 1`, any route re-application
+(`new active route`, `restoring route`, `setting route`), any new PipeWire client, kernel errors. After: compare `changed:
+none` (mic 27 dB muted, instrument 14 dB muted). The input re-muted itself, so no restoration command was sent.
+
+**Established:** the device accepted both FU 5 mute SET_CUR transfers (status 0), then *itself* reported an FU 5 mute change
+for channel 1 (+297 ms) and channel 2 (+809 ms) on its interrupt endpoint; the kernel dropped its cache, PipeWire's ACP
+re-read the switch from the device, the device answered "muted", and PipeWire/WirePlumber followed. Cases B (rejected
+transfer), C (route re-application) and D (another client) did not occur in this run. Steam was not needed for the behaviour.
+
+**Not established:** whether the device's own mute (settings bytes 2/12) or the physical inputs ever unmuted during the
+0.3 s / 0.8 s windows (the vendor compares bracket the event but did not sample it); why the firmware reverts FU 5 mute — a
+plausible reading is that FU 5 mute mirrors the device's own input mute while that is on, but the test does not show it;
+whether a desktop mute *does* mute the inputs when the device's own mute is off (not tested). The earlier step-2 run
+(2026-10-26) showed the same outward pattern, consistent with the same mechanism (not re-examined).
+
 ### Step 3 — one controlled FU 5 volume request (later, separate approval; revised in Phase 10E.1)
 
 **Per-channel mapping (offline evidence):** FU 5 sits on the 4-channel *Microphone* input terminal; the official channel

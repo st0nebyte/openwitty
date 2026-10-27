@@ -1692,3 +1692,13 @@ interrupt (EP 0x83), so the read might reach the device, and all hypotheses pred
 `save = true`, node softMute true, saved route muted. Source analysis: softMute follows any ACP mute-changed event; the
 `save = true` flag contradicts a WirePlumber route re-application; a device notification on the interrupt endpoint is the
 most plausible unverified cause. Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 follow-up).
+
+## 25. GAIN-1 step 2R — instrumented unmute, 2026-10-27 08:01: device-initiated re-mute
+
+One owner-approved run, physical safety confirmed, Steam quit, usbmon (bus 3, filtered to UAC2 CUR/RANGE and EP 0x83),
+`alsactl monitor`, `pw-mon`, WirePlumber info logging. One `wpctl set-mute 65 0`: both FU 5 mute SET_CUR transfers completed
+with status 0; 297 ms and 809 ms later the device sent UAC2 interrupts for entity 5, control mute, channels 1 and 2; the
+kernel's re-reads (GET_CUR) answered muted; PipeWire followed. No volume request, no route re-application, no other client.
+Device settings unchanged before/after (mic 27 dB, instrument 14 dB, both muted). No restoration command needed. Logging
+restored exactly, monitors stopped, usbmon unloaded; the service took the device back at 08:04:01. Raw traces kept locally
+(not committed). Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2R result).
