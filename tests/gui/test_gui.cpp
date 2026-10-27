@@ -2257,6 +2257,22 @@ TEST(Permissions11AGui, HardwareCheckExpectsTheBytesOfWrittenControlsOnly) {
     EXPECT_TRUE(report().endsWith("unexpected: 29 (headphone mute)")) << report().toStdString();
 }
 
+TEST(Permissions11AGui, TriggersStopAfterAnUnconfirmedWriteLikeSettingsWrites) {
+    app();
+    lewitt::UserConfig cfg = withPermission("measurements");
+    cfg.ledBrightnessControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    r.hw->dropWrites = true;                                   // the next settings SET is acknowledged but ignored
+    const int original = r.c->values().value("set.ledBrightness").toInt();
+    r.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.locked").toBool(); }));
+    r.c->trigger("autogain1");
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "refused"; }));
+    EXPECT_TRUE(r.mock.triggers().empty());
+}
+
 // ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------
 namespace {
 void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field is stored sign-inverted Q8.8

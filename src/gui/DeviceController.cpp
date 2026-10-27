@@ -884,6 +884,15 @@ bool DeviceWorker::refuseUnauthorized(const QString& key) {
 void DeviceWorker::trigger(const QString& name) {
     if (!session_) return;
     if (refuseUnauthorized(name)) return;
+    // Phase 11A: the same stops as for settings writes - after an unconfirmed real-device write, and in --hw-check mode
+    // before a baseline exists.
+    if (!session_->isSimulated() && (writeLocked_ || (hwCheck_ && !hwBaseline_))) {
+        const QString why = writeLocked_ ? writeLockReason_ : QString("the hardware check has no baseline yet; nothing was sent");
+        emit errorOccurred(why);
+        noteWriteOutcome(name, "refused", why);
+        publish();
+        return;
+    }
     static const QMap<QString, Trigger> map{
         {"autogain1", Trigger::AutoGainMicrophone}, {"autogain2", Trigger::AutoGainInstrument},
         {"autogainBoth", Trigger::AutoGainBoth}};
