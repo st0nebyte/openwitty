@@ -255,4 +255,8 @@ private:
     qint64 lastLoggedTraceSequence_{0};
     qint64 pendingTraceSequence_{0}, pendingWorkerNs_{0};
     qint64 activeTraceSequence_{0}, activeGuiNs_{0}, activeQmlNs_{0};
+    // Phase 11A: controls with a write request on its way (GUI thread only). Published as "inflight.<key>" from the
+    // moment QML asks until the worker reports an outcome for that key, so a control can stay disabled meanwhile.
+    QSet<QString> inflight_;
+    void markInflight(const QString& key, bool on);
 };

@@ -48,11 +48,13 @@ Item {
     GainKnob {
         objectName: "gainKnob" + root.index
         x: 90 - width / 2; y: 78
-        enabled: root.can(root.p + "gain")
+        enabled: root.can(root.p + "gain") && device.values["inflight." + root.p + "gain"] !== true
+        commitOnRelease: !device.simulated
         tip: "Adjust the input gain"
         value: root.v("gain", 0); from: 0; to: root.v("gainMax", root.mic ? 72 : 60)
         minLabel: "0 dB"; maxLabel: to + " dB"
         onMoved: (nv) => device.setValue(root.p + "gain", nv)
+        onCommitted: (nv) => device.setValue(root.p + "gain", nv)
     }
     // pending-edit marker: a small dot while a write is in flight / unconfirmed
     Rectangle { visible: root.pending; x: 128; y: 84; width: 6; height: 6; radius: 3; color: Theme.warn }

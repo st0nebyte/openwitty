@@ -28,10 +28,12 @@ Item {
                  meterR: device.meters.channel(root.group === "loop" ? 3 : root.group === "spk" ? 5 : 7)
                  sourceFreshness: device.meters.freshness
                  levelL: root.v("levelL", -60); levelR: root.v("levelR", -60) }
-    Fader { objectName: "fader_" + root.group; visible: root.hasFader; x: 55; y: 44; height: 187; enabled: root.can(root.group + ".volume")
+    Fader { objectName: "fader_" + root.group; visible: root.hasFader; x: 55; y: 44; height: 187; enabled: root.can(root.group + ".volume") && device.values["inflight." + root.group + ".volume"] !== true
+            commitOnRelease: !device.simulated
             tip: root.group === "spk" ? "Adjust the loudspeaker volume" : "Adjust the headphone volume"
             value: root.v("volume", 0)
-            onMoved: (nv) => device.setValue(root.group + ".volume", nv) }
+            onMoved: (nv) => device.setValue(root.group + ".volume", nv)
+            onCommitted: (nv) => device.setValue(root.group + ".volume", nv) }
     ToggleButton { objectName: "mute_" + root.group; x: 18; y: 240; width: 50; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
                    enabled: root.can(root.group + ".mute"); active: root.v("mute", false)
                    onClicked: device.setValue(root.group + ".mute", !active) }

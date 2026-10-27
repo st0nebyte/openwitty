@@ -610,13 +610,13 @@ TEST(Qml, RealReadOnlyMixUsesObservedPhysicalScale) {
     EXPECT_NEAR(fractionAt(-18.57), 0.8143, 0.0001);
     EXPECT_DOUBLE_EQ(fractionAt(0.0), 1.0);
     engine.rootContext()->setContextProperty("device", QVariantMap{
-        {"simulated", true}, {"values", QVariantMap{{"mon.mix", 0.5}}}});
+        {"simulated", true}, {"values", QVariantMap{{"mon.mix", -25.0}}}});
     std::unique_ptr<QObject> mockSection(comp.create());
     ASSERT_TRUE(mockSection);
     auto* mockKnob = mockSection->findChild<QObject*>("monitorMixKnob");
     ASSERT_TRUE(mockKnob);
-    EXPECT_DOUBLE_EQ(mockKnob->property("from").toDouble(), -1.0);
-    EXPECT_DOUBLE_EQ(mockKnob->property("to").toDouble(), 1.0);
+    EXPECT_DOUBLE_EQ(mockKnob->property("from").toDouble(), -100.0);   // one scale since Phase 11A
+    EXPECT_DOUBLE_EQ(mockKnob->property("to").toDouble(), 0.0);
     EXPECT_DOUBLE_EQ(mockKnob->property("frac").toDouble(), 0.75);
     EXPECT_EQ(mockKnob->property("maxLabel").toString(), "0:100");
 }
@@ -880,7 +880,7 @@ TEST(GuiAudit, EveryQmlWritableKeyIsAcceptedByTheBackend) {
         {"in1.preamp", 1}, {"in2.preamp", 2}, {"in1.denoise", true}, {"in2.denoise", true},
         {"in1.compress", true}, {"in2.compress", true}, {"in1.phantom", true},
         {"loop.mute", true}, {"spk.volume", -10.0}, {"spk.mute", true}, {"hp.volume", -12.0}, {"hp.mute", true},
-        {"mon.mix", 0.5}, {"mon.mic", true}, {"mon.inst", true}, {"out.dim", true}, {"out.mono", true},
+        {"mon.mix", -25.0}, {"mon.mic", true}, {"mon.inst", true}, {"out.dim", true}, {"out.mono", true},
         {"set.gainLock", true}, {"set.mixToSpeakers", true}, {"set.customButton", 8},
         {"set.highImpedance", true}, {"set.highVolume", true}, {"set.ledBrightness", 40},
         {"set.led.icons", "#112233"}, {"set.led.mute", "#112233"}, {"set.led.parameter", "#112233"},
@@ -1983,6 +1983,133 @@ TEST(HwCheck10B2, ReplacingTheBaselineNeedsTheExplicitTwoStepActionAndIsReported
     EXPECT_EQ(r.hw->writeCalls, 0);
 }
 
+// ---- Phase 11A: every continuous control sends at most one SET per deliberate change on the real device ------------
+#include <QWheelEvent>
+namespace {
+struct MainView {
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root;
+    QQuickWindow* w{nullptr};
+    explicit MainView(DeviceController& c) {
+        root = loadMain(c, engine);
+        w = qobject_cast<QQuickWindow*>(root.get());
+        EXPECT_TRUE(w);
+        if (!w) return;
+        w->resize(1008, 566);
+        w->show();
+        for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    }
+    QQuickItem* item(const char* name) { return root->findChild<QQuickItem*>(name); }
+    void mouse(QQuickItem* it, QEvent::Type type, double fx, double fy) {
+        const QPointF scene = it->mapToScene(QPointF(it->width() * fx, it->height() * fy));
+        QMouseEvent e(type, scene, scene, w->mapToGlobal(scene.toPoint()), Qt::LeftButton,
+                      type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+        QGuiApplication::sendEvent(w, &e);
+    }
+    void wheel(QQuickItem* it, int notches) {
+        const QPointF scene = it->mapToScene(QPointF(it->width() / 2, it->height() / 2));
+        QWheelEvent e(scene, w->mapToGlobal(scene.toPoint()), QPoint(), QPoint(0, notches > 0 ? 120 : -120),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QGuiApplication::sendEvent(w, &e);
+    }
+};
+lewitt::WritePolicy policyFor(std::initializer_list<std::size_t> offsets) {
+    lewitt::WritePolicy p;
+    p.allowHardwareWrites = true;
+    p.hardwareWriteOffsets = offsets;
+    return p;
+}
+void setDeviceSpeakerDb(RealLike& r, double db) {
+    auto m = lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value();
+    ASSERT_TRUE(m.setSpeakerVolumeDb(db).ok());
+    auto b = m.bytes();
+    r.mock.setSettingsBytes(lewitt::Bytes(b.begin(), b.end()));
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return std::fabs(r.c->values().value("spk.volume").toDouble() - db) < 0.01; }));
+}
+}  // namespace
+
+TEST(Controls11A, LongSpeakerFaderDragSendsOneSetAndStaysWithinTheIncreaseLimit) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(true, false, false));
+    setDeviceSpeakerDb(r, -40.0);
+    MainView v(*r.c);
+    QQuickItem* fader = v.item("fader_spk");
+    ASSERT_TRUE(fader && fader->isEnabled());
+    EXPECT_TRUE(fader->property("commitOnRelease").toBool());
+    const int w0 = r.hw->writeCalls;
+    v.mouse(fader, QEvent::MouseButtonPress, 0.5, 0.8);
+    for (int i = 0; i <= 300; ++i) v.mouse(fader, QEvent::MouseMove, 0.5, 0.8 - 0.75 * i / 300.0);   // drag to the top
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls, w0) << "dragging previews only";
+    v.mouse(fader, QEvent::MouseButtonRelease, 0.5, 0.05);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    for (int i = 0; i < 5; ++i) r.c->flush();
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    EXPECT_LE(r.c->values().value("spk.volume").toDouble(), -30.0 + 1e-6);   // +10 dB at most per SET
+    EXPECT_FALSE(r.c->values().value("inflight.spk.volume").toBool());
+}
+
+TEST(Controls11A, GainKnobDragAndWheelBurstEachSendOneSet) {
+    app();
+    RealLike r(policyFor({lewitt::settings_off::kGain[0], lewitt::settings_off::kGain[0] + 1}));
+    MainView v(*r.c);
+    QQuickItem* knob = v.item("gainKnob1");
+    ASSERT_TRUE(knob && knob->isEnabled());
+    const double start = r.c->values().value("in1.gain").toDouble();
+    int w0 = r.hw->writeCalls;
+    v.mouse(knob, QEvent::MouseButtonPress, 0.5, 0.5);
+    for (int i = 0; i <= 200; ++i) v.mouse(knob, QEvent::MouseMove, 0.5, 0.5 + 0.3 * i / 200.0);     // downwards = less gain
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls, w0);
+    v.mouse(knob, QEvent::MouseButtonRelease, 0.5, 0.8);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    const double afterDrag = r.c->values().value("in1.gain").toDouble();
+    EXPECT_LT(afterDrag, start);
+    // twelve wheel notches in a burst: one SET after the wheel rests
+    w0 = r.hw->writeCalls;
+    for (int i = 0; i < 12; ++i) v.wheel(knob, -1);
+    for (int i = 0; i < 3; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls, w0) << "nothing before the wheel rests";
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.hw->writeCalls > w0; }, 3000));
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    EXPECT_NEAR(r.c->values().value("in1.gain").toDouble(), std::max(0.0, afterDrag - 12.0), 0.01);
+}
+
+TEST(Controls11A, MixKnobWritesTheDeviceScaleOnce) {
+    app();
+    RealLike r(policyFor({lewitt::settings_off::kInputPlaybackMix, lewitt::settings_off::kInputPlaybackMix + 1}));
+    MainView v(*r.c);
+    QQuickItem* knob = v.item("monitorMixKnob");
+    ASSERT_TRUE(knob && knob->isEnabled());
+    const int w0 = r.hw->writeCalls;
+    v.mouse(knob, QEvent::MouseButtonPress, 0.5, 0.5);
+    for (int i = 0; i <= 100; ++i) v.mouse(knob, QEvent::MouseMove, 0.5, 0.5 + 0.3 * i / 100.0);
+    v.mouse(knob, QEvent::MouseButtonRelease, 0.5, 0.8);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    const double mix = lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value().inputPlaybackMix();
+    EXPECT_GE(mix, -100.0);
+    EXPECT_LT(mix, -50.0);                                    // moved left from the simulated default -50
+}
+
+TEST(Controls11A, SimulatedControlsStayLive) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.values().contains("spk.volume"); }));
+    MainView v(c);
+    QQuickItem* fader = v.item("fader_spk");
+    ASSERT_TRUE(fader);
+    EXPECT_FALSE(fader->property("commitOnRelease").toBool());
+    const double before = c.values().value("spk.volume").toDouble();
+    v.mouse(fader, QEvent::MouseButtonPress, 0.5, 0.5);
+    for (int i = 0; i <= 20; ++i) v.mouse(fader, QEvent::MouseMove, 0.5, 0.5 + 0.3 * i / 20.0);
+    ASSERT_TRUE(waitFor([&] { return std::fabs(c.values().value("spk.volume").toDouble() - before) > 1.0; }));   // before release
+    v.mouse(fader, QEvent::MouseButtonRelease, 0.5, 0.8);
+}
+
 // ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------
 namespace {
 void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field is stored sign-inverted Q8.8
@@ -2021,7 +2148,7 @@ TEST(MonitorMix, RealDeviceValuesAreShownOnTheObservedScaleAndClamped) {
     EXPECT_FALSE(r.can("mon.mix"));
 }
 
-TEST(MonitorMix, SimulatorKeepsItsScaleAndHasNoReadout) {
+TEST(MonitorMix, SimulatorUsesTheDeviceScaleAndHasNoReadout) {
     app();
     DeviceController c;
     QQmlEngine engine;
@@ -2032,16 +2159,17 @@ TEST(MonitorMix, SimulatorKeepsItsScaleAndHasNoReadout) {
     QObject* knob = root->findChild<QObject*>("monitorMixKnob");
     QObject* readout = root->findChild<QObject*>("monitorMixReadout");
     ASSERT_TRUE(knob && readout);
-    EXPECT_DOUBLE_EQ(knob->property("from").toDouble(), -1.0);
-    EXPECT_DOUBLE_EQ(knob->property("to").toDouble(), 1.0);
+    EXPECT_DOUBLE_EQ(knob->property("from").toDouble(), -100.0);       // device scale, also simulated (Phase 11A)
+    EXPECT_DOUBLE_EQ(knob->property("to").toDouble(), 0.0);
     EXPECT_FALSE(readout->property("visible").toBool());
-    c.setValue("mon.mix", 1.0);
+    c.setValue("mon.mix", 0.0);
     c.flush();
-    ASSERT_TRUE(waitFor([&] { return std::fabs(c.values().value("mon.mix").toDouble() - 1.0) < 0.01; }));
+    ASSERT_TRUE(waitFor([&] { return std::fabs(c.values().value("mon.mix").toDouble() - 0.0) < 0.01; }));
     QCoreApplication::processEvents();
     EXPECT_NEAR(knob->property("frac").toDouble(), 1.0, 1e-9);
     lewitt::SettingsMessage m = lewitt::SettingsMessage::fromBytes(lewitt::Bytes(0x80, 0)).value();
-    EXPECT_FALSE(m.setInputPlaybackMix(-100.0).ok());          // no real-device write scale is assumed
+    EXPECT_TRUE(m.setInputPlaybackMix(-100.0).ok());
+    EXPECT_FALSE(m.setInputPlaybackMix(1.0).ok());
 }
 
 // ---- Phase 10B: real sample rate and DSP availability ------------------------------------------------------------

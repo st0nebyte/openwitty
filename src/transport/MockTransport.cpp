@@ -12,6 +12,7 @@ MockTransport::MockTransport() : settings_(0x80, 0), status_(0x40, 0), version_(
     settings_[20] = 0; settings_[21] = 0;
     settings_[27] = 0; settings_[28] = 0;
     settings_[34] = 1;  // simulated default: microphone monitoring
+    settings_[35] = 0x00; settings_[36] = 0x32;   // monitoring mix -50 (device scale -100..0, stored sign-inverted)
     settings_[37] = 80;  // LED brightness
     settings_[41] = 0xFF;  // mute LED red (guide: factory red)
     settings_[53] = 0x0E;  // custom button: toggle brightness (as in the guide screenshot)

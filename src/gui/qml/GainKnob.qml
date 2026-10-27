@@ -17,10 +17,21 @@ Item {
     property real warnFrom: 0.9     // fraction of range where the orange arc starts (approximation)
     property real sweepDeg: 270
     property int labelInset: 13
+    // Phase 11A, real device: drag/wheel preview only; one committed(v) on release (or after the wheel rests),
+    // only if the value changed. Simulated device: moved(v) continuously as before.
+    property bool commitOnRelease: false
+    readonly property bool previewing: ma.pressed || wheelTimer.running
+    property real previewValue: 0
+    property real pressValue: 0
+    readonly property real shownValue: previewing && commitOnRelease ? previewValue : value
     signal moved(real v)
+    signal committed(real v)
     implicitWidth: 2 * (bodyRadius + 12); implicitHeight: implicitWidth
     opacity: enabled ? 1 : 0.5
-    readonly property real frac: (Math.max(from, Math.min(to, value)) - from) / (to - from)
+    readonly property real frac: (Math.max(from, Math.min(to, shownValue)) - from) / (to - from)
+    function emitValue(v) { previewValue = v; if (!commitOnRelease) moved(v); }
+    Timer { id: wheelTimer; interval: 400
+            onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.committed(root.previewValue) }
     readonly property real a0: (90 + (360 - sweepDeg) / 2) * Math.PI / 180
     readonly property real sweep: sweepDeg * Math.PI / 180
 
@@ -55,24 +66,35 @@ Item {
         Connections { target: root; function onFracChanged() { cv.requestPaint(); } }
     }
     Text { visible: root.showValue; anchors.centerIn: parent; color: "#ffffff"; font.pixelSize: 13; font.bold: true
-           text: Math.round(root.value) + root.unit }
+           text: Math.round(root.shownValue) + root.unit }
     Text { x: root.labelInset; y: parent.height - 14; color: Theme.textDim; font.pixelSize: 7; text: root.minLabel }
     Text { anchors.right: parent.right; anchors.rightMargin: root.labelInset; y: parent.height - 14
            color: Theme.textDim; font.pixelSize: 7; text: root.maxLabel }
     MouseArea {
+        id: ma
         anchors.fill: parent
         hoverEnabled: true
         onEntered: if (root.tip.length) Hint.show(root.tip)
         onExited: Hint.clear()
         property real startY; property real startV
-        onPressed: (m) => { startY = m.y; startV = root.value; }
+        onPressed: (m) => {
+            startY = m.y;
+            if (!wheelTimer.running) root.pressValue = root.value;
+            startV = wheelTimer.running ? root.previewValue : root.value;
+            root.previewValue = startV; wheelTimer.stop();
+        }
         onPositionChanged: (m) => {
             if (!pressed) return;
             var v = startV + (startY - m.y) * (root.to - root.from) / 140;
             v = Math.max(root.from, Math.min(root.to, v));
-            root.moved(Math.round(v / root.step) * root.step);
+            root.emitValue(Math.round(v / root.step) * root.step);
         }
-        onWheel: (w) => root.moved(Math.max(root.from, Math.min(root.to,
-                              root.value + (w.angleDelta.y > 0 ? root.step : -root.step))))
+        onReleased: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.committed(root.previewValue)
+        onWheel: (w) => {
+            if (!wheelTimer.running) { root.pressValue = root.value; root.previewValue = root.value; }
+            var base = root.commitOnRelease ? root.previewValue : root.value;
+            root.emitValue(Math.max(root.from, Math.min(root.to, base + (w.angleDelta.y > 0 ? root.step : -root.step))));
+            if (root.commitOnRelease) wheelTimer.restart();
+        }
     }
 }

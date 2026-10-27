@@ -91,6 +91,31 @@ An independent review of the HW-1 plan found three problems; all are fixed offli
   the full-struct write guard, read-back verification and no-retry are unchanged; the background service's mirror
   path is unaffected.
 
+## Phase 11 — fully working private version (owner mandate, 2026-10-27)
+
+Goal: every officially documented CONNECT 2 function that the protocol work supports, usable from OpenWitty on Linux, each
+validated on hardware before it is called working; safety rules unchanged (fail-closed permissions, one SET per deliberate
+change, read-back, no automatic retries, physical safety confirmed by the owner for anything audible).
+
+**11A — offline**
+1. *Done:* faders, gain knobs and the mix knob commit once per release on the real device (they wrote on every pointer
+   movement and wheel notch — the 10B.1 fix had covered only the LED slider); wheel bursts commit once after 400 ms; controls
+   are disabled while their write is in flight (`inflight.<key>`). Mix codec on the device scale −100…0 everywhere.
+2. Grouped, separately confirmed permissions for all supported settings: inputs (gain, mute, gain lock), processing (low-cut,
+   Clipguard, preamp, Comp, Denoise flag), monitoring (source, mix, Dim, Mono, loopback mute), LEDs and custom button;
+   own permissions with per-action confirmation for 48 V, high-volume speakers, high-impedance headphones; a measurement
+   permission for autogain triggers. Gain increases bounded per SET.
+3. `--hw-check` judges changed offsets against the written control's footprint (not only byte 37).
+4. Opt-in Linux configuration: named inputs (microphone, instrument, loopback L/R) and optional split sources on top of the
+   four-channel source — example files, never installed automatically.
+5. Stays display-only until researched: mix-to-speakers (byte 23 value set), mobile and macOS streaming modes; excluded by
+   decision: firmware update, factory reset.
+
+**11B — hardware validation with the owner present** (HW procedure template from HW-1): session 1 low-risk settings
+(LED colours, custom button, Dim/Mono with outputs off, input mutes, low-cut/Clipguard/preamp/Comp, gain lock, monitoring
+source, gain decreases); session 2 outputs (HW-2…HW-4); session 3 audio (LB-1/LB-2, then DAW-1…DAW-4); session 4 high-risk
+(48 V, high-volume, high-impedance, autogain).
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real

@@ -14,17 +14,18 @@ Item {
     GainKnob {
         objectName: "monitorMixKnob"
         x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
-        enabled: root.can("mon.mix"); showValue: false; warnFrom: 1
+        enabled: root.can("mon.mix") && device.values["inflight.mon.mix"] !== true; showValue: false; warnFrom: 1
+        commitOnRelease: !device.simulated
         tip: device.simulated ? "Hear your input signal and computer"
-             : "Monitoring mix as read from the CONNECT 2 (device scale -100...0, observed at the physical stops). "
-               + "How it maps to the 100:0...0:100 labels in between is not calibrated. Display only."
-        // Physical CONNECT 2 reads observed in Phase 7C span -100..0. Keep the established
-        // simulated -1..1 control unchanged; real hardware remains display-only.
-        from: device.simulated ? -1 : -100; to: device.simulated ? 1 : 0
-        step: device.simulated ? 0.05 : 1
+             : "Monitoring mix of the CONNECT 2 (device scale -100...0 between the physical stops). "
+               + "How the values in between map to the 100:0...0:100 balance is not calibrated."
+        // Device scale -100..0 (physical stops observed in Phase 7C), also used by the simulator since Phase 11A.
+        from: -100; to: 0
+        step: 1
         value: root.v("mon.mix", 0)
         minLabel: "100:0"; maxLabel: "0:100"
         onMoved: (nv) => device.setValue("mon.mix", nv)
+        onCommitted: (nv) => device.setValue("mon.mix", nv)
     }
     // Phase 10B: on the real device the raw value is shown, since the label mapping is not calibrated.
     Text { objectName: "monitorMixReadout"; visible: !device.simulated && device.values["mon.mix"] !== undefined

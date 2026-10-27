@@ -73,7 +73,11 @@ TEST(Monitor, InputPlaybackMixSignInverted) {
     SettingsMessage s;
     ASSERT_TRUE(s.setInputPlaybackMix(-1.0).ok());
     EXPECT_EQ(rdI16(s.bytes(), 35), 256);  // stored inverted
-    EXPECT_FALSE(s.setInputPlaybackMix(1.5).ok());
+    ASSERT_TRUE(s.setInputPlaybackMix(-100.0).ok());          // device scale (Phase 11A)
+    EXPECT_EQ(rdI16(s.bytes(), 35), 25600);
+    EXPECT_DOUBLE_EQ(s.inputPlaybackMix(), -100.0);
+    EXPECT_FALSE(s.setInputPlaybackMix(0.5).ok());            // above the right stop
+    EXPECT_FALSE(s.setInputPlaybackMix(-100.5).ok());
 }
 
 TEST(Leds, ColorBytesAreRgbAndBrightnessRange) {

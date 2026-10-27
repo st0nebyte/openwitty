@@ -919,7 +919,7 @@ void DeviceWorker::applyQueuedValue(const QString& key) {
 }
 
 void DeviceWorker::setValue(const QString& key, const QVariant& v) {
-    if (!session_) return;
+    if (!session_) { noteWriteOutcome(key, "refused", "no device session"); publish(); return; }
     if (refuseUnauthorized(key)) { noteWriteOutcome(key, "refused", "not authorized; nothing was sent"); publish(); return; }
     if (writeLocked_ && !session_->isSimulated()) {
         emit errorOccurred(writeLockReason_);
@@ -1222,6 +1222,16 @@ DeviceController::DeviceController(QObject* parent, bool diagnosticLegacyPolling
         for (auto it = v.begin(); it != v.end(); ++it) {
             if (it.value().isValid()) values_[it.key()] = it.value(); else values_.remove(it.key());
         }
+        // An outcome for a control (write.seq advanced) ends its in-flight state; so does losing the session.
+        if (v.contains("write.seq")) {
+            const QString key = values_.value("write.key").toString();
+            if (!key.isEmpty() && inflight_.remove(key)) values_.remove("inflight." + key);
+        }
+        if (v.contains("ui.state") && values_.value("ui.state").toString() != "real-writable"
+            && values_.value("ui.state").toString() != "simulated") {
+            for (const auto& k : std::as_const(inflight_)) values_.remove("inflight." + k);
+            inflight_.clear();
+        }
         meters_.setSourceState(values_.value("fresh.status").toString(), connection_ == "Connected");
         emit valuesChanged();
     });
@@ -1288,7 +1298,15 @@ void DeviceController::hwCheckCompare() { QMetaObject::invokeMethod(worker_, "hw
 void DeviceController::reconnectForTesting() {
     QMetaObject::invokeMethod(worker_, [this] { worker_->reconnectForTesting(); }, Qt::BlockingQueuedConnection);
 }
+void DeviceController::markInflight(const QString& key, bool on) {
+    if (on == inflight_.contains(key)) return;
+    if (on) { inflight_.insert(key); values_["inflight." + key] = true; }
+    else { inflight_.remove(key); values_.remove("inflight." + key); }
+    emit valuesChanged();
+}
+
 void DeviceController::setValue(const QString& k, const QVariant& v) {
+    markInflight(k, true);
     // Coalesced: while a request for this control waits (e.g. a write is in flight), newer values replace it.
     if (worker_->queueValue(k, v)) QMetaObject::invokeMethod(worker_, "applyQueuedValue", Q_ARG(QString, k));
 }

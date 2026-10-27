@@ -168,8 +168,10 @@ Status SettingsMessage::setLoopbackMute(bool v) { setBoolByte(raw_[settings_off:
 Status SettingsMessage::setDim(bool v) { setBoolByte(raw_[settings_off::kDim], v); return okStatus(); }
 Status SettingsMessage::setMono(bool v) { setBoolByte(raw_[settings_off::kMono], v); return okStatus(); }
 Status SettingsMessage::setInputPlaybackMix(double v) {
-    if (!std::isfinite(v) || v < -1.0 || v > 1.0)
-        return makeError(Errc::InvalidArgument, "mix must be within -1..+1 (range unverified)");
+    // Phase 11A: device scale, as read at the physical stops of a CONNECT 2 (-100 = left stop "100:0" ... 0 = right
+    // stop "0:100", Phase 7C). The simulator uses the same scale.
+    if (!std::isfinite(v) || v < -100.0 || v > 0.0)
+        return makeError(Errc::InvalidArgument, "mix must be within -100..0 (device scale)");
     wrI16(raw_, settings_off::kInputPlaybackMix, doubleToQ88(-v));
     return okStatus();
 }
