@@ -5,6 +5,7 @@
 #pragma once
 #include <QObject>
 #include <QStringList>
+#include <QVariantMap>
 #include <functional>
 
 #include "core/UserConfig.hpp"
@@ -20,6 +21,8 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(bool ledBrightnessControl READ ledBrightnessControl NOTIFY changed)
     // An older settings file had the combined output_control = true; it grants nothing now (reconfirm).
     Q_PROPERTY(bool legacyOutputControlPending READ legacyOutputControlPending NOTIFY changed)
+    // Phase 11A: every device-write permission by name (core/UserConfig devicePermissions()): name -> on/off.
+    Q_PROPERTY(QVariantMap permissions READ permissions NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
     Q_PROPERTY(QStringList configWarnings READ configWarnings NOTIFY changed)
     // not-installed | disabled | enabled | active | unknown
@@ -56,6 +59,10 @@ public:
     bool headphoneControl() const { return cfg_.headphoneControl; }
     bool ledBrightnessControl() const { return cfg_.ledBrightnessControl; }
     bool legacyOutputControlPending() const { return cfg_.legacyOutputControlPending; }
+    QVariantMap permissions() const;
+    // Turning a permission on needs `confirmed` (the GUI's dialog); turning it off never does. Unknown names: no-op.
+    Q_INVOKABLE void setPermission(const QString& name, bool on, bool confirmed);
+    Q_INVOKABLE QString permissionDescription(const QString& name) const;
     QString configPath() const { return path_; }
     QStringList configWarnings() const { return warnings_; }
     QString serviceState() const { return serviceState_; }

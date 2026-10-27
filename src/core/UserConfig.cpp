@@ -20,10 +20,14 @@ std::string trim(const std::string& s) {
 }
 bool& flag(UserConfig& c, const std::string& key) {
     if (key == "vendor_fallback") return c.vendorFallback;
-    if (key == "speaker_control") return c.speakerControl;
-    if (key == "headphone_control") return c.headphoneControl;
-    if (key == "led_brightness_control") return c.ledBrightnessControl;
+    for (const auto& p : devicePermissions())
+        if (key == p.key) return c.*(p.field);
     return c.legacyOutputControlPending;   // "output_control" (legacy)
+}
+bool isPermissionKey(const std::string& key) {
+    for (const auto& p : devicePermissions())
+        if (key == p.key) return true;
+    return false;
 }
 int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
     if (v == "true" || v == "yes" || v == "on" || v == "1") return 1;
@@ -31,6 +35,44 @@ int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
     return -1;
 }
 }  // namespace
+
+const std::vector<DevicePermission>& devicePermissions() {
+    static const std::vector<DevicePermission> t = {
+        {"speaker", "speaker_control", &UserConfig::speakerControl,
+         "OpenWitty's speaker fader and MUTE change the speaker volume and mute (settings bytes 20-22)."},
+        {"headphone", "headphone_control", &UserConfig::headphoneControl,
+         "OpenWitty's headphone fader and MUTE change the headphone volume and mute (bytes 27-29)."},
+        {"ledBrightness", "led_brightness_control", &UserConfig::ledBrightnessControl,
+         "OpenWitty's LED brightness slider changes the LED brightness (byte 37)."},
+        {"inputs", "input_control", &UserConfig::inputControl,
+         "microphone and instrument gain and mute, external gain lock (bytes 0-2, 10-12, 57)."},
+        {"processing", "processing_control", &UserConfig::processingControl,
+         "low-cut, Clipguard, preamp style, Denoise and Comp switches of both inputs (bytes 3-4, 6-7, 9, 13-16, 18)."},
+        {"monitoring", "monitoring_control", &UserConfig::monitoringControl,
+         "direct monitoring source, input/playback mix, Dim, Mono, loopback mute (bytes 19, 32-36)."},
+        {"appearance", "appearance_control", &UserConfig::appearanceControl,
+         "LED colours and the custom button function (bytes 38-53)."},
+        {"phantom", "phantom_control", &UserConfig::phantomControl,
+         "48 V phantom power for the microphone input (byte 5); each switch-on is confirmed again."},
+        {"outputModes", "output_modes_control", &UserConfig::outputModesControl,
+         "high-volume speaker mode and high-impedance headphone mode (bytes 24, 31); each switch-on is confirmed again."},
+        {"measurements", "measurement_control", &UserConfig::measurementControl,
+         "autogain measurements (the device then changes the input gain by itself)."},
+    };
+    return t;
+}
+
+const DevicePermission* findDevicePermission(const std::string& name) {
+    for (const auto& p : devicePermissions())
+        if (name == p.name) return &p;
+    return nullptr;
+}
+
+bool anyDeviceWritePermission(const UserConfig& c) {
+    for (const auto& p : devicePermissions())
+        if (c.*(p.field)) return true;
+    return false;
+}
 
 ParsedUserConfig parseUserConfig(const std::string& text) {
     // Fail-safe rules: an invalid value sets its key to the safe default (even after a valid one), and a
@@ -53,7 +95,7 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control" ||
-                           key == "speaker_control" || key == "headphone_control" || key == "led_brightness_control";
+                           isPermissionKey(key);
         if (!known) {
             r.warnings.push_back("unknown key '" + key + "' ignored");
             continue;
@@ -98,13 +140,9 @@ std::string serializeUserConfig(const UserConfig& c) {
       << "desktop_volume_sync = " << (c.desktopVolumeSync == DesktopVolumeSync::Mirror ? "mirror" : "off") << "\n"
       << "# true writes the device: apply a desktop volume change the device did not follow (vendor protocol).\n"
       << "vendor_fallback = " << (c.vendorFallback ? "true" : "false") << "\n"
-      << "# Each of the following writes the device, is confirmed on its own and changes only the bytes named.\n"
-      << "# true: OpenWitty's speaker fader and MUTE change the speaker volume and mute (settings bytes 20-22).\n"
-      << "speaker_control = " << (c.speakerControl ? "true" : "false") << "\n"
-      << "# true: OpenWitty's headphone fader and MUTE change the headphone volume and mute (bytes 27-29).\n"
-      << "headphone_control = " << (c.headphoneControl ? "true" : "false") << "\n"
-      << "# true: OpenWitty's LED brightness slider changes the LED brightness (byte 37).\n"
-      << "led_brightness_control = " << (c.ledBrightnessControl ? "true" : "false") << "\n";
+      << "# Each of the following writes the device, is confirmed on its own and changes only the bytes named.\n";
+    for (const auto& p : devicePermissions())
+        o << "# true: " << p.description << "\n" << p.key << " = " << (c.*(p.field) ? "true" : "false") << "\n";
     if (c.legacyOutputControlPending)
         o << "# Legacy setting from an older OpenWitty. It grants NOTHING; it is kept only so that Settings can ask\n"
           << "# you to reconfirm the speaker/headphone control above. Removed when you do so or reset.\n"

@@ -2110,6 +2110,153 @@ TEST(Controls11A, SimulatedControlsStayLive) {
     v.mouse(fader, QEvent::MouseButtonRelease, 0.5, 0.8);
 }
 
+// ---- Phase 11A: grouped permissions on (fake) real hardware ---------------------------------------------------------
+namespace {
+lewitt::UserConfig withPermission(const char* name) {
+    lewitt::UserConfig c;
+    c.*(lewitt::findDevicePermission(name)->field) = true;
+    return c;
+}
+// Repeater delegates have no QObject parent: search the visual item tree.
+QQuickItem* findItem(QQuickItem* from, const QString& name) {
+    if (!from) return nullptr;
+    if (from->objectName() == name) return from;
+    for (QQuickItem* c : from->childItems())
+        if (QQuickItem* f = findItem(c, name)) return f;
+    return nullptr;
+}
+std::vector<std::size_t> footprintOf(const char* key) {
+    auto v = lewitt::controlFootprint(key)->settingsOffsets;
+    std::sort(v.begin(), v.end());
+    return v;
+}
+}  // namespace
+
+TEST(Permissions11AGui, EachGroupWritesOnlyItsControlsBytes) {
+    app();
+    struct Case { const char* perm; const char* key; QVariant value; };
+    const Case cases[] = {
+        {"inputs", "in1.mute", true}, {"inputs", "set.gainLock", true},
+        {"processing", "in2.preamp", 2}, {"processing", "in1.highPass", true},
+        {"monitoring", "out.dim", true}, {"monitoring", "mon.mix", -80.0},
+        {"appearance", "set.led.icons", QString("#112233")}, {"appearance", "set.customButton", 8},
+        {"phantom", "in1.phantom", true}, {"outputModes", "set.highImpedance", true},
+    };
+    for (const auto& c : cases) {
+        RealLike r(lewitt::guiWritePolicy(withPermission(c.perm)));
+        ASSERT_TRUE(r.can(c.key)) << c.key;
+        const lewitt::Bytes before = deviceBytes(r);
+        r.c->setValue(c.key, c.value);
+        r.c->flush();
+        ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; })) << c.key;
+        const auto changed = changedOffsets(before, deviceBytes(r));
+        EXPECT_FALSE(changed.empty()) << c.key;
+        for (auto off : changed) {
+            const auto fp = footprintOf(c.key);
+            EXPECT_TRUE(std::find(fp.begin(), fp.end(), off) != fp.end()) << c.key << " changed byte " << off;
+        }
+        EXPECT_EQ(r.hw->writeCalls, 1) << c.key;
+        // a control of another group stays refused
+        r.c->setValue(std::string(c.perm) == "inputs" ? "out.mono" : "in2.mute", true);
+        r.c->flush();
+        ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "refused"; })) << c.key;
+        EXPECT_EQ(r.hw->writeCalls, 1) << c.key;
+    }
+}
+
+TEST(Permissions11AGui, RealDeviceGainRisesAtMostSixDbPerSet) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(withPermission("inputs")));
+    const double start = r.c->values().value("in1.gain").toDouble();
+    r.c->setValue("in1.gain", start + 30.0);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    EXPECT_NEAR(r.c->values().value("in1.gain").toDouble(), start + 6.0, 0.01);
+}
+
+TEST(Permissions11AGui, AutogainSendsOnlyMeasurementTriggersAndNoSettingsWrite) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(withPermission("measurements")));
+    ASSERT_TRUE(r.can("autogain1"));
+    EXPECT_FALSE(r.can("in1.gain"));
+    r.c->trigger("autogain1");
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.mock.triggers().size() >= 2; }));
+    const auto tr = r.mock.triggers();
+    EXPECT_EQ(tr[0], static_cast<std::uint16_t>(lewitt::Trigger::BeginMeasurementSession));
+    EXPECT_EQ(tr[1], static_cast<std::uint16_t>(lewitt::Trigger::AutoGainMicrophone));
+    EXPECT_EQ(lewitt::testing::settingsWrites(r.mock), 0);
+    RealLike none(lewitt::guiWritePolicy(lewitt::UserConfig{}));
+    none.c->trigger("autogain1");
+    none.c->flush();
+    EXPECT_TRUE(none.mock.triggers().empty());
+}
+
+TEST(Permissions11AGui, NewSwitchesNeedTheirConfirmationAndGrantOnlyThemselves) {
+    app();
+    writeConfigText("[openwitty]\n");
+    Calls calls;
+    auto s = makeSettings(calls);
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("device", &c);
+    engine.rootContext()->setContextProperty("integration", s.get());
+    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+    std::unique_ptr<QObject> root(comp.create());
+    ASSERT_TRUE(root);
+    root->setProperty("showSettings", true);
+    root->findChild<QObject*>("settingsView")->setProperty("open", "device");
+    QCoreApplication::processEvents();
+    QObject* dialog = root->findChild<QObject*>("confirmWriteDialog");
+    QObject* cancel = root->findChild<QObject*>("confirmWriteCancel");
+    QObject* enable = root->findChild<QObject*>("confirmWriteEnable");
+    ASSERT_TRUE(dialog && cancel && enable);
+    for (const char* n : {"inputs", "processing", "monitoring", "appearance", "phantom", "outputModes", "measurements"}) {
+        auto* win = qobject_cast<QQuickWindow*>(root.get());
+        ASSERT_TRUE(win);
+        QObject* sw = findItem(win->contentItem(), QString("permSwitch_") + n);
+        ASSERT_TRUE(sw) << n;
+        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
+        EXPECT_TRUE(dialog->property("visible").toBool()) << n;
+        EXPECT_EQ(dialog->property("field").toString(), n);
+        QMetaObject::invokeMethod(cancel, "clicked");
+        EXPECT_FALSE(s->permissions().value(n).toBool()) << n;
+        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
+        QMetaObject::invokeMethod(enable, "clicked");
+        EXPECT_TRUE(s->permissions().value(n).toBool()) << n;
+        int on = 0;
+        for (const auto& v : s->permissions()) on += v.toBool();
+        EXPECT_EQ(on, 1) << n;
+        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, false));                 // off without a dialog
+        EXPECT_FALSE(s->permissions().value(n).toBool()) << n;
+        EXPECT_FALSE(dialog->property("visible").toBool()) << n;
+    }
+    s->setPermission("inputs", true, false);                                         // API refuses unconfirmed
+    EXPECT_FALSE(s->permissions().value("inputs").toBool());
+    s->setPermission("everything", true, true);                                       // unknown: no-op
+    EXPECT_FALSE(lewitt::anyDeviceWritePermission(onDisk()));
+}
+
+TEST(Permissions11AGui, HardwareCheckExpectsTheBytesOfWrittenControlsOnly) {
+    app();
+    BlockRealUsb isolate;
+    isolate.lease.reset();
+    RealLike r(lewitt::guiWritePolicy(withPermission("inputs")), /*hwCheck=*/true);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("hwcheck.state").toString() == "recorded"; }));
+    r.c->setValue("in1.mute", true);
+    r.c->flush();
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    lewitt::Bytes b = r.mock.settingsBytes();                 // and a change on the device itself
+    b[lewitt::settings_off::kHeadphoneMute] ^= 1;
+    r.mock.setSettingsBytes(b);
+    r.c->hwCheckCompare();
+    r.c->flush();
+    auto report = [&] { return r.c->values().value("hwcheck.report").toString(); };
+    ASSERT_TRUE(waitFor([&] { return report().startsWith("now vs baseline"); }));
+    EXPECT_NE(report().indexOf("changed: 2 (mic mute), 29 (headphone mute)"), -1) << report().toStdString();
+    EXPECT_TRUE(report().endsWith("unexpected: 29 (headphone mute)")) << report().toStdString();
+}
+
 // ---- Phase 10B: monitoring-mix display ---------------------------------------------------------------------------
 namespace {
 void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field is stored sign-inverted Q8.8

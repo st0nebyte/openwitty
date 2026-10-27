@@ -106,6 +106,9 @@ private:
     std::optional<lewitt::SettingsMessage> hwBaseline_;
     QString hwReport_;
     int hwBaselineReplacements_{0};
+    // Phase 11A: bytes of every control written (or possibly written) since the baseline - the expected differences.
+    std::vector<std::size_t> hwExpected_;
+    void hwNoteWritten(const QString& key);
     QString hwLastWait_;
     void hwCheckLog(const QString& line);
     // Phase 10B.2: called with the result of a read that just happened (connect, reconnect, settings refresh).

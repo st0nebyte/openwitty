@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/UserConfig.hpp"
+
 namespace lewitt {
 
 OutputLevel outputLevel(const SettingsMessage& s, Output o) {
@@ -29,10 +31,53 @@ WritePolicy outputWritePolicy(bool speaker, bool headphone) {
 }
 
 WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness) {
-    WritePolicy p = outputWritePolicy(speaker, headphone);
-    if (ledBrightness) {
+    UserConfig c;
+    c.speakerControl = speaker;
+    c.headphoneControl = headphone;
+    c.ledBrightnessControl = ledBrightness;
+    return guiWritePolicy(c);
+}
+
+std::vector<std::size_t> permissionOffsets(const std::string& name) {
+    using namespace settings_off;
+    if (name == "speaker") return outputWriteOffsets(Output::Speaker);
+    if (name == "headphone") return outputWriteOffsets(Output::Headphone);
+    if (name == "ledBrightness") return {kLedBrightness};
+    if (name == "inputs") return {kGain[0], kGain[0] + 1, kMute[0], kGain[1], kGain[1] + 1, kMute[1], kExternalGainLock};
+    if (name == "processing") {
+        std::vector<std::size_t> v;
+        for (int i = 0; i < 2; ++i)
+            for (std::size_t o : {kHighPass[i], kClipguard[i], kPreamp[i], kDenoise[i], kCompress[i]}) v.push_back(o);
+        return v;
+    }
+    if (name == "monitoring") return {kLoopbackMute, kDim, kMono, kMonitorSource, kInputPlaybackMix, kInputPlaybackMix + 1};
+    if (name == "appearance") {
+        std::vector<std::size_t> v;
+        for (std::size_t o = kLedColorIcons; o < kLedColorIcons + 15; ++o) v.push_back(o);
+        v.push_back(kCustomButton);
+        return v;
+    }
+    if (name == "phantom") return {kPhantom1};
+    if (name == "outputModes") return {kHighVolumeSpeaker, kHighImpedanceHeadphone};
+    return {};
+}
+
+std::vector<Trigger> permissionTriggers(const std::string& name) {
+    if (name == "measurements")
+        return {Trigger::BeginMeasurementSession, Trigger::AutoGainMicrophone, Trigger::AutoGainInstrument,
+                Trigger::AutoGainBoth, Trigger::EndMeasurementSession};
+    return {};
+}
+
+WritePolicy guiWritePolicy(const UserConfig& c) {
+    WritePolicy p;
+    p.allowRoutingChanges = false;
+    p.allowPersistentChanges = false;
+    for (const auto& perm : devicePermissions()) {
+        if (!(c.*(perm.field))) continue;
         p.allowHardwareWrites = true;
-        p.hardwareWriteOffsets.push_back(settings_off::kLedBrightness);
+        for (auto o : permissionOffsets(perm.name)) p.hardwareWriteOffsets.push_back(o);
+        for (auto t : permissionTriggers(perm.name)) p.hardwareTriggers.push_back(t);
     }
     return p;
 }

@@ -101,11 +101,11 @@ change, read-back, no automatic retries, physical safety confirmed by the owner 
 1. *Done:* faders, gain knobs and the mix knob commit once per release on the real device (they wrote on every pointer
    movement and wheel notch — the 10B.1 fix had covered only the LED slider); wheel bursts commit once after 400 ms; controls
    are disabled while their write is in flight (`inflight.<key>`). Mix codec on the device scale −100…0 everywhere.
-2. Grouped, separately confirmed permissions for all supported settings: inputs (gain, mute, gain lock), processing (low-cut,
+2. *Done:* grouped, separately confirmed permissions for all supported settings: inputs (gain, mute, gain lock), processing (low-cut,
    Clipguard, preamp, Comp, Denoise flag), monitoring (source, mix, Dim, Mono, loopback mute), LEDs and custom button;
    own permissions with per-action confirmation for 48 V, high-volume speakers, high-impedance headphones; a measurement
    permission for autogain triggers. Gain increases bounded per SET.
-3. `--hw-check` judges changed offsets against the written control's footprint (not only byte 37).
+3. *Done:* `--hw-check` judges changed offsets against the footprints of the controls written since the baseline.
 4. Opt-in Linux configuration: named inputs (microphone, instrument, loopback L/R) and optional split sources on top of the
    four-channel source — example files, never installed automatically.
 5. Stays display-only until researched: mix-to-speakers (byte 23 value set), mobile and macOS streaming modes; excluded by

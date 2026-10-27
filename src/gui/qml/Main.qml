@@ -20,7 +20,9 @@ Window {
     // Phase 10A: plain-language list of what the session may change on the real device (from can.<key>).
     function authorizedSummary() {
         var groups = [["speaker volume", "spk.volume"], ["speaker mute", "spk.mute"], ["headphone volume", "hp.volume"],
-                      ["headphone mute", "hp.mute"], ["LED brightness", "set.ledBrightness"]];
+                      ["headphone mute", "hp.mute"], ["LED brightness", "set.ledBrightness"], ["input gain/mute", "in1.gain"],
+                      ["input processing", "in1.highPass"], ["monitoring", "mon.mix"], ["LED colours/button", "set.customButton"],
+                      ["48 V", "in1.phantom"], ["output modes", "set.highVolume"], ["autogain", "autogain1"]];
         var out = [];
         for (var i = 0; i < groups.length; ++i) if (device.values["can." + groups[i][1]] === true) out.push(groups[i][0]);
         var other = 0;

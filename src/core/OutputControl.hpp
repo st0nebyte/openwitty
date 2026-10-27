@@ -30,6 +30,16 @@ WritePolicy outputWritePolicy(bool speaker, bool headphone);
 // speaker volume+mute (bytes 20-22), headphone volume+mute (27-29), LED brightness (37). No triggers, no routing
 // or persistent changes. All false = the read-only default (no hardware writes at all).
 WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness);
+// Phase 11A: the same for every permission group in UserConfig (devicePermissions()): exactly the union of the enabled
+// groups' bytes; triggers only with the measurement permission (measurement session + autogain words). Never routing,
+// never persistent changes, never mix-to-speakers (byte 23, value set unknown) or the streaming-mode bytes.
+WritePolicy guiWritePolicy(const struct UserConfig& c);
+// The bytes and triggers of one permission (empty for an unknown name).
+std::vector<std::size_t> permissionOffsets(const std::string& name);
+std::vector<Trigger> permissionTriggers(const std::string& name);
+
+// Default per-step limit for input gain increases on real hardware (Phase 11A).
+inline constexpr double kMaxGainIncreaseDb = 6.0;
 
 // Clamp to the device range and round to the Q8.8 grid the device stores. Non-finite -> nullopt.
 std::optional<double> normalizeOutputDb(double db);

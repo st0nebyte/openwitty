@@ -50,13 +50,15 @@ What works on real hardware (one device, one system):
 
 Optional and limited:
 
-- **Device control** (Settings → Device control, three separate switches, each off by default and each
-  confirmed on its own): *speaker control* (speaker volume and mute), *headphone control* (headphone volume
-  and mute) and *LED brightness*. Each switch lets OpenWitty's own control write only its own bytes; volume at
-  most 10 dB louder per step; every write is read back and never retried. The underlying vendor write path
-  is verified on hardware (via the CLI); the LED brightness switch passed its first GUI hardware test (HW-1);
-  speaker and headphone via the GUI have not been exercised on hardware yet. All other
-  controls on the real device stay display-only.
+- **Device control** (Settings → Device control): separate switches, each off by default and each confirmed
+  on its own — speaker volume/mute, headphone volume/mute, LED brightness, input gain/mute (with gain lock),
+  input processing (low-cut, Clipguard, preamp, Denoise, Comp), monitoring (source, mix, Dim, Mono, loopback
+  mute), LED colours and custom button, 48 V, output modes (high-volume speakers, high-impedance headphones;
+  each switch-on confirmed again) and autogain measurements. Each switch lets OpenWitty write only its own
+  bytes; one write per deliberate change (dragging previews, the release sends); volume at most 10 dB and gain
+  at most 6 dB higher per write; every write is read back and never retried. Hardware status: LED brightness
+  passed its GUI hardware test (HW-1); the other groups are tested offline and await their hardware sessions.
+  Mix-to-speakers and the streaming modes stay display-only (their device values are not known yet).
 - **CLI writes** (`openwitty-cli write …`, explicit opt-in variables): LED brightness and speaker
   volume/mute were verified on hardware; instrument mute is prepared but never executed.
 - **Vendor fallback** for the desktop volume (off by default): only for a device state in which

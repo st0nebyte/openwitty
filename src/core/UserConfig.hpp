@@ -26,12 +26,31 @@ struct UserConfig {
     bool speakerControl{false};        // speaker volume + mute: settings bytes 20-22
     bool headphoneControl{false};      // headphone volume + mute: settings bytes 27-29
     bool ledBrightnessControl{false};  // LED brightness: settings byte 37
+    // Phase 11A: further groups, each off by default and confirmed on its own (writes the device):
+    bool inputControl{false};          // mic/instrument gain + mute, external gain lock: bytes 0-2, 10-12, 57
+    bool processingControl{false};     // low-cut, Clipguard, preamp, Denoise flag, Comp: bytes 3,4,6,7,9,13-16,18
+    bool monitoringControl{false};     // monitoring source, input/playback mix, Dim, Mono, loopback mute: 19,32-36
+    bool appearanceControl{false};     // LED colours, custom button: bytes 38-52, 53
+    bool phantomControl{false};        // 48 V phantom power (each switch-on is confirmed again): byte 5
+    bool outputModesControl{false};    // high-volume speakers, high-impedance headphones (confirmed per use): 24, 31
+    bool measurementControl{false};    // autogain measurements: measurement-session and autogain triggers
     // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
     // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.
     bool legacyOutputControlPending{false};
 
     bool operator==(const UserConfig&) const = default;
 };
+
+// The device-write permissions in one table: name (GUI/API), configuration key, field, one-line description.
+struct DevicePermission {
+    const char* name;
+    const char* key;
+    bool UserConfig::*field;
+    const char* description;
+};
+const std::vector<DevicePermission>& devicePermissions();
+const DevicePermission* findDevicePermission(const std::string& name);
+bool anyDeviceWritePermission(const UserConfig& c);
 
 struct ParsedUserConfig {
     UserConfig config;

@@ -56,7 +56,7 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
 | 18 | Speaker level unchanged across logout/login | **FAIL (limitation)** — the login screen's own audio service sets its default level; see "Speaker level at the login screen (Phase 9C)" |
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
-| 20 | GUI device control (speaker, headphone, LED brightness) on hardware | **PARTLY DONE** — LED brightness PASS (HW-1, 2026-10-26, `docs/HARDWARE_TEST_RESULTS.md` §19); speaker/headphone via the GUI not yet (HW-2…HW-4) |
+| 20 | GUI device control on hardware (speaker, headphone, LED brightness; since Phase 11A also inputs, processing, monitoring, LED colours/button, 48 V, output modes, autogain) | **PARTLY DONE** — LED brightness PASS (HW-1, 2026-10-26, `docs/HARDWARE_TEST_RESULTS.md` §19); all other groups offline-tested only (Phase 11B sessions) |
 | 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
 | 20c | First-GUI-write safety (Phase 10B.1): one SET per deliberate change, stable snapshot before a real SET, stop after an unconfirmed write, in-window read-only `--hw-check` | PASS (offline tests) and used in HW-1 (PASS, 2026-10-26) |
 | 20d | Four-channel capture identity and hardware loopback with signal (LB-1/LB-2) | **NOT DONE** — channels present (read-only observation); PipeWire labels them as 4.0 surround; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |

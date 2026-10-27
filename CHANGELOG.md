@@ -24,11 +24,11 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Setup check for the desktop hardware volume and the kernel compatibility quirk (`openwitty-volumed --check`,
   Settings page), with an example module option for Linux 7.3 (`examples/openwitty-connect2.conf`, never
   installed automatically).
-- Settings → Device control: three separate, separately confirmed permissions — speaker control, headphone
-  control, LED brightness — each scoped to its own bytes (volume ≤ 10 dB louder per step; every write read back,
-  never retried). All other real-device controls are display-only and say so per control. The vendor write path
-  is verified on hardware; the LED brightness permission passed its first GUI hardware test (HW-1); speaker and
-  headphone via the GUI have not been exercised on hardware.
+- Settings → Device control: separate, separately confirmed permissions for every supported setting group —
+  speaker, headphone, LED brightness, input gain/mute, input processing, monitoring, LED colours and custom button,
+  48 V, output modes, autogain measurements — each scoped to its own bytes (volume ≤ 10 dB, gain ≤ 6 dB louder per
+  write; every write read back, never retried). The LED brightness permission passed its GUI hardware test (HW-1);
+  the other groups await their hardware sessions. Mix-to-speakers and the streaming modes stay display-only.
 - Device sample rate shown from the kernel's stream state (read-only; "unknown" while no stream is open); the
   monitoring-mix knob also shows the raw device value, because the device scale is not calibrated.
 - GUI preferences (`gui.conf`): the first-run introduction is shown once, the tooltip setting is remembered.
@@ -62,6 +62,9 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - Real-device GUI writes now require two identical settings reads right before the write and stop all further
   writes in that session after a write that was not confirmed; unconfirmed edits are no longer kept.
 - Reopening the device after a permission change could let the background service take the device in between.
+- Volume faders, gain knobs and the mix knob wrote on every pointer movement or wheel notch on the real device; they
+  now send one write per release (wheel: after it rests) and stay disabled until the result is known.
+- The monitoring mix used a −1…+1 scale in the simulator and the setter; it now uses the device scale −100…0.
 
 ### Known limitations
 

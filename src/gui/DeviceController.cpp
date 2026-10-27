@@ -263,11 +263,9 @@ void DeviceWorker::connectUsb() {
     const UserConfig userConfig = loadUserConfig(userConfigPath()).config;
     // Phase 10B: only the individually confirmed fields are writable (union of speaker 20-22, headphone 27-29,
     // LED brightness 37); nothing confirmed = the read-only transport options.
-    const bool anyWritePermission =
-        userConfig.speakerControl || userConfig.headphoneControl || userConfig.ledBrightnessControl;
+    const bool anyWritePermission = anyDeviceWritePermission(userConfig);
     if (anyWritePermission)
-        adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()),
-                     guiWritePolicy(userConfig.speakerControl, userConfig.headphoneControl, userConfig.ledBrightnessControl));
+        adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()), guiWritePolicy(userConfig));
     else
         adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
     // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
@@ -379,9 +377,10 @@ void DeviceWorker::endMeasurementSessionBestEffort() {
 void DeviceWorker::applyUserConfig() {
     const UserConfig c = loadUserConfig(userConfigPath()).config;
     if (!usbMode_ || !session_ || session_->isSimulated()) return;
-    const WritePolicy wanted = guiWritePolicy(c.speakerControl, c.headphoneControl, c.ledBrightnessControl);
+    const WritePolicy wanted = guiWritePolicy(c);
     if (wanted.allowHardwareWrites != session_->policy().allowHardwareWrites ||
-        wanted.hardwareWriteOffsets != session_->policy().hardwareWriteOffsets) {
+        wanted.hardwareWriteOffsets != session_->policy().hardwareWriteOffsets ||
+        wanted.hardwareTriggers != session_->policy().hardwareTriggers) {
         connectUsb();
         return;
     }
@@ -944,13 +943,17 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
         if (simulated || !std::isfinite(requested)) return requested;
         return limitIncrease(current, requested, kMaxOutputIncreaseDb);
     };
+    auto boundedGain = [simulated](double current, double requested) {   // Phase 11A: <= +6 dB per SET
+        if (simulated || !std::isfinite(requested)) return requested;
+        return limitIncrease(current, requested, kMaxGainIncreaseDb);
+    };
     auto parts = key.split('.');
     if (parts.size() < 2) return;
     int in = parts[0] == "in1" ? 0 : parts[0] == "in2" ? 1 : -1;
     const QString g = parts[0], f = parts[1];
     auto fn = [&](SettingsMessage& s) -> Status {
         if (in >= 0) {
-            if (f == "gain") return s.setGainDb(in, v.toDouble());
+            if (f == "gain") return s.setGainDb(in, boundedGain(s.gainDb(in), v.toDouble()));
             if (f == "mute") return s.setMute(in, v.toBool());
             if (f == "highPass") return s.setHighPass(in, v.toBool());
             if (f == "clipguard") return s.setClipguard(in, v.toBool());
@@ -1065,6 +1068,7 @@ void DeviceWorker::finishRealWrite(const QString& key, const WriteResult& r) {
             noteWriteOutcome(key, "not-sent", why);
         }
     }
+    if (hwCheck_ && r.submitted) hwNoteWritten(key);
     if (hwCheck_) {
         QString line = QString("write %1: %2; SET sent: %3; verification reads: %4")
                            .arg(key, writeOutcome_, r.submitted ? "yes" : "no").arg(r.pollAttempts);
@@ -1077,8 +1081,14 @@ void DeviceWorker::finishRealWrite(const QString& key, const WriteResult& r) {
         hwCheckLog(line);
         if (hwBaseline_ && session_->settings())
             hwCheckLog("since baseline: " + QString::fromStdString(describeComparison(compareSettings(
-                           *hwBaseline_, *session_->settings(), {settings_off::kLedBrightness}))));
+                           *hwBaseline_, *session_->settings(), hwExpected_))));
     }
+}
+
+void DeviceWorker::hwNoteWritten(const QString& key) {
+    if (const auto* f = controlFootprint(key.toStdString()))
+        for (auto off : f->settingsOffsets)
+            if (std::find(hwExpected_.begin(), hwExpected_.end(), off) == hwExpected_.end()) hwExpected_.push_back(off);
 }
 
 void DeviceWorker::hwCheckLog(const QString& line) {
@@ -1149,6 +1159,7 @@ void DeviceWorker::hwCheckReplaceBaseline() {
     }
     freshness_.markSettings();
     hwBaseline_ = *session_->settings();
+    hwExpected_.clear();                    // a new reference: nothing written since
     ++hwBaselineReplacements_;
     hwCheckLog(QString("baseline REPLACED by owner action (#%1): LED brightness %2 -> %3; earlier comparisons refer to "
                        "the previous reference")
@@ -1167,7 +1178,7 @@ void DeviceWorker::hwCheckCompare() {
         return;
     }
     hwCheckLog("now vs baseline: " + QString::fromStdString(describeComparison(compareSettings(
-                   *hwBaseline_, *session_->settings(), {settings_off::kLedBrightness}))));
+                   *hwBaseline_, *session_->settings(), hwExpected_))));
     publish();
 }
 

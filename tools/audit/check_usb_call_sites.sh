@@ -71,27 +71,35 @@ if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src
 if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -vE 'readOnlyHardwareOptions\(\)|outputControlHardwareOptions\(\)' >/dev/null; then echo "FAIL GUI constructs a UsbTransport with unreviewed options"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() or the gated output options only"; fi
 n_out=$(grep -c 'outputControlHardwareOptions()' src/gui/DeviceController.cpp)
 if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'if (anyWritePermission)' \
-   || ! grep -B6 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'userConfig.speakerControl || userConfig.headphoneControl || userConfig.ledBrightnessControl' \
-   || ! grep -A1 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'guiWritePolicy(userConfig.speakerControl, userConfig.headphoneControl, userConfig.ledBrightnessControl)'; then
+   || ! grep -B6 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'const bool anyWritePermission = anyDeviceWritePermission(userConfig);' \
+   || ! grep 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'guiWritePolicy(userConfig)'; then
     echo "FAIL GUI writes must be one gated outputControlHardwareOptions()+guiWritePolicy(confirmed fields) site"; fail=1
 else echo "ok   GUI writes: one site, only with a confirmed permission, policy = union of the confirmed fields"; fi
-# guiWritePolicy adds exactly the LED brightness byte to the output policy, nothing else
-gwp=$(grep -A8 'WritePolicy guiWritePolicy' src/core/OutputControl.cpp)
-if printf '%s' "$gwp" | grep -q 'WritePolicy p = outputWritePolicy(speaker, headphone);' \
-   && printf '%s' "$gwp" | grep -q 'hardwareWriteOffsets.push_back(settings_off::kLedBrightness);' \
-   && [ "$(printf '%s' "$gwp" | grep -c 'settings_off::')" -eq 1 ] \
-   && ! printf '%s' "$gwp" | grep -qE 'hardwareTriggers|allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true'; then
-    echo "ok   guiWritePolicy = output policy + LED brightness byte only (no triggers, routing or persistent changes)"
+# Phase 11A: guiWritePolicy = the union of the enabled permission groups (core/UserConfig devicePermissions(), all
+# default off); never routing or persistent changes; the groups never include mix-to-speakers (23), mobile streaming (67)
+# or undecoded bytes; triggers only via permissionTriggers(), which may list only measurement-session/autogain words.
+gwp=$(awk '/^WritePolicy guiWritePolicy\(const UserConfig& c\)/,/^}/' src/core/OutputControl.cpp)
+pof=$(awk '/^std::vector<std::size_t> permissionOffsets/,/^}/' src/core/OutputControl.cpp)
+ptr=$(awk '/^std::vector<Trigger> permissionTriggers/,/^}/' src/core/OutputControl.cpp)
+if [ -n "$gwp" ] && printf '%s' "$gwp" | grep -q 'if (!(c.\*(perm.field))) continue;' \
+   && ! grep -qE 'allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true' src/core/OutputControl.cpp \
+   && [ -n "$pof" ] && ! printf '%s' "$pof" | grep -qE 'kMixToSpeakers|kMobileStreaming|kSelectedChannel|kNativeVolumeMapping|[^0-9](5[4-9]|6[0-9]|7[0-9])[^0-9]' \
+   && [ -n "$ptr" ] && ! printf '%s' "$ptr" | grep -qE 'Switch|Factory|ResetLed|Denoise' \
+   && [ "$(printf '%s' "$ptr" | grep -oE 'Trigger::[A-Za-z]+' | sort -u | tr '\n' ' ')" = "Trigger::AutoGainBoth Trigger::AutoGainInstrument Trigger::AutoGainMicrophone Trigger::BeginMeasurementSession Trigger::EndMeasurementSession " ]; then
+    echo "ok   guiWritePolicy = union of the enabled permission groups (no routing/persistent changes, no byte 23/67, autogain triggers only)"
 else echo "FAIL guiWritePolicy scope changed"; fail=1; fi
 if grep -nE 'UsbTransport|DeviceSession|commit|stageOutput|writeDevice' src/gui/IntegrationSettings.cpp >/dev/null; then
     echo "FAIL IntegrationSettings must not touch the device"; fail=1
 else echo "ok   IntegrationSettings never touches the device"; fi
-if [ "$(grep -c 'if (on && !confirmed) return;' src/gui/IntegrationSettings.cpp)" -ge 3 ] \
+perm_fields=$(grep -cE '^[[:space:]]+bool [a-zA-Z]+Control\{' src/core/UserConfig.hpp)
+perm_false=$(grep -cE '^[[:space:]]+bool [a-zA-Z]+Control\{false\};' src/core/UserConfig.hpp)
+setter=$(awk '/^void IntegrationSettings::setPermission/,/^}/' src/gui/IntegrationSettings.cpp)
+if [ -n "$setter" ] && printf '%s' "$setter" | grep -q 'if (on && !confirmed) return;' \
+   && [ "$(grep -cE 'next\.\*\(p->field\)|next\.[a-zA-Z]+Control[[:space:]]*=' src/gui/IntegrationSettings.cpp)" -eq 1 ] \
    && grep -q 'if (on && (!confirmed || !desktopSync())) return;' src/gui/IntegrationSettings.cpp \
    && grep -q 'bool vendorFallback{false};' src/core/UserConfig.hpp \
-   && grep -q 'bool speakerControl{false};' src/core/UserConfig.hpp && grep -q 'bool headphoneControl{false};' src/core/UserConfig.hpp \
-   && grep -q 'bool ledBrightnessControl{false};' src/core/UserConfig.hpp \
-   && ! grep -nE '(speakerControl|headphoneControl|ledBrightnessControl)[[:space:]]*=[[:space:]]*(true|.*legacyOutputControl)' src/core/UserConfig.cpp >/dev/null; then
+   && [ "$perm_fields" -ge 10 ] && [ "$perm_fields" -eq "$perm_false" ] \
+   && ! grep -nE '[a-zA-Z]+Control[[:space:]]*=[[:space:]]*(true|.*legacyOutputControl)|\.\*\([a-z.]+field\)[[:space:]]*=[[:space:]]*true' src/core/UserConfig.cpp >/dev/null; then
     echo "ok   device-writing settings default off, need confirmation, and the legacy setting grants nothing"
 else echo "FAIL device-writing settings must default off and need confirmation (legacy must grant nothing)"; fail=1; fi
 # the GUI-hosted desktop link only mirrors (native mode); it never uses the vendor fallback
@@ -136,10 +144,12 @@ if grep -q 'InstanceChannel::Role::Failed' src/gui/main.cpp && grep -q 'Instance
    && [ "$(grep -n 'claimOrForward' src/gui/main.cpp | head -1 | cut -d: -f1)" -lt "$(grep -n 'DeviceController controller' src/gui/main.cpp | cut -d: -f1)" ]; then
     echo "ok   window/tray single-instance claim handled, before any device code"
 else echo "FAIL single-instance claim must be handled (Failed) and precede DeviceController"; fail=1; fi
-# Phase 10A: no production code authorizes a trigger on real hardware (WritePolicy::hardwareTriggers stays empty).
-if grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp' | grep -v 'std::vector<Trigger> hardwareTriggers;' >/dev/null; then
+# Phase 10A/11A: triggers are authorized at exactly one place - guiWritePolicy() from permissionTriggers() (measurement
+# permission only, see above); nowhere else in production code.
+if grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp' | grep -v 'std::vector<Trigger> hardwareTriggers;' \
+     | grep -v '^src/core/OutputControl.cpp:.*for (auto t : permissionTriggers(perm.name)) p.hardwareTriggers.push_back(t);' >/dev/null; then
     echo "FAIL production code authorizes hardware triggers:"; grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp'; fail=1
-else echo "ok   no hardware trigger is authorized in production code"; fi
+else echo "ok   hardware triggers only via the measurement permission (one site)"; fi
 # Phase 10A: GUI controls are enabled per capability (can.<key>), never by the global writable flag alone, and
 # the test-only transport injection is not used by the application.
 if grep -nE 'enabled:[[:space:]]*root\.interactive([[:space:]]*[;}]|[[:space:]]*$)' src/gui/qml/InputStrip.qml src/gui/qml/OutputStrip.qml \

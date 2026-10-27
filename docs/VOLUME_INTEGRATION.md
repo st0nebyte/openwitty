@@ -106,9 +106,17 @@ vendor_fallback = false        # true writes the device
 speaker_control = false        # true: OpenWitty's speaker fader/mute write the device
 headphone_control = false      # true: OpenWitty's headphone fader/mute write the device
 led_brightness_control = false # true: OpenWitty's LED brightness control writes the device
+input_control = false          # gain + mute of both inputs, gain lock (bytes 0-2, 10-12, 57)
+processing_control = false     # low-cut, Clipguard, preamp, Denoise, Comp (3-4, 6-7, 9, 13-16, 18)
+monitoring_control = false     # monitoring source, mix, Dim, Mono, loopback mute (19, 32-36)
+appearance_control = false     # LED colours, custom button (38-53)
+phantom_control = false        # 48 V (5)
+output_modes_control = false   # high-volume speakers, high-impedance headphones (24, 31)
+measurement_control = false    # autogain measurements (triggers)
 ```
-The three device-control keys are set on **Settings → Device control** (each confirmed separately, applied at once by
-reconnecting the session with the matching scoped policy: speaker bytes 20–22, headphone bytes 27–29, LED byte 37).
+The device-control keys are set on **Settings → Device control** (each confirmed separately, applied at once by
+reconnecting the session with the matching scoped policy — exactly the union of the enabled groups' bytes; triggers only
+with `measurement_control`).
 `output_control` from an older version grants **nothing**: `output_control = true` is kept only as a reminder (with a
 "grants NOTHING" comment) until speaker or headphone control is set or the notice is dismissed.
 Missing file = defaults. Invalid values fall back to the safe default and are shown as warnings in the page and in the
