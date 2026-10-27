@@ -2462,3 +2462,68 @@ TEST(GuiPreferences10B, FirstRunDecisionIsDeterministic) {
     p.setOnboardingDone(true);
     EXPECT_FALSE(p.showOnboardingAtStart(false, false));    // remembered
 }
+
+// Phase 11B session 1 finding: with Settings open, a wheel turn on an empty part of the page reached the
+// instrument gain knob underneath and lowered the gain on the real device. The page must swallow it.
+TEST(Overlay11B, SettingsPageBlocksWheelAndClicksToTheMainView) {
+    app();
+    namespace o = lewitt::settings_off;
+    RealLike r(policyFor({o::kGain[1], o::kGain[1] + 1, o::kMute[0], o::kMute[1]}));
+    MainView v(*r.c);
+    QQuickItem* knob = v.item("gainKnob2");
+    ASSERT_TRUE(knob && knob->isEnabled());
+    const double gain = r.c->values().value("in2.gain").toDouble();
+    v.root->setProperty("showSettings", true);
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    ASSERT_TRUE(v.item("settingsInputBlocker"));
+    const int w0 = r.hw->writeCalls;
+    for (int i = 0; i < 4; ++i) v.wheel(knob, -1);
+    v.mouse(knob, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(knob, QEvent::MouseMove, 0.5, 0.9);
+    v.mouse(knob, QEvent::MouseButtonRelease, 0.5, 0.9);
+    QElapsedTimer t; t.start();
+    while (t.elapsed() < 700) { QCoreApplication::processEvents(); r.c->flush(); }   // past the 400 ms wheel rest
+    EXPECT_EQ(r.hw->writeCalls, w0) << "nothing reaches the knob under the settings page";
+    EXPECT_DOUBLE_EQ(r.c->values().value("in2.gain").toDouble(), gain);
+    // control check: with the page closed the same wheel does reach the knob
+    v.root->setProperty("showSettings", false);
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    v.wheel(knob, -1);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.hw->writeCalls > w0; }, 3000));
+}
+
+// A device colour that is not one of the swatches stays selectable after a swatch was tried, so the original
+// colour can be restored exactly.
+TEST(Overlay11B, NonSwatchDeviceColourStaysRestorable) {
+    app();
+    namespace o = lewitt::settings_off;
+    RealLike r(policyFor({o::kLedColorMute, o::kLedColorMute + 1, o::kLedColorMute + 2}));
+    auto m = lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value();
+    ASSERT_TRUE(m.setLedColor(lewitt::LedElement::Mute, lewitt::Rgb{0x12, 0x34, 0x56}).ok());
+    auto b = m.bytes();
+    r.mock.setSettingsBytes(lewitt::Bytes(b.begin(), b.end()));
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.led.mute").toString() == "#123456"; }));
+    MainView v(*r.c);
+    QObject* sv = v.root->findChild<QObject*>("settingsView");
+    v.root->setProperty("showSettings", true);
+    sv->setProperty("open", "leds");
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    QQuickItem* custom = findItem(v.w->contentItem(), "swatch_mute_7");
+    ASSERT_TRUE(custom) << "an eighth swatch shows the device's own colour";
+    EXPECT_TRUE(custom->property("sel").toBool());
+    QQuickItem* red = findItem(v.w->contentItem(), "swatch_mute_0");
+    ASSERT_TRUE(red && red->isEnabled());
+    v.mouse(red, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(red, QEvent::MouseButtonRelease, 0.5, 0.5);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.led.mute").toString() == "#ff0000"; }));
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    custom = findItem(v.w->contentItem(), "swatch_mute_7");
+    ASSERT_TRUE(custom) << "the device colour is still offered after trying a swatch";
+    v.mouse(custom, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(custom, QEvent::MouseButtonRelease, 0.5, 0.5);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.led.mute").toString() == "#123456"; }));
+    const auto after = r.mock.settingsBytes();
+    EXPECT_EQ(after[o::kLedColorMute], 0x12);
+    EXPECT_EQ(after[o::kLedColorMute + 1], 0x34);
+    EXPECT_EQ(after[o::kLedColorMute + 2], 0x56);
+}

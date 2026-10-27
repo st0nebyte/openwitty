@@ -9,6 +9,10 @@ Rectangle {
     signal closeRequested()
     signal onboardingRequested()
     color: "#1e1e1e"
+    // Phase 11B: the page is opaque to input. Clicks and wheel turns on its empty areas must not reach the
+    // controls of the main view underneath (session 1: a wheel over the page lowered the instrument gain).
+    MouseArea { objectName: "settingsInputBlocker"; anchors.fill: parent; acceptedButtons: Qt.AllButtons
+                hoverEnabled: true; onWheel: (w) => { w.accepted = true; } }
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
     function can(k) { return root.interactive && device.values["can." + k] === true; }
@@ -155,21 +159,39 @@ Rectangle {
             Row {
                 id: ledRow
                 property var elem: modelData
+                readonly property var swatches: ["#ff0000", "#ff8800", "#ffee00", "#00cc44", "#0099ff", "#8844ff", "#ffffff"]
+                readonly property string current: String(root.v("set.led." + elem.k, ""))
+                // A colour set elsewhere (official app, earlier firmware) that is not one of the swatches is kept
+                // here, so it stays selectable and can be restored exactly after trying a swatch.
+                property string deviceColour: ""
+                function remember() { if (current.length && swatches.indexOf(current) < 0) deviceColour = current; }
+                onCurrentChanged: remember()
+                Component.onCompleted: remember()
                 spacing: 6
                 Text { width: 100; color: Theme.text; font.pixelSize: 11; text: ledRow.elem.t
                        anchors.verticalCenter: parent.verticalCenter }
                 Repeater {
-                    model: ["#ff0000", "#ff8800", "#ffee00", "#00cc44", "#0099ff", "#8844ff", "#ffffff"]
-                    Rectangle {
+                    model: ledRow.deviceColour.length ? ledRow.swatches.concat([ledRow.deviceColour]) : ledRow.swatches
+                    Item {
                         id: sw
+                        objectName: "swatch_" + ledRow.elem.k + "_" + index
                         property string key: "set.led." + ledRow.elem.k
-                        width: 22; height: 18; radius: 3; color: modelData
+                        property string colour: modelData
+                        readonly property bool isDeviceColour: index >= ledRow.swatches.length
+                        property bool sel: ledRow.current === modelData
+                        width: 22; height: 18
                         opacity: root.can(sw.key) ? 1 : 0.4
-                        property bool sel: root.v(sw.key, "") === modelData
-                        border.width: sel ? 2 : 1
-                        border.color: sel ? Theme.text : Theme.line
-                        MouseArea { anchors.fill: parent; enabled: root.can(sw.key)
-                                    onClicked: device.setValue(sw.key, sw.color.toString()) }
+                        // selection ring: lime outside a dark gap, visible on every swatch colour incl. white
+                        Rectangle { anchors.fill: parent; anchors.margins: -3; radius: 5; color: "transparent"
+                                    visible: sw.sel; border.width: 2; border.color: "#a4c400" }
+                        Rectangle { anchors.fill: parent; radius: 3; color: sw.colour
+                                    border.width: 1; border.color: sw.sel ? "#000000" : Theme.line }
+                        Text { visible: sw.isDeviceColour; anchors.centerIn: parent; text: "•"; font.pixelSize: 10
+                               color: Qt.colorEqual(sw.colour, "#ffffff") ? "#000000" : "#ffffff" }
+                        MouseArea { anchors.fill: parent; enabled: root.can(sw.key); hoverEnabled: true
+                                    onEntered: if (sw.isDeviceColour) Hint.show("Colour found on the device (" + sw.colour + "), not one of the swatches")
+                                    onExited: Hint.clear()
+                                    onClicked: device.setValue(sw.key, sw.colour) }
                     }
                 }
             }

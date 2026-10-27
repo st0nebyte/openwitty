@@ -22,7 +22,8 @@ Rectangle {
     readonly property int progress: device.values["auto.progress"] || 0
     readonly property int outcome: device.values["auto.resultCode"] === undefined ? 0 : device.values["auto.resultCode"]
     readonly property bool failed: autoState === "finished" && outcome === 1
-    MouseArea { anchors.fill: parent }
+    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true
+                onWheel: (w) => { w.accepted = true; } }   // modal: no click or wheel reaches the main view
 
     function apply() {
         var ins = target === "mic" ? [1] : target === "inst" ? [2] : [1, 2];

@@ -16,7 +16,8 @@ Item {
     readonly property var cur: steps[step]
     readonly property int topY: 78
     readonly property int bottomY: 345
-    MouseArea { anchors.fill: parent }   // modal
+    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true
+                onWheel: (w) => { w.accepted = true; } }   // modal: no click or wheel reaches the main view
     // four dim rectangles around the highlighted section
     Rectangle { x: 0; y: 0; width: parent.width; height: root.topY; color: "#cc000000" }
     Rectangle { x: 0; y: root.bottomY; width: parent.width; height: parent.height - root.bottomY; color: "#cc000000" }
