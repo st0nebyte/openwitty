@@ -185,6 +185,23 @@ Findings and fixes:
 
 Finding fixed in `c4a7ecf`: the output faders had no visible value; they now show dB (lime while previewed/awaiting).
 
+**Session 3 part 1 — LB-2 hardware loopback (2026-10-28, owner present, speakers muted, headphones off): PASS.**
+Method: 48 kHz stereo file (1 s silence, 4 s 1 kHz L-only, 1 s, 4 s 2 kHz R-only, −30 dBFS peak) played with `pw-play`
+to the CONNECT 2 sink while `pw-record --channels 4 --channel-map FL,FR,RL,RR --format s32` recorded the 4-channel
+source raw; offline per-channel FFT/RMS/peak. No desktop volume, mute or profile was changed.
+
+| Run | Loopback mute (byte 19) | ch 1 mic | ch 2 instrument | ch 3 | ch 4 |
+|---|---|---|---|---|---|
+| LB-2a | 1 (muted, start state) | exact zero | exact zero | exact zero | exact zero |
+| LB-2b | 0 (unmuted from the GUI, verified SET) | exact zero | exact zero | L tone only, peak −30.0 dBFS | R tone only, peak −30.0 dBFS |
+
+Findings: capture ch 3 = loopback L, ch 4 = loopback R; no crosstalk (exact digital zero elsewhere); the loopback is
+unity gain and independent of the speaker volume (−17.5 dB) and the desktop sink volume; loopback mute (byte 19) works
+and the GUI write of it is verified (then restored, final compare changed: none). Muted inputs deliver exact zeros.
+Opening the capture stream changed neither the device settings nor the PipeWire route (still muted, volumes
+[≈1.0, ≈1.0, 0.000251, 0.000251]). The GUI meters showed L then R on loopback and speaker. LB-1 (mic/instrument
+identity) waits for GAIN-1 (needs the inputs unmuted at the FU 5 / PipeWire level).
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
