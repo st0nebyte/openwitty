@@ -142,17 +142,36 @@ End: **Compare with baseline** → `changed: none`; all four permissions off; wi
 back. Abort on any unexpected byte, "not confirmed", USB error or audible event; no retries. Evidence class per step:
 W-gui (device accepted and reports the value); audible behaviour (low-cut, Comp, Dim …) needs A-live in session 3.
 
-**Session 1, part 1 (2026-10-27, owner present, safety conditions confirmed):**
-- Step 1 PASS: custom button 53: 2→12→2, one verified SET each, unexpected: none.
-- Step 2 PASS (Icons row): 7 swatch clicks, only bytes 38–40 changed, back to white (255,255,255).
-- Finding: with Settings open, a wheel turn on an empty part of the page reached the instrument gain knob underneath
-  (byte 11: 14→11 dB, a decrease); the owner restored it (11→13→14), final compare changed: none. Fixed in
-  `dbc51c3` (overlays accept every click and the wheel; tests `Overlay11B.*`). Same commit: visible selection ring
-  and an eighth "device colour" swatch for a non-swatch colour, so it can be restored exactly.
-- Note: each permission switch reconnects the session with the new policy (by design); the baseline is kept.
-- Paused before step 3; all permissions off, window closed. Next: restart with the fixed build, step 2b (map every LED
-  row to the physical LEDs: Mute, Parameter, Metering, Gain reduction; Mute/Parameter/Gain reduction showed no
-  selected swatch, so they hold non-swatch colours → restore with the device-colour swatch), then steps 3–10.
+**Session 1 results (2026-10-27/28, owner present, safety conditions confirmed before each part): PASS.** Evidence
+class W-gui for every row: one GUI action → one SET → device read-back verified → restored; final compare
+`now vs baseline: changed: none`, all permissions off, window closed.
+
+| # | Control | Bytes (start → test → start) | Result |
+|---|---|---|---|
+| 1 | Custom button | 53: 2 → 12 → 2 | PASS |
+| 2 | LED colours, all five rows | Icons 38–40, Mute 41–43, Parameter 44–46, Metering 47–49, Gain reduction 50–52 | PASS; meaning observed: Icons = icons of unmuted channels, Mute = icons of muted channels, Parameter = gain/volume display of the selected channel, Metering = level meter, Gain reduction = its meter part (not visible without signal) |
+| 3 | Gain lock | 57 was already **on** | not toggled (see below) |
+| 4 | Mic low-cut, Clipguard, Comp, preamp | 3: 1→0→1, 4: 1→0→1, 9: 1→0→1, 6: 2→1→2 | PASS |
+| 5 | Instrument low-cut, Clipguard, Comp, preamp | 13: 0→1→0, 14: 0→1→0, 18: 0→1→0, 15: 2→1→2 | PASS |
+| 6 | Dim, Mono | 32 0→1→0 (+ device sets 25), 33 0→1→0 (+ device sets 26) | PASS after fix (below) |
+| 7 | Monitoring source | 34: 2 → 0 (mic off) → 2, 2 → 1 (instrument off) → 2 | PASS; 0 inst, 1 mic, 2 both confirmed |
+| 8 | Input/playback mix | 36: 0 → … → 30 (= −30) → 0, byte 35 stayed 0 | PASS (12 releases, each one verified SET) |
+| 9 | Instrument / mic mute | 12: 1→0→1, 2: 1→0→1 | PASS |
+| 10 | Mic gain | 1: 27 → 26 → 25 → 24 → 27 | PASS (+3 dB in one SET) |
+
+Findings and fixes:
+- **Overlay click-through** (part 1): a wheel turn on the Settings page lowered the instrument gain underneath
+  (11: 14→11, restored). Fixed in `dbc51c3`.
+- **Device-maintained bytes 25/26**: Dim and Mono each make the device set a second byte (25 = speaker dim state,
+  26 = speaker mono state) to the same value. OpenWitty correctly stopped as "not confirmed" (twice, each restored to
+  changed: none); since `1b3d5e5`/`d8ef700` these are device followers of Dim/Mono (accepted only for that write).
+- **Gain lock was on at the start** (byte 57 = 1). Hypothesis: it is why the device re-muted FU 5 by itself in GAIN-1
+  step 2R and why FU 5 never matched the preamp gain. Toggling it off is moved to GAIN-1 (the desktop route still
+  requests +72 dB), not done in session 1. Caveat: the vendor field is `ExternalGainControl`; the polarity is unverified.
+- **Knob/fader flash** after a wheel commit (old value shown until the read-back). Fixed: the committed value stays
+  shown until the device reports it or 1.5 s pass.
+- Each permission switch reconnects the session with the new policy (by design); the baseline is kept.
+- Not tested in session 1: Denoise (needs the official measurement), 48 V, loopback mute, outputs (session 2).
 
 ## Feature matrix
 

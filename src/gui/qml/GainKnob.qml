@@ -23,7 +23,13 @@ Item {
     readonly property bool previewing: ma.pressed || wheelTimer.running
     property real previewValue: 0
     property real pressValue: 0
-    readonly property real shownValue: previewing && commitOnRelease ? previewValue : value
+    // After a commit the new value stays shown until the device reports it (or 1.5 s pass without it, e.g. a refused
+    // write); without this the old value flashed up between the end of the preview and the confirmed read.
+    property bool awaiting: false
+    readonly property real shownValue: (previewing || awaiting) && commitOnRelease ? previewValue : value
+    onValueChanged: awaiting = false
+    Timer { id: awaitTimer; interval: 1500; onTriggered: root.awaiting = false }
+    function commit(v) { awaiting = true; awaitTimer.restart(); committed(v); }
     signal moved(real v)
     signal committed(real v)
     implicitWidth: 2 * (bodyRadius + 12); implicitHeight: implicitWidth
@@ -31,7 +37,7 @@ Item {
     readonly property real frac: (Math.max(from, Math.min(to, shownValue)) - from) / (to - from)
     function emitValue(v) { previewValue = v; if (!commitOnRelease) moved(v); }
     Timer { id: wheelTimer; interval: 400
-            onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.committed(root.previewValue) }
+            onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.commit(root.previewValue) }
     readonly property real a0: (90 + (360 - sweepDeg) / 2) * Math.PI / 180
     readonly property real sweep: sweepDeg * Math.PI / 180
 
@@ -89,7 +95,7 @@ Item {
             v = Math.max(root.from, Math.min(root.to, v));
             root.emitValue(Math.round(v / root.step) * root.step);
         }
-        onReleased: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.committed(root.previewValue)
+        onReleased: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.commit(root.previewValue)
         onWheel: (w) => {
             if (!wheelTimer.running) { root.pressValue = root.value; root.previewValue = root.value; }
             var base = root.commitOnRelease ? root.previewValue : root.value;

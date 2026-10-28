@@ -14,7 +14,13 @@ Item {
     readonly property bool previewing: ma.pressed || wheelTimer.running
     property real previewValue: 0
     property real pressValue: 0
-    readonly property real shownValue: previewing && commitOnRelease ? previewValue : value
+    // After a commit the new value stays shown until the device reports it (or 1.5 s pass without it, e.g. a refused
+    // write); without this the old value flashed up between the end of the preview and the confirmed read.
+    property bool awaiting: false
+    readonly property real shownValue: (previewing || awaiting) && commitOnRelease ? previewValue : value
+    onValueChanged: awaiting = false
+    Timer { id: awaitTimer; interval: 1500; onTriggered: root.awaiting = false }
+    function commit(v) { awaiting = true; awaitTimer.restart(); committed(v); }
     signal moved(real v)
     signal committed(real v)
     implicitWidth: 20; implicitHeight: 187
@@ -23,7 +29,7 @@ Item {
     function clampStep(v) { return Math.round(Math.max(from, Math.min(to, v)) * 2) / 2; }
     function emitValue(v) { previewValue = v; if (!commitOnRelease) moved(v); }
     Timer { id: wheelTimer; interval: 400
-            onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.committed(root.previewValue) }
+            onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.commit(root.previewValue) }
     Rectangle { x: parent.width / 2 - 2; width: 4; height: parent.height; color: "#2a2a2a" }
     Rectangle { x: parent.width / 2 - 1; width: 2; y: handle.y + handle.height / 2
                 height: parent.height - y; color: "#8f8d8d" }
@@ -49,7 +55,7 @@ Item {
         onPositionChanged: (m) => { if (pressed) setFrom(m.y); }
         onReleased: (m) => {
             setFrom(m.y);
-            if (root.commitOnRelease && root.previewValue !== root.pressValue) { wheelTimer.stop(); root.committed(root.previewValue); }
+            if (root.commitOnRelease && root.previewValue !== root.pressValue) { wheelTimer.stop(); root.commit(root.previewValue); }
         }
         onWheel: (w) => {
             if (!wheelTimer.running) { root.pressValue = root.value; root.previewValue = root.value; }

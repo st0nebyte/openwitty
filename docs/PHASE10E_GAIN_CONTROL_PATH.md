@@ -514,3 +514,12 @@ values alone.
   muting them is a software mute (it should be) — never a hidden FU 5 write.
 * The CONNECT 2 is never treated as a surround-recording interface; the 4.0 labels stay an artefact to be documented
   or relabelled, not a basis for remixing.
+
+## Update 2026-10-28 (Phase 11B session 1)
+
+Vendor read during the GUI session: **External Gain Lock (byte 57) is on.** Working hypothesis for GAIN-1: with the
+lock on the device refuses external (UAC2 FU 5) gain/mute changes — which would explain the self re-mute after
+`wpctl set-mute 65 0` (step 2R) and the FU 5 cache (+72 dB) not matching the preamp (27 dB). Test it in GAIN-1 with
+the step-3 rules; switching the lock off while the desktop route requests +72 dB is the risk to plan for. Caveat: the
+vendor's field name is `ExternalGainControl`, so the polarity (1 = locked or 1 = external control allowed) is not
+verified; OpenWitty's label "gain lock" assumes 1 = locked. GAIN-1 must settle this first, read-only where possible.

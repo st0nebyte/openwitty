@@ -154,8 +154,12 @@ Rectangle {
                color: root.ledWrite === "verified" || root.ledWrite === "unchanged" ? Theme.textDim
                     : root.ledWrite === "pending" ? Theme.text : Theme.warn }
         Repeater {
-            model: [{k: "icons", t: "Icons"}, {k: "mute", t: "Mute"}, {k: "parameter", t: "Parameter"},
-                    {k: "metering", t: "Metering"}, {k: "gainReduction", t: "Gain reduction"}]
+            // what each colour lights on the device (observed on hardware, Phase 11B session 1)
+            model: [{k: "icons", t: "Icons", d: "Channel icons of channels that are not muted"},
+                    {k: "mute", t: "Mute", d: "Channel icons of muted channels"},
+                    {k: "parameter", t: "Parameter", d: "Gain / volume display of the selected channel"},
+                    {k: "metering", t: "Metering", d: "Level meter"},
+                    {k: "gainReduction", t: "Gain reduction", d: "Gain reduction shown in the level meter (Clipguard / Comp; needs a signal)"}]
             Row {
                 id: ledRow
                 property var elem: modelData
@@ -169,7 +173,9 @@ Rectangle {
                 Component.onCompleted: remember()
                 spacing: 6
                 Text { width: 100; color: Theme.text; font.pixelSize: 11; text: ledRow.elem.t
-                       anchors.verticalCenter: parent.verticalCenter }
+                       anchors.verticalCenter: parent.verticalCenter
+                       MouseArea { anchors.fill: parent; hoverEnabled: true
+                                   onEntered: Hint.show(ledRow.elem.d); onExited: Hint.clear() } }
                 Repeater {
                     model: ledRow.deviceColour.length ? ledRow.swatches.concat([ledRow.deviceColour]) : ledRow.swatches
                     Item {

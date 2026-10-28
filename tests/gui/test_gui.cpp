@@ -2527,3 +2527,33 @@ TEST(Overlay11B, NonSwatchDeviceColourStaysRestorable) {
     EXPECT_EQ(after[o::kLedColorMute + 1], 0x34);
     EXPECT_EQ(after[o::kLedColorMute + 2], 0x56);
 }
+
+// Phase 11B session 1: after a wheel commit the knob showed the old value for a moment until the device confirmed
+// the new one. The committed value now stays shown until the device reports it, or 1.5 s pass (refused write).
+TEST(Controls11B, CommittedValueStaysShownUntilTheDeviceReportsIt) {
+    app();
+    for (const char* file : {"/GainKnob.qml", "/Fader.qml"}) {
+        QQmlEngine engine;
+        QQmlComponent comp(&engine, QUrl::fromLocalFile(QString(LEWITT_QML_DIR) + file));
+        for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
+        std::unique_ptr<QObject> k(comp.create());
+        ASSERT_TRUE(k) << file;
+        k->setProperty("from", -60); k->setProperty("to", 72);
+        k->setProperty("commitOnRelease", true);
+        k->setProperty("value", 27.0);
+        k->setProperty("previewValue", 24.0);
+        QMetaObject::invokeMethod(k.get(), "commit", Q_ARG(QVariant, 24.0));
+        QCoreApplication::processEvents();
+        EXPECT_DOUBLE_EQ(k->property("shownValue").toDouble(), 24.0) << file << ": no flash of the old value";
+        k->setProperty("value", 24.0);    // device confirmed
+        EXPECT_FALSE(k->property("awaiting").toBool()) << file;
+        EXPECT_DOUBLE_EQ(k->property("shownValue").toDouble(), 24.0) << file;
+        // refused / never confirmed: falls back to the device value
+        k->setProperty("previewValue", 20.0);
+        QMetaObject::invokeMethod(k.get(), "commit", Q_ARG(QVariant, 20.0));
+        EXPECT_DOUBLE_EQ(k->property("shownValue").toDouble(), 20.0) << file;
+        QElapsedTimer t; t.start();
+        while (t.elapsed() < 1700) QCoreApplication::processEvents();
+        EXPECT_DOUBLE_EQ(k->property("shownValue").toDouble(), 24.0) << file;
+    }
+}
