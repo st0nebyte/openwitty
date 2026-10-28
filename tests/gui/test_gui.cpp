@@ -2557,3 +2557,25 @@ TEST(Controls11B, CommittedValueStaysShownUntilTheDeviceReportsIt) {
         EXPECT_DOUBLE_EQ(k->property("shownValue").toDouble(), 24.0) << file;
     }
 }
+
+// Phase 11B session 2: the output faders show their value in dB, including while a drag is previewed.
+TEST(Controls11B, OutputFadersShowTheirValueInDb) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(true, false, false));
+    setDeviceSpeakerDb(r, -17.5);
+    MainView v(*r.c);
+    QQuickItem* label = findItem(v.w->contentItem(), "faderValue_spk");
+    ASSERT_TRUE(label);
+    EXPECT_EQ(label->property("text").toString(), "-17.5");
+    QQuickItem* fader = v.item("fader_spk");
+    v.mouse(fader, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(fader, QEvent::MouseMove, 0.5, 0.6);
+    QCoreApplication::processEvents();
+    const double preview = fader->property("previewValue").toDouble();
+    EXPECT_NE(preview, -17.5);
+    EXPECT_EQ(label->property("text").toString(), QString::number(preview, 'f', 1)) << "shows the previewed value";
+    v.mouse(fader, QEvent::MouseButtonRelease, 0.5, 0.6);
+    ASSERT_TRUE(waitFor([&] { return r.c->values().value("write.outcome").toString() == "verified"; }));
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(label->property("text").toString(), QString::number(r.c->values().value("spk.volume").toDouble(), 'f', 1));
+}
