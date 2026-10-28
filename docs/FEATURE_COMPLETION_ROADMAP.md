@@ -173,6 +173,18 @@ Findings and fixes:
 - Each permission switch reconnects the session with the new policy (by design); the baseline is kept.
 - Not tested in session 1: Denoise (needs the official measurement), 48 V, loopback mute, outputs (session 2).
 
+**Session 2 results (2026-10-28, owner present, speakers powered off, headphones off the head): PASS.** Only one of
+*speaker control* / *headphone control* was on at a time; every write verified by read-back.
+
+| Test | Bytes | Result |
+|---|---|---|
+| HW-2 speaker mute | 22: 0→1→0 | PASS; desktop volume mirrored mute and unmute |
+| HW-3 speaker volume | 20–21: −17.5 → −24 → −16.5 (+7.5 dB in one SET, within the 10 dB limit) → −17.5 dB | PASS; restored exactly |
+| HW-4 headphone mute (first-ever headphone SET) | 29: 1→0→1 | PASS |
+| HW-4 headphone volume | 27–28: −32.4 → −30 → −36 → −32.5 dB | PASS; the start value −32.398 dB (set with the device knob) is off the fader's 0.5 dB grid, restored to −32.5 dB with the owner's agreement — final compare: only byte 27 (154→128) |
+
+Finding fixed in `c4a7ecf`: the output faders had no visible value; they now show dB (lime while previewed/awaiting).
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
