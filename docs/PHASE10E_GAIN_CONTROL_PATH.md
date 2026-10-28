@@ -523,3 +523,12 @@ lock on the device refuses external (UAC2 FU 5) gain/mute changes — which woul
 the step-3 rules; switching the lock off while the desktop route requests +72 dB is the risk to plan for. Caveat: the
 vendor's field name is `ExternalGainControl`, so the polarity (1 = locked or 1 = external control allowed) is not
 verified; OpenWitty's label "gain lock" assumes 1 = locked. GAIN-1 must settle this first, read-only where possible.
+
+## Update 2026-10-28 (LB-1): FU 5 mute does not gate the capture
+
+With the device's own mic/instrument mute (bytes 2/12) switched off from OpenWitty while the PipeWire route stayed
+muted (FU 5 mute = 1, cache +72 dB), the 4-channel capture carried the mic (ch 1) and the instrument (ch 2); with the
+device mute on, both were exact digital zero. No FU 5/ALSA event occurred in either direction. So for the capture
+path FU 5 mute is not effective and FU 5 does not mirror the device mute; the device's own mute is the only gate. This
+answers step 2R's open question for practical purposes (the device re-mutes FU 5 but that state has no audio effect)
+and makes steps 3–4 lower priority: the planned fix is to stop using FU 5 as the desktop's hardware mute/volume.

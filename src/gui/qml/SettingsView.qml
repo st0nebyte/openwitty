@@ -257,6 +257,11 @@ Rectangle {
                          : "not configured") }
             Repeater { model: integration.findings
                        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10; text: "• " + modelData } }
+            // Verified on hardware (Phase 11B LB-1): audio flows whenever the device's own input mute is off, while the
+            // desktop shows the CONNECT 2 input as muted; the desktop mute switch does not silence it.
+            Text { objectName: "desktopMicMuteWarning"; width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                   text: "Microphone privacy: the desktop's input mute does not mute the CONNECT 2. Apps hear the "
+                       + "microphone and instrument whenever they are unmuted on the device. Use MUTE on the device or in OpenWitty." }
             Row { spacing: 8
                 ToggleButton { width: 150; height: 22; text: quirkHelp.visible ? "Hide quirk instructions" : "About the kernel quirk"
                                onClicked: quirkHelp.visible = !quirkHelp.visible }

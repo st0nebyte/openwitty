@@ -2579,3 +2579,17 @@ TEST(Controls11B, OutputFadersShowTheirValueInDb) {
     for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
     EXPECT_EQ(label->property("text").toString(), QString::number(r.c->values().value("spk.volume").toDouble(), 'f', 1));
 }
+
+// Phase 11B LB-1: the desktop input mute does not silence the CONNECT 2; the desktop integration page says so.
+TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, false, false));
+    MainView v(*r.c);
+    v.root->setProperty("showSettings", true);
+    v.root->findChild<QObject*>("settingsView")->setProperty("open", "desktop");
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    QQuickItem* w = findItem(v.w->contentItem(), "desktopMicMuteWarning");
+    ASSERT_TRUE(w);
+    EXPECT_TRUE(w->isVisible());
+    EXPECT_TRUE(w->property("text").toString().contains("does not mute the CONNECT 2"));
+}

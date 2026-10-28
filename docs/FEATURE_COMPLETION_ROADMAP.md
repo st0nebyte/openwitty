@@ -202,6 +202,30 @@ Opening the capture stream changed neither the device settings nor the PipeWire 
 [≈1.0, ≈1.0, 0.000251, 0.000251]). The GUI meters showed L then R on loopback and speaker. LB-1 (mic/instrument
 identity) waits for GAIN-1 (needs the inputs unmuted at the FU 5 / PipeWire level).
 
+**Session 3 part 2 — LB-1 input channel identity (2026-10-28 23:09, owner present, physical speakers muted,
+headphones off, an open cable in the instrument input): PASS, with a privacy finding.** One 4-channel recording
+(`pw-record`, as LB-2) while the owner unmuted/muted the device's own mic mute (byte 2) and instrument mute (byte 12)
+from the GUI (*input control* only; four verified SETs; final compare changed: none). Passive watchers: PipeWire input
+route every 0.25 s, `alsactl monitor` on the card.
+
+| Window | Device state | ch 1 | ch 2 | ch 3/4 |
+|---|---|---|---|---|
+| 23:09:49–57 | mic unmuted, one spoken sentence | speech, peak −20 dBFS | exact zero | exact zero |
+| 23:10:00–06 | instrument unmuted | exact zero | hum ≈ −48 dBFS RMS (open cable) | exact zero |
+| otherwise | both muted | exact zero | exact zero | exact zero |
+
+Findings:
+- Capture ch 1 = microphone, ch 2 = instrument (with LB-2: ch 3/4 = loopback L/R). No crosstalk.
+- **The device's own input mute alone decides whether audio flows.** The PipeWire route stayed `mute: true` with volumes
+  [≈1.0, ≈1.0, 0.000251, 0.000251] throughout, and there was no ALSA control event: FU 5 mute did not follow the device
+  mute, and FU 5's "muted" state did not silence the capture. **The desktop input mute does not mute the CONNECT 2**
+  (privacy issue for users). OpenWitty now says so on Settings ▸ Desktop integration.
+- Speech at normal level peaked at −20 dBFS with the device at 27 dB, consistent with the FU 5 request (+72 dB cache)
+  not acting on the mic preamp (not a calibrated proof).
+- Planned fix (11C, needs owner approval): make the desktop's input mute/volume software-side for this device (ACP path
+  override: the FU 5 switch/volume not used as hardware mute/volume), so a desktop mute silences apps and no FU 5 volume
+  request is sent any more.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
