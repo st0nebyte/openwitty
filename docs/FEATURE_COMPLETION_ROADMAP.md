@@ -226,6 +226,27 @@ Findings:
   override: the FU 5 switch/volume not used as hardware mute/volume), so a desktop mute silences apps and no FU 5 volume
   request is sent any more.
 
+### Phase 11C — desktop input mute that works (software input mute/volume for the CONNECT 2)
+
+Files (shipped as examples, installed by hand for now): `packaging/alsa-card-profile/profile-sets/openwitty-connect2.conf`
+(the default mappings for this device: `analog-stereo` output with the default output paths, `analog-surround-40`
+input), `packaging/alsa-card-profile/paths/openwitty-connect2-input.conf` (capture path with the FU 5 "Mic" element
+`switch = ignore`, `volume = ignore`), `packaging/wireplumber/52-openwitty-connect2-input.conf` (selects the profile set
+for USB `29c2:0004` only). PipeWire's ACP reads profile sets/paths from `~/.config/alsa-card-profile/mixer/` too.
+Expected: same profile name and output route (`analog-output`, saved speaker state restored as at every login); a new
+input route (software mute/volume, `route.hw-mute`/`hw-volume` false); no FU 5 write at all.
+
+**Live test 11C-1 (owner present; speakers physically muted, headphones off, mic away):**
+1. Before: profile, routes, node props, default source; `alsactl monitor` on the card running.
+2. Install the three files into `~/.config/…`; `systemctl --user restart wireplumber` (one restart).
+3. Check: profile unchanged; output route and speaker level unchanged (vendor compare in an `--hw-check` window);
+   input route new, software mute/volume; no `Mic Capture` ALSA event.
+4. Function: 4-channel recording; owner unmutes the device mic (GUI, *input control*), speaks; `wpctl set-mute <source> 1`
+   → all four channels exact zero; `wpctl set-mute <source> 0` → speech again; device mic muted; permission off.
+   (Software mute applies to the whole capture node, loopback channels included.)
+5. Abort: speaker level or any vendor byte changes, profile changes, any FU 5 write, any error. Rollback: delete the
+   three files, restart WirePlumber, verify the old route (`analog-input-mic`) is back.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real

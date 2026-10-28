@@ -133,6 +133,9 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
     install(SCRIPT packaging/systemd/InstallUserUnit.cmake)
     install(FILES packaging/modprobe/openwitty-connect2.conf
                   packaging/wireplumber/51-openwitty-connect2-login-screen.conf
+                  packaging/wireplumber/52-openwitty-connect2-input.conf
+                  packaging/alsa-card-profile/profile-sets/openwitty-connect2.conf
+                  packaging/alsa-card-profile/paths/openwitty-connect2-input.conf
             DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples)
     # Login-screen WirePlumber rule (example only): valid SPA-JSON, matches the CONNECT 2's card name pattern.
     find_program(LEWITT_SPA_JSON_DUMP spa-json-dump)
@@ -146,6 +149,14 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
                                     printf '%s' \"\$n\" | grep -Eq \"\$pat\" && exit 4; done; echo RULE OK"
                  sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/51-openwitty-connect2-login-screen.conf)
         set_tests_properties(wireplumber_login_screen_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
+        # Input rule: valid SPA-JSON, matches the CONNECT 2 by USB id only, selects OpenWitty's profile set.
+        add_test(NAME wireplumber_input_rule_parses
+                 COMMAND sh -c "out=\$(\"$1\" \"$2\") || exit 1; \
+                                printf '%s' \"\$out\" | grep -q '\"device.vendor.id\": \"0x29c2\"' || exit 2; \
+                                printf '%s' \"\$out\" | grep -q '\"device.product.id\": \"0x0004\"' || exit 3; \
+                                printf '%s' \"\$out\" | grep -q '\"device.profile-set\": \"openwitty-connect2.conf\"' || exit 4; echo RULE OK"
+                 sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/52-openwitty-connect2-input.conf)
+        set_tests_properties(wireplumber_input_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
     endif()
     # The generated user unit must verify cleanly (keys in the right sections, valid ExecStart).
     find_program(LEWITT_SYSTEMD_ANALYZE systemd-analyze)
