@@ -3,7 +3,8 @@
 > **Historical document (written before the first hardware session, 2026-10-14).** Its statements that the
 > software was never run on a CONNECT 2 or that all writes are disabled are outdated. Current status:
 > `README.md`, `FEATURES.md`, `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md`,
-> `docs/RELEASE_READINESS.md`.
+> `docs/RELEASE_READINESS.md`. **Start here instead (2026-10-28):** `docs/FEATURE_COMPLETION_ROADMAP.md` →
+> "Phase 11 status and remaining plan".
 
 You are continuing **OpenWitty**, an unofficial Linux control app for the LEWITT CONNECT 2.
 Read `docs/HANDOFF_HARDWARE_TESTING.md` first, then `docs/HARDWARE_TEST_PLAN.md`.

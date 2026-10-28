@@ -1,7 +1,8 @@
 # TODO
 
-> **Current plan (Phase 10A, 2026-10-25):** `docs/FEATURE_COMPLETION_ROADMAP.md` — feature matrix, GUI permission
-> fixes, hardware-validation roadmap and work packages. The numbered items below are the historical log; where they
+> **Current plan (Phase 11, updated 2026-10-28):** `docs/FEATURE_COMPLETION_ROADMAP.md`, section "Phase 11 status and
+> remaining plan" — what is hardware-verified, the owner system's state, and the ordered next steps (DAW tests,
+> channel naming, high-risk session, research items). Also: feature matrix, hardware-validation roadmap. The numbered items below are the historical log; where they
 > disagree with the roadmap (e.g. "Next" items), the roadmap is current. Release status: `docs/RELEASE_READINESS.md`.
 
 ## Needs the device (do in this order, read-only first)

@@ -116,6 +116,51 @@ change, read-back, no automatic retries, physical safety confirmed by the owner 
 source, gain decreases); session 2 outputs (HW-2…HW-4); session 3 audio (LB-1/LB-2, then DAW-1…DAW-4); session 4 high-risk
 (48 V, high-volume, high-impedance, autogain).
 
+### Phase 11 status and remaining plan (as of 2026-10-28, end of day)
+
+**Done and hardware-verified:** 11A.1–11A.3; 11B session 1 (all low-risk settings), session 2 (HW-2…HW-4 outputs),
+session 3 part 1/2 (LB-2 loopback, LB-1 input channel identity); 11C (desktop input mute that works, installed on the
+owner's system). Fixes found on hardware: overlay click-through (`dbc51c3`), device-maintained bytes 25/26 (`1b3d5e5`,
+`d8ef700`), knob/fader flash and LED row descriptions (`1a192ef`), fader dB readout (`c4a7ecf`), desktop-mute warning and
+detection (`ce3608e`, `4977413`). Results in the sections below and in `PROTOCOL.md` ("Hardware observations, Phase 11B").
+
+**Owner system state after 2026-10-28:** OpenWitty installed user-local from `4977413`; all device permissions off; 11C
+files installed in `~/.config/alsa-card-profile/mixer/{profile-sets,paths}/` and
+`~/.config/wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf` (undo: delete, restart WirePlumber); the
+input route is now `openwitty-connect2-input` (software mute/volume, unmuted, 1.0). Device settings equal the session
+baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agreed). Steam was quit for the tests.
+
+**Remaining plan, in order** (every hardware step: owner present, safety confirmed right before, one action at a time,
+`--hw-check` window, restore, final compare):
+
+1. **DAW-1…DAW-4 (rest of session 3).** Owner decision first on the backend:
+   *A (recommended start)* Ardour 9's ALSA backend — no system change; PipeWire releases the card through device
+   reservation while Ardour runs (desktop audio on the CONNECT 2 pauses). *B* replace `jack2` with `pipewire-jack`
+   (package swap with sudo; Ardour and desktop audio side by side). Procedure: DAW-1 record the port names per backend;
+   DAW-2 four mono tracks (mic speech, instrument cable hum, loopback tone L/R via `tools/audio/`); DAW-3 mic → mono
+   track, loopback → one stereo track; DAW-4 stereo playback L/R (speakers muted, meters/loopback as evidence);
+   DAW-10 compare changed: none. Then DAW-5… (latency, xruns, long run) as listed in the parity section.
+2. **11A.4 channel naming / split inputs (opt-in).** Now that the channel order is verified: either name the four
+   capture channels in the 11C profile set (e.g. AUX0–3 instead of the surround labels) and/or offer optional virtual
+   sources "CONNECT 2 Microphone" (ch 1), "Instrument" (ch 2), "Loopback" (ch 3/4) via a PipeWire loopback module
+   example. Then LB-5 (how mono/stereo apps downmix the 4-channel source) with signal. Offline first, then one live test.
+3. **Session 4 — high-risk controls**, each with its own procedure and per-use confirmation: 48 V (dynamic mic or nothing
+   connected — note: 48 V was **on** at every baseline so far, i.e. the owner's mic needs it; a test turns it off and on
+   again), high-impedance headphones and high-volume speakers (outputs physically off, headphones unplugged), autogain
+   (measurement permission; device changes the gain itself — expected-change handling like bytes 25/26 may be needed).
+4. **Gain lock (byte 57) polarity.** Low risk now (11C means the desktop no longer writes FU 5): toggle in a session,
+   observe what changes (official app behaviour, FU 5 interrupts), restore.
+5. **Research items (offline RE before any write):** Denoise with its noise-floor measurement (triggers 6/7/8),
+   mix-to-speakers `OutputSource` value set (byte 23), mobile/macOS streaming, custom-button value↔function map
+   (2 and 12 known), native volume mapping (byte 59).
+6. **Small GUI items:** a fine adjustment for faders (e.g. 0.1 dB with a modifier) so off-grid device values can be
+   restored exactly; show "set by the device" bytes in `--hw-check` output (done) and in diagnostics.
+7. **Obsolete / closed:** GAIN-1 steps 3–5 (FU 5 volume requests) — with 11C nothing writes FU 5 any more; kept as
+   history in `docs/PHASE10E_GAIN_CONTROL_PATH.md`.
+8. **Still open, owner decisions:** login-screen WirePlumber rule live test (postponed); GitHub `refs/pull/1..3` privacy
+   blocker (first name in 18 commits); no merge to `main`, no tag, no release, repo stays private. The background
+   service picks up the new binary at the next login.
+
 ### Phase 11B session 1 — low-risk settings via the GUI (procedure)
 
 Owner present; speakers physically off or fully down, headphones off the head, nothing on the instrument input,

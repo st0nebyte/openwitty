@@ -115,6 +115,24 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 59 | u8 | Main `MasterSliderMap` | `NativeVolumeControlMapping` enum | type name matches |
 | 67 | u8 | Main `MobileStreaming` | bool (routing change) | ordered match |
 
+**Hardware observations, Phase 11B (2026-10-27/28, GUI writes verified by read-back) [V-hw]:**
+
+| Byte(s) | Observation |
+|---|---|
+| 2 / 12 | mic / instrument mute: the **only** gate for capture ch 1 / ch 2 (muted = exact digital zero; UAC2 FU 5 mute has no audio effect) |
+| 3, 4, 6, 9 / 13, 14, 15, 18 | low-cut, Clipguard, preamp (0/1/2, 2 = Vivid), Comp: device accepts and reports each value |
+| 19 | loopback mute: muted = capture ch 3/4 exact zero; unmuted = computer playback at unity gain (independent of output volumes) |
+| 20–21, 22, 27–28, 29 | speaker / headphone volume (Q8.8 dB, any value incl. off-grid e.g. −32.398 dB from the device knob) and mutes |
+| **25** | **device-maintained**: set by the device to the Dim value (0↔1) whenever Dim (32) changes; OpenWitty never edits it |
+| **26** | **device-maintained**: set by the device to the Mono value whenever Mono (33) changes |
+| 34 | monitoring source: 0 instrument only, 1 microphone only, 2 both |
+| 35–36 | mix: byte 36 = −(value) in whole steps (−30 → 30), byte 35 stayed 0 |
+| 38–52 | LED colours: Icons = channel icons of unmuted channels, Mute = icons of muted channels, Parameter = gain/volume display of the selected channel, Metering = level meter, Gain reduction = its meter part |
+| 53 | custom button: value 2 = "Toggle mute: hp + mic/spkr" (official label), 12 = another function |
+| 57 | was 1 on the owner's device (GUI label "gain lock"); polarity of `ExternalGainControl` not verified |
+
+Capture channel order (LB-1/LB-2): ch 1 microphone, ch 2 instrument, ch 3 loopback L, ch 4 loopback R; no crosstalk.
+
 "ordered match": identifiers and lambda triplets inside the `Main` group are
 paired by creation order; the enum type names (`OutputSource`,
 `NativeVolumeControlMapping`) and the guide corroborate but do not prove
