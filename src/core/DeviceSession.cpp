@@ -272,7 +272,18 @@ WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
     }
     const SettingsMessage before = *current_;
     const SettingsMessage target = *pending_;
-    const auto expected = diffOffsets(before, target);
+    auto expected = diffOffsets(before, target);
+    // Bytes the device updates itself in response to this write (e.g. byte 25 after Dim): accepted as changed,
+    // and not required to match the request.
+    std::vector<std::size_t> followers;
+    for (auto o : expected)
+        for (auto f : deviceFollowerOffsets(o)) followers.push_back(f);
+    expected.insert(expected.end(), followers.begin(), followers.end());
+    auto converged = [&] {
+        for (auto o : diffOffsets(*current_, target))
+            if (std::find(followers.begin(), followers.end(), o) == followers.end()) return false;
+        return true;
+    };
 
     r.state = WriteState::Submitted;
     const std::uint64_t attemptsBefore = settingsWriteAttempts_;
@@ -291,7 +302,7 @@ WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
     }
     auto bad = unexpectedOffsets(before, *current_, expected);
     if (!bad.empty()) { r.state = WriteState::Ambiguous; r.unexpectedOffsets = bad; return r; }
-    if (diffOffsets(*current_, target).empty()) { r.state = WriteState::Verified; return r; }
+    if (converged()) { r.state = WriteState::Verified; return r; }
 
     // Not yet converged: bounded, read-only polling. The SET is never resent.
     r.state = WriteState::AwaitingConvergence;
@@ -310,7 +321,7 @@ WriteResult DeviceSession::commitAndVerify(PollPolicy pp) {
         }
         bad = unexpectedOffsets(before, *current_, expected);
         if (!bad.empty()) { r.state = WriteState::Ambiguous; r.unexpectedOffsets = bad; return r; }
-        if (diffOffsets(*current_, target).empty()) { r.state = WriteState::Verified; return r; }
+        if (converged()) { r.state = WriteState::Verified; return r; }
     }
     r.state = WriteState::VerificationTimedOut;
     return r;

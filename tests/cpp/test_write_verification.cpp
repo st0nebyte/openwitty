@@ -213,3 +213,27 @@ TEST(WriteVerification, StateNamesAreAllDistinctAndNonEmpty) {
     std::sort(names.begin(), names.end());
     EXPECT_EQ(std::adjacent_find(names.begin(), names.end()), names.end());   // all distinct
 }
+
+// HW 11B session 1: the device sets byte 25 to the Dim value itself. A Dim write accepts that change; the same
+// byte change during any other write is still treated as unexpected.
+TEST(WriteVerification, DimWriteAcceptsTheDevicesOwnDimStateByte) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->injectExternalSettingsChange(1, settings_off::kSpeakerDimState, 1);
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setDim(true); }).ok());
+    auto r = f.session->commitAndVerify(instantPolicy(5));
+    EXPECT_EQ(r.state, WriteState::Verified);
+    EXPECT_TRUE(r.unexpectedOffsets.empty());
+    EXPECT_EQ(f.mock->writeLog().size(), 1u);
+}
+
+TEST(WriteVerification, DimStateByteChangingDuringAnotherWriteIsStillUnexpected) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->injectExternalSettingsChange(1, settings_off::kSpeakerDimState, 1);
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setMono(true); }).ok());
+    auto r = f.session->commitAndVerify(instantPolicy(5));
+    EXPECT_EQ(r.state, WriteState::Ambiguous);
+    ASSERT_EQ(r.unexpectedOffsets.size(), 1u);
+    EXPECT_EQ(r.unexpectedOffsets[0], settings_off::kSpeakerDimState);
+}

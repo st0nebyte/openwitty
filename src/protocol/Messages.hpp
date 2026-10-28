@@ -2,6 +2,7 @@
 // setters edit in place so reserved/unknown bytes survive read-modify-write.
 #pragma once
 #include <optional>
+#include <vector>
 
 #include "Types.hpp"
 
@@ -79,6 +80,9 @@ inline constexpr std::size_t kHeadphoneMute = 29;
 inline constexpr std::size_t kHighImpedanceHeadphone = 31;  // bool
 inline constexpr std::size_t kDim = 32;
 inline constexpr std::size_t kMono = 33;
+// Device-maintained: the device sets it to the Dim value itself (HW 11B session 1, 2026-10-28: Dim 0->1 and
+// 1->0 each changed byte 25 the same way, nothing else). OpenWitty never edits it.
+inline constexpr std::size_t kSpeakerDimState = 25;
 inline constexpr std::size_t kMonitorSource = 34;      // 0 instrument, 1 microphone, 2 both
 inline constexpr std::size_t kInputPlaybackMix = 35;   // i16 Q8.8, stored sign-inverted
 inline constexpr std::size_t kLedBrightness = 37;      // 0..100
@@ -93,6 +97,13 @@ inline constexpr std::size_t kExternalGainLock = 57;   // bool (ExternalGainCont
 inline constexpr std::size_t kNativeVolumeMapping = 59;// enum (MasterSliderMap)
 inline constexpr std::size_t kMobileStreaming = 67;    // bool
 }  // namespace settings_off
+
+// Bytes the device itself changes as a consequence of a write to `written` (observed on hardware). A write
+// verification accepts a change of these bytes only when their parent byte was part of the write.
+inline std::vector<std::size_t> deviceFollowerOffsets(std::size_t written) {
+    if (written == settings_off::kDim) return {settings_off::kSpeakerDimState};
+    return {};
+}
 
 inline constexpr double kGainMinDb = 0.0;
 inline constexpr double kGainMaxDb = 85.0;   // device-level setter clamp 0x5500 (binary)

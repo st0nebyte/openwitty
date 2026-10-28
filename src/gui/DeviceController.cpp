@@ -1096,8 +1096,12 @@ void DeviceWorker::finishRealWrite(const QString& key, const WriteResult& r) {
 
 void DeviceWorker::hwNoteWritten(const QString& key) {
     if (const auto* f = controlFootprint(key.toStdString()))
-        for (auto off : f->settingsOffsets)
-            if (std::find(hwExpected_.begin(), hwExpected_.end(), off) == hwExpected_.end()) hwExpected_.push_back(off);
+        for (auto off : f->settingsOffsets) {
+            std::vector<std::size_t> offs{off};
+            for (auto d : deviceFollowerOffsets(off)) offs.push_back(d);
+            for (auto o : offs)
+                if (std::find(hwExpected_.begin(), hwExpected_.end(), o) == hwExpected_.end()) hwExpected_.push_back(o);
+        }
 }
 
 void DeviceWorker::hwCheckLog(const QString& line) {
