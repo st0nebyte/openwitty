@@ -247,6 +247,15 @@ input route (software mute/volume, `route.hw-mute`/`hw-volume` false); no FU 5 w
 5. Abort: speaker level or any vendor byte changes, profile changes, any FU 5 write, any error. Rollback: delete the
    three files, restart WirePlumber, verify the old route (`analog-input-mic`) is back.
 
+**11C-1 result (2026-10-28 23:19–23:21, owner present): PASS.** After installing the three files and one WirePlumber
+restart: profile set `openwitty-connect2.conf` in use, profile name unchanged, output route `analog-output` unchanged
+(hardware mute/volume, 0.13335, speaker −17.5 dB), input route `openwitty-connect2-input` with `route.hw-mute=false`,
+`route.hw-volume=false`, unmuted at 1.0; **no ALSA control event** during the restart or the test (nothing written to
+FU 5). Function: device mic unmuted from the GUI, owner counting; `wpctl set-mute <source> 1` at 23:20:17.4 → all four
+channels exact zero until `wpctl set-mute <source> 0` at 23:20:25.4 → speech again; device mic muted; final vendor
+compare changed: none. The files stay installed on the owner's system. Settings ▸ Desktop integration detects them
+(warning only when missing); install steps in docs/INSTALLATION.md.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real

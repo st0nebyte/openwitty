@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Desktop input mute that really mutes: optional per-device ALSA profile + WirePlumber rule (software input
+  mute/volume for the CONNECT 2), detected in Settings ▸ Desktop integration (Phase 11C, hardware-verified).
+- Hardware-verified (Phase 11B): all low-risk settings, outputs, loopback and input channel identity via the GUI.
 
 - Qt 6 / QML application for the CONNECT 2 with a simulated device (`openwitty --mock`, always labelled).
 - Live, read-only view of the real device: input gain and mute, speaker/headphone volume and mute, monitoring

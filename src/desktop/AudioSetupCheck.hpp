@@ -22,6 +22,11 @@ struct AudioSetupStatus {
 bool modprobeTextConfiguresQuirk(const std::string& text);
 // True if the module parameter value (as in /sys/module/snd_usb_audio/parameters/quirk_flags) carries it.
 bool quirkFlagsParamActive(const std::string& value);
+// Phase 11C: OpenWitty's software input mute/volume for the CONNECT 2 is installed in the user's config directory
+// (`configHome` = $XDG_CONFIG_HOME or ~/.config): the WirePlumber rule plus the profile set and capture path it needs.
+bool softwareInputMuteConfigured(const std::string& configHome);
+// $XDG_CONFIG_HOME if absolute, else $HOME/.config; empty if neither is usable.
+std::string userConfigHome();
 // Plain-language findings, most important first. Empty = everything needed is in place.
 std::vector<std::string> audioSetupFindings(const AudioSetupStatus& s);
 

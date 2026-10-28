@@ -37,6 +37,7 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(bool volumeControl READ volumeControl NOTIFY changed)
     Q_PROPERTY(bool quirkConfigured READ quirkConfigured NOTIFY changed)
     Q_PROPERTY(bool quirkActive READ quirkActive NOTIFY changed)
+    Q_PROPERTY(bool softwareInputMute READ softwareInputMute NOTIFY changed)   // Phase 11C files installed
     Q_PROPERTY(QStringList findings READ findings NOTIFY changed)
     Q_PROPERTY(QString quirkInstructions READ quirkInstructions CONSTANT)
     // Optional system tray icon (openwitty-tray): installed at all, and started at login (XDG autostart).
@@ -76,6 +77,7 @@ public:
     bool volumeControl() const { return volumeControl_; }
     bool quirkConfigured() const { return quirkConfigured_; }
     bool quirkActive() const { return quirkActive_; }
+    bool softwareInputMute() const { return softwareInputMute_; }
     QStringList findings() const { return findings_; }
     QString quirkInstructions() const;
     bool trayInstalled() const;
@@ -126,5 +128,6 @@ private:
     QString lastError_;
     bool setupAvailable_{false}, cardFound_{false}, mixerLoads_{false}, volumeControl_{false};
     bool quirkConfigured_{false}, quirkActive_{false};
+    bool softwareInputMute_{false};
     QStringList findings_;
 };

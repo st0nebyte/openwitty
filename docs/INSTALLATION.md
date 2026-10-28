@@ -176,6 +176,29 @@ device is affected and your own session never reads that file.
 4. Undo: `sudo rm "$GHOME/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf"`; the
    next login screen manages the CONNECT 2 again. (Directories created in step 3 can stay; they are empty.)
 
+### Desktop microphone mute that really mutes (recommended)
+
+Verified on hardware (2026-10-28): without this, **muting the CONNECT 2 input in the desktop does not silence it** —
+the device ignores the standard USB mute for its audio, reports "muted" by itself, and apps keep hearing the
+microphone and instrument whenever they are unmuted on the device. The fix gives the CONNECT 2 its own small ALSA
+profile in which PipeWire mutes and scales the input in software (output, speaker volume and knob sync unchanged;
+other devices unaffected). It also stops the desktop from sending its saved input volume to the device.
+
+```sh
+ex=~/.local/share/doc/openwitty/examples     # package install: /usr/share/doc/openwitty/examples
+mkdir -p ~/.config/alsa-card-profile/mixer/profile-sets ~/.config/alsa-card-profile/mixer/paths \
+         ~/.config/wireplumber/wireplumber.conf.d
+cp $ex/alsa-card-profile/profile-sets/openwitty-connect2.conf ~/.config/alsa-card-profile/mixer/profile-sets/
+cp $ex/alsa-card-profile/paths/openwitty-connect2-input.conf  ~/.config/alsa-card-profile/mixer/paths/
+cp $ex/52-openwitty-connect2-input.conf ~/.config/wireplumber/wireplumber.conf.d/
+systemctl --user restart wireplumber
+```
+
+Afterwards the desktop shows the input as a normal, unmuted microphone at 100 %; desktop mute and the input slider
+act on what apps receive (all four channels, loopback included). The device's own MUTE stays separate and still
+silences the input at the source. OpenWitty's Settings ▸ Desktop integration shows whether it is installed.
+Undo: delete the three files and restart WirePlumber.
+
 ### Show the volume knob in the desktop volume
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move

@@ -4,6 +4,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <filesystem>
+#include <fstream>
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -2580,9 +2582,16 @@ TEST(Controls11B, OutputFadersShowTheirValueInDb) {
     EXPECT_EQ(label->property("text").toString(), QString::number(r.c->values().value("spk.volume").toDouble(), 'f', 1));
 }
 
-// Phase 11B LB-1: the desktop input mute does not silence the CONNECT 2; the desktop integration page says so.
+// Phase 11B LB-1 / 11C: the desktop page warns that the desktop input mute does not silence the CONNECT 2, unless
+// OpenWitty's software input mute is installed.
 TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     app();
+    namespace fs = std::filesystem;
+    const fs::path h = fs::temp_directory_path() / ("ow-gui-11c-" + std::to_string(QCoreApplication::applicationPid()));
+    fs::remove_all(h);
+    fs::create_directories(h);
+    const QByteArray oldXdg = qgetenv("XDG_CONFIG_HOME");
+    qputenv("XDG_CONFIG_HOME", QByteArray::fromStdString(h.string()));
     RealLike r(lewitt::guiWritePolicy(false, false, false));
     MainView v(*r.c);
     v.root->setProperty("showSettings", true);
@@ -2592,4 +2601,16 @@ TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     ASSERT_TRUE(w);
     EXPECT_TRUE(w->isVisible());
     EXPECT_TRUE(w->property("text").toString().contains("does not mute the CONNECT 2"));
+    for (const char* f : {"wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf",
+                          "alsa-card-profile/mixer/profile-sets/openwitty-connect2.conf",
+                          "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf"}) {
+        fs::create_directories((h / f).parent_path());
+        std::ofstream(h / f) << "x";
+    }
+    fakeIntegration()->refresh();
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    EXPECT_TRUE(w->property("text").toString().contains("software mute installed"));
+    if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
+    fakeIntegration()->refresh();
+    fs::remove_all(h);
 }

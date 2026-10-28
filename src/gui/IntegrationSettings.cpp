@@ -83,6 +83,7 @@ bool IntegrationSettings::setTrayAutostart(bool on) {
 }
 
 void IntegrationSettings::refreshSetup() {
+    softwareInputMute_ = softwareInputMuteConfigured(userConfigHome());
     const auto probed = probe_();
     setupAvailable_ = probed.has_value();
     if (!probed) return;
