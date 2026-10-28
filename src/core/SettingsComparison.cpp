@@ -31,6 +31,7 @@ std::string settingsFieldName(std::size_t off) {
         {kSpeakerMute, "speaker mute"}, {kMixToSpeakers, "mix to speakers"}, {kHighVolumeSpeaker, "high-volume speaker"},
         {kHeadphoneVolume, "headphone volume"}, {kHeadphoneVolume + 1, "headphone volume"},
         {kHeadphoneMute, "headphone mute"}, {kHighImpedanceHeadphone, "high-impedance headphone"}, {kDim, "dim"}, {kSpeakerDimState, "speaker dim state (set by the device)"},
+        {kSpeakerMonoState, "speaker mono state (set by the device)"},
         {kMono, "mono"}, {kMonitorSource, "monitoring source"}, {kInputPlaybackMix, "monitoring mix"},
         {kInputPlaybackMix + 1, "monitoring mix"}, {kLedBrightness, "LED brightness"},
         {kCustomButton, "custom button"}, {kSelectedChannel, "selected channel"},

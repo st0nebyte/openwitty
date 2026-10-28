@@ -237,3 +237,13 @@ TEST(WriteVerification, DimStateByteChangingDuringAnotherWriteIsStillUnexpected)
     ASSERT_EQ(r.unexpectedOffsets.size(), 1u);
     EXPECT_EQ(r.unexpectedOffsets[0], settings_off::kSpeakerDimState);
 }
+
+TEST(WriteVerification, MonoWriteAcceptsTheDevicesOwnMonoStateByte) {
+    Fixture f;
+    ASSERT_TRUE(f.session->connect().ok());
+    f.mock->injectExternalSettingsChange(1, settings_off::kSpeakerMonoState, 1);
+    ASSERT_TRUE(f.session->edit([](SettingsMessage& s) { return s.setMono(true); }).ok());
+    auto r = f.session->commitAndVerify(instantPolicy(5));
+    EXPECT_EQ(r.state, WriteState::Verified);
+    EXPECT_TRUE(r.unexpectedOffsets.empty());
+}

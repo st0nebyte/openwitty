@@ -83,6 +83,8 @@ inline constexpr std::size_t kMono = 33;
 // Device-maintained: the device sets it to the Dim value itself (HW 11B session 1, 2026-10-28: Dim 0->1 and
 // 1->0 each changed byte 25 the same way, nothing else). OpenWitty never edits it.
 inline constexpr std::size_t kSpeakerDimState = 25;
+// Device-maintained in the same way for Mono (HW 11B session 1: Mono 0->1 changed byte 26 0->1, nothing else).
+inline constexpr std::size_t kSpeakerMonoState = 26;
 inline constexpr std::size_t kMonitorSource = 34;      // 0 instrument, 1 microphone, 2 both
 inline constexpr std::size_t kInputPlaybackMix = 35;   // i16 Q8.8, stored sign-inverted
 inline constexpr std::size_t kLedBrightness = 37;      // 0..100
@@ -102,6 +104,7 @@ inline constexpr std::size_t kMobileStreaming = 67;    // bool
 // verification accepts a change of these bytes only when their parent byte was part of the write.
 inline std::vector<std::size_t> deviceFollowerOffsets(std::size_t written) {
     if (written == settings_off::kDim) return {settings_off::kSpeakerDimState};
+    if (written == settings_off::kMono) return {settings_off::kSpeakerMonoState};
     return {};
 }
 
