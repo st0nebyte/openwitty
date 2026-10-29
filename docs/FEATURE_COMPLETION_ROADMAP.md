@@ -141,7 +141,7 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    DAW-2 four mono tracks (mic speech, instrument cable hum, loopback tone L/R via `tools/audio/`); DAW-3 mic → mono
    track, loopback → one stereo track; DAW-4 stereo playback L/R (speakers muted, meters/loopback as evidence);
    DAW-10 compare changed: none. Then DAW-5… (latency, xruns, long run) as listed in the parity section.
-2. **11A.4 channel naming / split inputs (opt-in) — implemented offline 2026-10-29, live test 11A.4-1 pending.**
+2. **11A.4 channel naming / split inputs (opt-in) — done 2026-10-29, live test 11A.4-1 PASS (below).**
    Done: `src/desktop/SplitSources` (config for three loopback-module sources: Microphone ← FL/ch 1, Instrument ←
    FR/ch 2, Loopback ← RL RR/ch 3–4; `node.passive`; node name validated), Settings ▸ Desktop integration switch +
    confirmed "Restart desktop audio", state off/on/stale/unavailable; the 11C WirePlumber rule names the 4-channel input
@@ -330,6 +330,23 @@ Ardour exited (default sink/source kept). With a desktop stream playing on the C
 open it — use option B (`pipewire-jack`) for side-by-side use; not tested yet. A first run missed the mic/instrument
 window (instructions reached the owner after the 60 s recording); repeated with 180 s. Final vendor compare:
 changed: none; all permissions off.
+
+**11A.4-1 result (2026-10-29 20:06–20:21, owner present, usual safety): PASS.** Updated 52 rule copied; the owner
+switched *Separate inputs for apps* on and used *Restart desktop audio* (GUI path, confirmation dialog). PipeWire
+created `openwitty_connect2_microphone` (MONO ← FL), `_instrument` (MONO ← FR) and `_loopback` (FL FR ← RL RR); the main
+input is described "CONNECT 2 (1 Mic, 2 Instrument, 3+4 Loopback)". One recording per virtual source (`pw-record`):
+
+| Time | Event | Microphone | Instrument | Loopback L / R |
+|---|---|---|---|---|
+| 20:20:22–29 | device mic unmuted, counting | speech, peak −13 dBFS | exact zero | exact zero |
+| 20:20:29–35 | device instrument unmuted | exact zero | cable hum | exact zero |
+| 20:20:36–47 | desktop mute of the main input, tones playing | exact zero | exact zero | exact zero |
+| 20:20:49–59 | desktop unmuted, tones | exact zero | exact zero | L 1 kHz, then R 2 kHz, peak −30.3 dBFS |
+
+Cross-talk ≤ −134 dBFS. The first attempt used a fixed 200 s recording that ended before the owner's actions (messages
+reach the owner with a delay — recordings in live tests now run until the scripted sequence ends). Final vendor compare
+changed: none; permissions off. The separate inputs stay installed on the owner's system
+(`~/.config/pipewire/pipewire.conf.d/53-openwitty-connect2-split.conf`).
 
 ## Feature matrix
 
