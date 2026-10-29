@@ -133,7 +133,8 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
 **Remaining plan, in order** (every hardware step: owner present, safety confirmed right before, one action at a time,
 `--hw-check` window, restore, final compare):
 
-1. **DAW-1…DAW-4 (rest of session 3).** Owner decision first on the backend:
+1. **DAW-1…DAW-4 (rest of session 3) — done 2026-10-29 with option A (PASS, below).** Remaining: option B
+   (`pipewire-jack`, owner decision) and DAW-5… (latency, xruns, long run). Original plan:
    *A (recommended start)* Ardour 9's ALSA backend — no system change; PipeWire releases the card through device
    reservation while Ardour runs (desktop audio on the CONNECT 2 pauses). *B* replace `jack2` with `pipewire-jack`
    (package swap with sudo; Ardour and desktop audio side by side). Procedure: DAW-1 record the port names per backend;
@@ -300,6 +301,26 @@ FU 5). Function: device mic unmuted from the GUI, owner counting; `wpctl set-mut
 channels exact zero until `wpctl set-mute <source> 0` at 23:20:25.4 → speech again; device mic muted; final vendor
 compare changed: none. The files stay installed on the owner's system. Settings ▸ Desktop integration detects them
 (warning only when missing); install steps in docs/INSTALLATION.md.
+
+**Session 3 part 3 — DAW-1…DAW-4 with Ardour 9.8, ALSA backend (2026-10-29, owner present, speakers muted, headphones
+muted/off): PASS.** Headless Ardour session (`tools/audio/daw_ardour_test.sh`, `daw_ardour.lua`): 4 mono tracks on
+capture 1–4, one stereo track on capture 3/4, two `SinGen` buses (1 kHz → playback 1 only, 2 kHz → playback 2 only,
+−30 dBFS, not via master); device loopback unmuted from the GUI; the owner unmuted/muted mic and instrument during a
+180 s recording; analysis `tools/audio/wavinfo.py`.
+
+| Test | Result |
+|---|---|
+| DAW-1 discovery | ALSA device "CONNECT 2"; ports `system:capture_1…4` ("Main In 1…4"), `system:playback_1/2` ("Out Left", "Out Right"); 48 kHz, buffer 1024 |
+| DAW-2 four tracks | Mic: speech only while unmuted (9.5–15 s, peak −15.7 dBFS); Instrument: cable hum only while unmuted (15–21 s); tones in Mic/Instrument ≤ −141 dBFS |
+| DAW-3 assignment | stereo track L = capture 3 (1 kHz), R = capture 4 (2 kHz); L/R kept |
+| DAW-4 playback | 1 kHz only on loopback L, 2 kHz only on loopback R, both −30.0 dBFS peak (other tone ≤ −237 dBFS) |
+
+Notes: `ardour-request-device` could not take the device reservation from PipeWire ("Device or resource busy"), but the
+device was idle (no PipeWire stream), so Ardour opened it directly; PipeWire re-created the CONNECT 2 nodes after
+Ardour exited (default sink/source kept). With a desktop stream playing on the CONNECT 2 the ALSA backend would fail to
+open it — use option B (`pipewire-jack`) for side-by-side use; not tested yet. A first run missed the mic/instrument
+window (instructions reached the owner after the 60 s recording); repeated with 180 s. Final vendor compare:
+changed: none; all permissions off.
 
 ## Feature matrix
 
