@@ -129,7 +129,8 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 35–36 | mix: byte 36 = −(value) in whole steps (−30 → 30), byte 35 stayed 0 |
 | 38–52 | LED colours: Icons = channel icons of unmuted channels, Mute = icons of muted channels, Parameter = gain/volume display of the selected channel, Metering = level meter, Gain reduction = its meter part |
 | 53 | custom button: value 2 = "Toggle mute: hp + mic/spkr" (official label), 12 = another function |
-| 57 | was 1 on the owner's device (GUI label "gain lock"); polarity of `ExternalGainControl` not verified |
+| 57 | was 1 on the owner's device (GUI label "gain lock"); each toggle makes the device report UAC2 FU 5 mute changes (ch 1, ch 2); locked ⇒ FU 5 reads muted — consistent with 1 = host control locked out (unlocked value not sampled) |
+| 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes |
 
 Capture channel order (LB-1/LB-2): ch 1 microphone, ch 2 instrument, ch 3 loopback L, ch 4 loopback R; no crosstalk.
 
@@ -356,6 +357,9 @@ status bit `(@0x…4a0 & 2)` was never set (Connect 6/shared panel). Clip
 counters: `u16 @0x2E` (input 1) and `@0x30` (input 2), compared with the
 previous snapshot. Auto-gain result `u8 @0x02`/`@0x0B` = measured gain.
 Denoise measurement shares the same progress/result bytes.
+**[V-hw 2026-10-29]** Mic autogain on hardware: trigger 4 then 1; the device dropped the gain to 0, then set 39 dB while
+the owner spoke; progress reached 100 *before* the new gain appeared in the settings; the result byte decoded to **1**
+although the measurement succeeded — the 1 = failed / 2 = succeeded reading above is doubtful.
 
 ### Mode switching and measurement bracket (phase 5B, corrected scanners)  [V-bin mac+win, high]
 Earlier "not found" results for the macOS-streaming command were wrong: the

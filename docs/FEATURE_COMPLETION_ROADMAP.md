@@ -372,6 +372,20 @@ reach the owner with a delay — recordings in live tests now run until the scri
 changed: none; permissions off. The separate inputs stay installed on the owner's system
 (`~/.config/pipewire/pipewire.conf.d/53-openwitty-connect2-split.conf`).
 
+**Session 4 results (2026-10-29 21:30–22:00, owner present, speakers powered off, headphones unplugged): PASS.**
+
+| # | Control | Bytes (start → test → start) | Result / observation |
+|---|---|---|---|
+| 4a | Gain lock | 57: 1 → 0 → 1 | PASS. Each toggle made the device report UAC2 FU 5 mute changes for ch 1 and ch 2 (~0.5 s apart, ALSA `Mic Capture Switch` events); with the lock on FU 5 reads muted. Consistent with "lock on = the host's FU 5 control is locked out" (explains GAIN-1 step 2R); the unlocked FU 5 value was not sampled. No effect on the desktop (11C) |
+| 4b | High-impedance headphones | 31: 1 → 0 → 1 (was on) | PASS, no follower byte |
+| 4c | High-volume speakers | 24: 1 → 0 → 1 (was on) | PASS, no follower byte |
+| 4d | 48 V | 5: 1 → 0 → 1 (dialog on enable) | PASS |
+| 4e | Mic autogain | triggers 4, 1, then 5 after progress 100 | PASS. The device dropped the gain to 0, listened while the owner spoke, set **39 dB**; the gain change appeared in the settings shortly **after** progress 100. **Result code read 1** although the measurement succeeded → the decoded meaning (1 = failed) is doubtful; the GUI must not report failure from it. Gain restored to 27 dB with the knob (one decrease) |
+
+Final compare changed: none; all permissions off. Open question from the owner: the rear-panel 48 V button — same
+setting as byte 5 or a hardware master switch? Planned read-only check: owner presses it off/on while OpenWitty
+(no permissions) watches byte 5.
+
 ## Feature matrix
 
 Columns: **Function** · **QML → backend** (`setValue`/`trigger` key) · **Field / API** · **Write policy today (real
