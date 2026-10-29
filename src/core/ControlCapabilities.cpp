@@ -52,6 +52,8 @@ const std::map<std::string, ControlFootprint, std::less<>>& table() {
         m["autogain1"] = {{}, measure(Trigger::AutoGainMicrophone)};
         m["autogain2"] = {{}, measure(Trigger::AutoGainInstrument)};
         m["autogainBoth"] = {{}, measure(Trigger::AutoGainBoth)};
+        m["denoise1"] = {{}, measure(Trigger::DenoiseMeasureMicrophone)};
+        m["denoise2"] = {{}, measure(Trigger::DenoiseMeasureInstrument)};
         // The Autosetup wizard writes preamp, Clipguard, Denoise (both inputs), 48 V and runs an autogain.
         ControlFootprint a;
         for (const char* k : {"in1.preamp", "in2.preamp", "in1.clipguard", "in2.clipguard", "in1.denoise",

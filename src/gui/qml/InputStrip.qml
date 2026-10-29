@@ -79,7 +79,10 @@ Item {
         ToggleButton { width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
                        tip: root.dsp ? "Good for live streaming" + root.dspTip : "Choose lower sample rate to enable this function"
                        active: root.v("denoise", false)
-                       onClicked: device.setValue(root.p + "denoise", !active) }
+                       // Phase 11B session 5: switching Denoise on can include the device's noise measurement (as the
+                       // official app does) when measurements are authorized; switching off is always a plain write.
+                       onClicked: { if (!active && !device.simulated && root.can("denoise" + root.index)) denoiseConfirm.visible = true;
+                                    else device.setValue(root.p + "denoise", !active); } }
         ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.can(root.p + "compress"); unavailable: !root.dsp
                        tip: root.dsp ? "Consistent level, louder signal, finished sound" + root.dspTip : "Choose lower sample rate to enable this function"
                        active: root.v("compress", false)
@@ -88,6 +91,25 @@ Item {
     ToggleButton { objectName: "inputMute" + root.index; x: 58; y: 240; width: 64; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
                    enabled: root.can(root.p + "mute"); active: root.v("mute", false)
                    onClicked: device.setValue(root.p + "mute", !active) }
+
+    Rectangle {   // Denoise: measure the background noise first (every time, real device)
+        id: denoiseConfirm
+        objectName: "denoiseConfirm" + root.index
+        visible: false; z: 20; anchors.centerIn: parent; width: 160; height: 132; radius: 5
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 6
+            Text { width: 144; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
+                   color: Theme.text; font.pixelSize: 10
+                   text: "Denoise measures the background noise: stay quiet for a few seconds after Measure." }
+            ToggleButton { objectName: "denoiseMeasure" + root.index; width: 144; text: "Measure"; active: true
+                           activeColor: Theme.warn
+                           onClicked: { denoiseConfirm.visible = false; device.trigger("denoise" + root.index); } }
+            Row { spacing: 6; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { objectName: "denoiseOnOnly" + root.index; width: 69; text: "Only switch on"
+                               onClicked: { denoiseConfirm.visible = false; device.setValue(root.p + "denoise", true); } }
+                ToggleButton { width: 69; text: "Cancel"; onClicked: denoiseConfirm.visible = false } }
+        }
+    }
 
     Rectangle {   // autogain confirmation (every measurement on the real device)
         id: autogainConfirm

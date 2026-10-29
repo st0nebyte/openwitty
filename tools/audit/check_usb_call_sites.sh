@@ -77,16 +77,17 @@ if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/Dev
 else echo "ok   GUI writes: one site, only with a confirmed permission, policy = union of the confirmed fields"; fi
 # Phase 11A: guiWritePolicy = the union of the enabled permission groups (core/UserConfig devicePermissions(), all
 # default off); never routing or persistent changes; the groups never include mix-to-speakers (23), mobile streaming (67)
-# or undecoded bytes; triggers only via permissionTriggers(), which may list only measurement-session/autogain words.
+# or undecoded bytes; triggers only via permissionTriggers(), which may list only measurement-session, autogain and the
+# two single-input Denoise measurement words (Phase 11B session 5; never "both", never mode/reset words).
 gwp=$(awk '/^WritePolicy guiWritePolicy\(const UserConfig& c\)/,/^}/' src/core/OutputControl.cpp)
 pof=$(awk '/^std::vector<std::size_t> permissionOffsets/,/^}/' src/core/OutputControl.cpp)
 ptr=$(awk '/^std::vector<Trigger> permissionTriggers/,/^}/' src/core/OutputControl.cpp)
 if [ -n "$gwp" ] && printf '%s' "$gwp" | grep -q 'if (!(c.\*(perm.field))) continue;' \
    && ! grep -qE 'allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true' src/core/OutputControl.cpp \
    && [ -n "$pof" ] && ! printf '%s' "$pof" | grep -qE 'kMixToSpeakers|kMobileStreaming|kSelectedChannel|kNativeVolumeMapping|[^0-9](5[4-9]|6[0-9]|7[0-9])[^0-9]' \
-   && [ -n "$ptr" ] && ! printf '%s' "$ptr" | grep -qE 'Switch|Factory|ResetLed|Denoise' \
-   && [ "$(printf '%s' "$ptr" | grep -oE 'Trigger::[A-Za-z]+' | sort -u | tr '\n' ' ')" = "Trigger::AutoGainBoth Trigger::AutoGainInstrument Trigger::AutoGainMicrophone Trigger::BeginMeasurementSession Trigger::EndMeasurementSession " ]; then
-    echo "ok   guiWritePolicy = union of the enabled permission groups (no routing/persistent changes, no byte 23/67, autogain triggers only)"
+   && [ -n "$ptr" ] && ! printf '%s' "$ptr" | grep -qE 'Switch|Factory|ResetLed|DenoiseMeasureBoth' \
+   && [ "$(printf '%s' "$ptr" | grep -oE 'Trigger::[A-Za-z]+' | sort -u | tr '\n' ' ')" = "Trigger::AutoGainBoth Trigger::AutoGainInstrument Trigger::AutoGainMicrophone Trigger::BeginMeasurementSession Trigger::DenoiseMeasureInstrument Trigger::DenoiseMeasureMicrophone Trigger::EndMeasurementSession " ]; then
+    echo "ok   guiWritePolicy = union of the enabled permission groups (no routing/persistent changes, no byte 23/67, autogain and single-input Denoise measurement triggers only)"
 else echo "FAIL guiWritePolicy scope changed"; fail=1; fi
 if grep -nE 'UsbTransport|DeviceSession|commit|stageOutput|writeDevice' src/gui/IntegrationSettings.cpp >/dev/null; then
     echo "FAIL IntegrationSettings must not touch the device"; fail=1

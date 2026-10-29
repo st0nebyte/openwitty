@@ -118,7 +118,8 @@ Status MockTransport::write(MessageId id, std::span<const std::uint8_t> data) {
     if (id == MessageId::Triggers) {
         auto cmd = static_cast<std::uint16_t>(data[0] | (data[1] << 8));
         triggerLog_.push_back(cmd);
-        if (cmd == 1 || cmd == 2 || cmd == 3) { agProgress_ = 0; status_[0x23] = 0x40; }
+        // autogain (1-3) and Denoise (6-8) measurements share the progress/result bytes
+        if (cmd == 1 || cmd == 2 || cmd == 3 || cmd == 6 || cmd == 7 || cmd == 8) { agProgress_ = 0; status_[0x23] = 0x40; }
         if (cmd == 0x104) mode_ = DeviceMode::MacOSStreaming;
         if (cmd == 0x105) mode_ = DeviceMode::Normal;
     }

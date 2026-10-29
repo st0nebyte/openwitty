@@ -81,9 +81,9 @@ Rectangle {
         {n: "outputModes", label: "Output modes (louder)",
          confirm: "OpenWitty will be able to switch high-volume speaker mode and high-impedance headphone mode; each "
                 + "switch-on asks again. Both can make the output much louder."},
-        {n: "measurements", label: "Autogain measurements",
-         confirm: "OpenWitty will be able to start the CONNECT 2's autogain measurement. The device then sets the input gain "
-                + "by itself. Keep speakers down and headphones off during a measurement."}]
+        {n: "measurements", label: "Autogain and Denoise measurements",
+         confirm: "OpenWitty will be able to start the CONNECT 2's autogain and Denoise measurements (each asks again). The "
+                + "device then sets the input gain or Denoise by itself. Keep speakers down and headphones off during a measurement."}]
 
     Text { x: 16; y: 12; text: "Settings"; color: Theme.text; font.pixelSize: 15 }
     ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; y: 10; width: 60; text: "Close"

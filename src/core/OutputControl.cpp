@@ -65,7 +65,8 @@ std::vector<std::size_t> permissionOffsets(const std::string& name) {
 std::vector<Trigger> permissionTriggers(const std::string& name) {
     if (name == "measurements")
         return {Trigger::BeginMeasurementSession, Trigger::AutoGainMicrophone, Trigger::AutoGainInstrument,
-                Trigger::AutoGainBoth, Trigger::EndMeasurementSession};
+                Trigger::AutoGainBoth, Trigger::DenoiseMeasureMicrophone, Trigger::DenoiseMeasureInstrument,
+                Trigger::EndMeasurementSession};
     return {};
 }
 

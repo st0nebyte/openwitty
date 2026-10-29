@@ -160,7 +160,8 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    (measurement permission; device changes the gain itself — expected-change handling like bytes 25/26 may be needed).
 4. **Gain lock (byte 57) polarity.** Low risk now (11C means the desktop no longer writes FU 5): toggle in a session,
    observe what changes (official app behaviour, FU 5 interrupts), restore.
-5. **Research items (offline RE before any write):** Denoise with its noise-floor measurement (triggers 6/7/8),
+5. **Research items (offline RE before any write):** Denoise measurement — *prepared as a hardware observation,
+   session 5 below* (no disassembler on this system; the bracket is known from the binary);
    mix-to-speakers `OutputSource` value set (byte 23), mobile/macOS streaming, custom-button value↔function map
    (2 and 12 known), native volume mapping (byte 59).
 6. **Small GUI items:** *done 2026-10-29:* Shift + wheel/drag moves the output faders in 0.1 dB steps (test
@@ -194,6 +195,25 @@ action after re-arming the permission, record it, teach OpenWitty offline, then 
 
 Not in session 4: instrument autogain (no real instrument; a cable hum is not a usable signal), Denoise measurement
 and Autosetup (need research first), mix-to-speakers, streaming modes.
+
+### Phase 11B session 5 — Denoise measurement (procedure, prepared 2026-10-29)
+
+Known (binary): Denoise uses the same bracket as autogain (word 4, then 6 mic / 7 instrument / 8 both, word 5 at
+completion) and the shared progress/result bytes 0x24/0x23. Unknown: whether the device switches the Denoise byte
+(7 / 16) on itself after the measurement, and what the official app writes around it. Prepared: the *measurements*
+permission now also allows words 6 and 7 (not 8; audit rule extended to exactly these); switching Denoise on in the GUI
+(real device, measurements authorized) opens a dialog **Measure / Only switch on / Cancel**; Measure sends 4 + 6 (or 7)
+with the 45 s timeout; `--hw-check` treats the Denoise byte of that input as expected to change. Tests
+`Measurement11B.DenoiseOnOffersTheMeasurement`, `Measurement11B.PolicyAllowsOnlySingleInputDenoiseWords`.
+
+| # | Action | Conditions | Observe | Restore |
+|---|---|---|---|---|
+| 5a | Mic Denoise → Measure | room quiet, owner silent ~10 s; mic unmuted only for the measurement; speakers off, headphones unplugged | trigger log, progress → 100, result code, whether byte 7 changes by itself and when | Denoise off (plain write) if it came on; mic muted |
+| 5b | (only if 5a left byte 7 at 0) Denoise → Only switch on | as 5a | byte 7 0 → 1 | off |
+| 5c | Instrument Denoise → Measure (open cable) | as 5a | same for byte 16 | as 5a |
+
+Audible effect of Denoise (noise reduction) is not judged here; a recording of the room noise with Denoise off/on
+(as LB-1) can follow.
 
 ### Phase 11B session 1 — low-risk settings via the GUI (procedure)
 

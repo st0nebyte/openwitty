@@ -56,7 +56,7 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
                         "set.customButton"}},
         {"phantom", {"in1.phantom"}},
         {"outputModes", {"set.highVolume", "set.highImpedance"}},
-        {"measurements", {"autogain1", "autogain2", "autogainBoth"}},
+        {"measurements", {"autogain1", "autogain2", "autogainBoth", "denoise1", "denoise2"}},
     };
     ASSERT_EQ(expected.size(), devicePermissions().size());
     for (const auto& p : devicePermissions())

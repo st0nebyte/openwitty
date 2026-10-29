@@ -57,7 +57,7 @@ const std::vector<DevicePermission>& devicePermissions() {
         {"outputModes", "output_modes_control", &UserConfig::outputModesControl,
          "high-volume speaker mode and high-impedance headphone mode (bytes 24, 31); each switch-on is confirmed again."},
         {"measurements", "measurement_control", &UserConfig::measurementControl,
-         "autogain measurements (the device then changes the input gain by itself)."},
+         "autogain and Denoise measurements (the device then changes the input gain or Denoise by itself)."},
     };
     return t;
 }

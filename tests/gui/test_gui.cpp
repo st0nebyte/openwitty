@@ -2766,3 +2766,54 @@ TEST(Controls11B, ShiftWheelGivesFineFaderSteps) {
     for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
     EXPECT_NEAR(r.c->values().value("hp.volume").toDouble(), -33.0, 0.01);
 }
+
+// Phase 11B session 5 preparation: switching Denoise on (real device, measurements authorized) offers the device's
+// noise measurement; Measure sends begin + word 6; the session ends after completion; switching off is a plain write.
+TEST(Measurement11B, DenoiseOnOffersTheMeasurement) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    cfg.processingControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    ASSERT_TRUE(r.can("denoise1"));
+    ASSERT_TRUE(r.can("in1.denoise"));
+    ASSERT_FALSE(r.c->values().value("in1.denoise").toBool());
+    MainView v(*r.c);
+    QQuickItem* btn = nullptr;
+    for (QQuickItem* it : v.root->findChildren<QQuickItem*>())
+        if (it->property("text").toString() == "Denoise" && it->isEnabled()) { btn = it; break; }
+    ASSERT_TRUE(btn);
+    const auto n0 = r.mock.triggers().size();
+    const int w0 = r.hw->writeCalls;
+    v.mouse(btn, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(btn, QEvent::MouseButtonRelease, 0.5, 0.5);
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.mock.triggers().size(), n0);
+    EXPECT_EQ(r.hw->writeCalls, w0) << "nothing sent before a choice";
+    QQuickItem* dlg = findItem(v.w->contentItem(), "denoiseConfirm1");
+    ASSERT_TRUE(dlg && dlg->isVisible());
+    QQuickItem* measure = findItem(v.w->contentItem(), "denoiseMeasure1");
+    ASSERT_TRUE(measure);
+    v.mouse(measure, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(measure, QEvent::MouseButtonRelease, 0.5, 0.5);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
+    auto t = r.mock.triggers();
+    ASSERT_GE(t.size(), n0 + 3);
+    EXPECT_EQ(t[n0], 4);
+    EXPECT_EQ(t[n0 + 1], 6);
+    EXPECT_EQ(t.back(), 5);
+}
+
+TEST(Measurement11B, PolicyAllowsOnlySingleInputDenoiseWords) {
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    const auto p = lewitt::guiWritePolicy(cfg);
+    auto has = [&](lewitt::Trigger t) { return std::find(p.hardwareTriggers.begin(), p.hardwareTriggers.end(), t) != p.hardwareTriggers.end(); };
+    EXPECT_TRUE(has(lewitt::Trigger::DenoiseMeasureMicrophone));
+    EXPECT_TRUE(has(lewitt::Trigger::DenoiseMeasureInstrument));
+    EXPECT_FALSE(has(lewitt::Trigger::DenoiseMeasureBoth));
+    EXPECT_FALSE(has(lewitt::Trigger::FactoryReset));
+    EXPECT_FALSE(has(lewitt::Trigger::SwitchToMacOSStreamingMode));
+    EXPECT_FALSE(has(lewitt::Trigger::ResetLedColors));
+    EXPECT_TRUE(lewitt::guiWritePolicy(lewitt::UserConfig{}).hardwareTriggers.empty());
+}

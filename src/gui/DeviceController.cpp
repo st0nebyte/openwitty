@@ -908,7 +908,8 @@ void DeviceWorker::trigger(const QString& name) {
     }
     static const QMap<QString, Trigger> map{
         {"autogain1", Trigger::AutoGainMicrophone}, {"autogain2", Trigger::AutoGainInstrument},
-        {"autogainBoth", Trigger::AutoGainBoth}};
+        {"autogainBoth", Trigger::AutoGainBoth}, {"denoise1", Trigger::DenoiseMeasureMicrophone},
+        {"denoise2", Trigger::DenoiseMeasureInstrument}};
     if (!map.contains(name)) return;
     // Same bracket the original uses: begin-session word, then the measurement word;
     // the end-session word is sent when the measurement finishes.
@@ -921,12 +922,18 @@ void DeviceWorker::trigger(const QString& name) {
     if (hwCheck_) {
         // The device sets the measured gain itself: those bytes are expected to change from here on.
         namespace o = settings_off;
+        // Autogain: the measured input's gain. Denoise measurement: that input's Denoise byte (whether the device sets
+        // it itself is what session 5 observes).
         std::vector<std::size_t> offs;
-        if (name != "autogain2") { offs.push_back(o::kGain[0]); offs.push_back(o::kGain[0] + 1); }
-        if (name != "autogain1") { offs.push_back(o::kGain[1]); offs.push_back(o::kGain[1] + 1); }
+        if (name == "denoise1") offs.push_back(o::kDenoise[0]);
+        else if (name == "denoise2") offs.push_back(o::kDenoise[1]);
+        else {
+            if (name != "autogain2") { offs.push_back(o::kGain[0]); offs.push_back(o::kGain[0] + 1); }
+            if (name != "autogain1") { offs.push_back(o::kGain[1]); offs.push_back(o::kGain[1] + 1); }
+        }
         for (auto off : offs)
             if (std::find(hwExpected_.begin(), hwExpected_.end(), off) == hwExpected_.end()) hwExpected_.push_back(off);
-        hwCheckLog(QString("trigger %1: %2").arg(name, s ? "begin + measurement sent; the device may now change the gain"
+        hwCheckLog(QString("trigger %1: %2").arg(name, s ? "begin + measurement sent; the device may now change its result bytes"
                                                       : "measurement word failed; end-session sent"));
     }
     publish();
