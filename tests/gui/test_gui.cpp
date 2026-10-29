@@ -2008,10 +2008,10 @@ struct MainView {
                       type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
         QGuiApplication::sendEvent(w, &e);
     }
-    void wheel(QQuickItem* it, int notches) {
+    void wheel(QQuickItem* it, int notches, Qt::KeyboardModifiers mods = Qt::NoModifier) {
         const QPointF scene = it->mapToScene(QPointF(it->width() / 2, it->height() / 2));
         QWheelEvent e(scene, w->mapToGlobal(scene.toPoint()), QPoint(), QPoint(0, notches > 0 ? 120 : -120),
-                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+                      Qt::NoButton, mods, Qt::NoScrollPhase, false);
         QGuiApplication::sendEvent(w, &e);
     }
 };
@@ -2731,4 +2731,38 @@ TEST(Measurement11B, AutogainButtonAsksBeforeEveryMeasurement) {
     v.mouse(start, QEvent::MouseButtonRelease, 0.5, 0.5);
     ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.mock.triggers().size() >= n0 + 2; }));
     EXPECT_FALSE(dlg->isVisible());
+}
+
+// Phase 11B session 2 follow-up: Shift + wheel moves a fader in 0.1 dB steps, so an off-grid value set with the device
+// knob (here -32.4 dB, bytes 154/223) can be restored exactly; one SET after the wheel rests.
+TEST(Controls11B, ShiftWheelGivesFineFaderSteps) {
+    app();
+    RealLike r(lewitt::guiWritePolicy(false, true, false));
+    {
+        auto m = lewitt::SettingsMessage::fromBytes(r.mock.settingsBytes()).value();
+        ASSERT_TRUE(m.setHeadphoneVolumeDb(-36.0).ok());
+        auto b = m.bytes();
+        r.mock.setSettingsBytes(lewitt::Bytes(b.begin(), b.end()));
+        ASSERT_TRUE(waitFor([&] { r.c->flush(); return std::fabs(r.c->values().value("hp.volume").toDouble() + 36.0) < 0.01; }));
+    }
+    MainView v(*r.c);
+    QQuickItem* fader = v.item("fader_hp");
+    ASSERT_TRUE(fader && fader->isEnabled());
+    const int w0 = r.hw->writeCalls;
+    for (int i = 0; i < 36; ++i) v.wheel(fader, +1, Qt::ShiftModifier);
+    QQuickItem* label = findItem(v.w->contentItem(), "faderValue_hp");
+    ASSERT_TRUE(label);
+    EXPECT_EQ(label->property("text").toString(), "-32.4");
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.hw->writeCalls > w0; }, 3000));
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.hw->writeCalls - w0, 1);
+    const auto b = r.mock.settingsBytes();
+    EXPECT_EQ(int(b[lewitt::settings_off::kHeadphoneVolume]), 154);
+    EXPECT_EQ(int(b[lewitt::settings_off::kHeadphoneVolume + 1]), 223);
+    // without Shift: 0.5 dB grid
+    const int w1 = r.hw->writeCalls;
+    v.wheel(fader, -1);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.hw->writeCalls > w1; }, 3000));
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_NEAR(r.c->values().value("hp.volume").toDouble(), -33.0, 0.01);
 }

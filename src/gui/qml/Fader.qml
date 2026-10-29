@@ -26,7 +26,8 @@ Item {
     implicitWidth: 20; implicitHeight: 187
     opacity: enabled ? 1 : 0.5
     readonly property real frac: (Math.max(from, Math.min(to, shownValue)) - from) / (to - from)
-    function clampStep(v) { return Math.round(Math.max(from, Math.min(to, v)) * 2) / 2; }
+    // 0.5 dB grid; with Shift held (wheel or drag) 0.1 dB, so device values set with the hardware knob can be matched.
+    function clampStep(v, fine) { var g = fine ? 10 : 2; return Math.round(Math.max(from, Math.min(to, v)) * g) / g; }
     function emitValue(v) { previewValue = v; if (!commitOnRelease) moved(v); }
     Timer { id: wheelTimer; interval: 400
             onTriggered: if (root.commitOnRelease && root.previewValue !== root.pressValue) root.commit(root.previewValue) }
@@ -40,26 +41,43 @@ Item {
         y: (1 - root.frac) * (root.height - height)
         Rectangle { width: parent.width - 6; height: 1; x: 3; anchors.verticalCenter: parent.verticalCenter; color: "#555" }
     }
-    property string tip: "Output volume"
+    property string tip: "Output volume (hold Shift for 0.1 dB steps)"
     MouseArea {
         id: ma
         anchors.fill: parent
         hoverEnabled: true
         onEntered: Hint.show(root.tip)
         onExited: Hint.clear()
+        property bool fine: false
+        property real fineStartY: 0
+        property real fineStartV: 0
         function setFrom(y) {
             var f = 1 - Math.max(0, Math.min(1, (y - handle.height / 2) / (root.height - handle.height)));
-            root.emitValue(root.clampStep(root.from + f * (root.to - root.from)));
+            root.emitValue(root.clampStep(root.from + f * (root.to - root.from), false));
         }
-        onPressed: (m) => { if (!wheelTimer.running) root.pressValue = root.value; setFrom(m.y); }
-        onPositionChanged: (m) => { if (pressed) setFrom(m.y); }
+        // Shift-drag: a fifth of the normal speed relative to the press point, 0.1 dB grid
+        function setFine(y) {
+            var dv = (fineStartY - y) / (root.height - handle.height) * (root.to - root.from) / 5;
+            root.emitValue(root.clampStep(fineStartV + dv, true));
+        }
+        onPressed: (m) => {
+            if (!wheelTimer.running) root.pressValue = root.value;
+            fine = (m.modifiers & Qt.ShiftModifier) !== 0;
+            if (fine) { fineStartY = m.y; fineStartV = wheelTimer.running ? root.previewValue : root.value; root.emitValue(fineStartV); }
+            else setFrom(m.y);
+        }
+        onPositionChanged: (m) => { if (pressed) { if (fine) setFine(m.y); else setFrom(m.y); } }
         onReleased: (m) => {
-            setFrom(m.y);
+            if (fine) setFine(m.y); else setFrom(m.y);
             if (root.commitOnRelease && root.previewValue !== root.pressValue) { wheelTimer.stop(); root.commit(root.previewValue); }
         }
         onWheel: (w) => {
             if (!wheelTimer.running) { root.pressValue = root.value; root.previewValue = root.value; }
-            root.emitValue(root.clampStep((root.commitOnRelease ? root.previewValue : root.value) + (w.angleDelta.y > 0 ? 0.5 : -0.5)));
+            var fineWheel = (w.modifiers & Qt.ShiftModifier) !== 0;
+            var d = w.angleDelta.y !== 0 ? w.angleDelta.y : w.angleDelta.x;   // some desktops turn Shift+wheel horizontal
+            if (d === 0) return;
+            var st = fineWheel ? 0.1 : 0.5;
+            root.emitValue(root.clampStep((root.commitOnRelease ? root.previewValue : root.value) + (d > 0 ? st : -st), fineWheel));
             if (root.commitOnRelease) wheelTimer.restart();
         }
     }

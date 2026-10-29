@@ -11,6 +11,8 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Output faders: dB readout; Shift + wheel/drag for 0.1 dB steps. Autogain asks before every measurement and closes
+  a measurement that does not finish within 45 s.
 - Optional separate desktop inputs "CONNECT 2 Microphone / Instrument / Loopback" (PipeWire loopback module, written
   for the user's device from Settings ▸ Desktop integration) and a descriptive name for the 4-channel input (Phase 11A.4).
 - Headless Ardour DAW test and audio analysis tools in `tools/audio/` (DAW-1…4 passed with the ALSA backend).
