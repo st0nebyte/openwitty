@@ -146,6 +146,14 @@ private:
     int backoffMs_{1000};
     QString autoState_{"idle"};
     bool inMeasureSession_{false};
+    // Phase 11B session 4: when the running measurement started (timeout closes the measurement session).
+    std::chrono::steady_clock::time_point autoStarted_{};
+    QString autoKey_;
+public:
+    static constexpr int kMeasurementTimeoutMs = 45000;
+    // Tests only: pretend the running measurement started `ms` earlier.
+    void ageMeasurementForTesting(int ms) { autoStarted_ -= std::chrono::milliseconds(ms); }
+private:
     bool restarting_{false};  // idle | running | finished
     // Verification state of the most recent settings write (see core/WriteVerification.hpp).
     // `verifying_` is true only while a commitAndVerify() call is actually in flight on this
@@ -232,6 +240,7 @@ public:
     Q_INVOKABLE void hwCheckReplaceBaseline();
     Q_INVOKABLE void hwCheckCompare();
     void reconnectForTesting();          // tests only
+    void ageMeasurementForTesting(int ms);   // tests only: the running measurement started `ms` earlier
     // Synchronous test hook: blocks until the worker has processed queued calls.
     Q_INVOKABLE void flush();
     // Tests only, never from QML: see DeviceWorker::connectTransportForTesting().

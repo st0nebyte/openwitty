@@ -2667,3 +2667,68 @@ TEST(SplitSources11A4, WritesConfigForTheCurrentNodeAndRestartsOnlyWhenConfirmed
     if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
     fs::remove_all(h);
 }
+
+// Phase 11B session 4 preparation: a measurement that never completes is closed with the end-session word after the
+// timeout (once), instead of leaving the device in its measurement session.
+TEST(Measurement11B, StalledAutogainIsClosedAfterTheTimeout) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    r.mock.setAutoGainStalls(true);
+    ASSERT_TRUE(r.can("autogain1"));
+    r.c->trigger("autogain1");
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "running"; }));
+    auto t = r.mock.triggers();
+    ASSERT_GE(t.size(), 2u);
+    EXPECT_EQ(t[t.size() - 2], 4);   // begin measurement session
+    EXPECT_EQ(t[t.size() - 1], 1);   // autogain microphone
+    for (int i = 0; i < 5; ++i) { r.c->flush(); QCoreApplication::processEvents(); }
+    EXPECT_EQ(r.c->values().value("auto.state").toString(), "running") << "no timeout before 45 s";
+    EXPECT_EQ(r.mock.triggers().back(), 1);
+    r.c->ageMeasurementForTesting(DeviceWorker::kMeasurementTimeoutMs + 1000);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "timeout"; }));
+    EXPECT_EQ(r.mock.triggers().back(), 5) << "end-session sent";
+    const auto n = r.mock.triggers().size();
+    for (int i = 0; i < 5; ++i) { r.c->flush(); QCoreApplication::processEvents(); }
+    EXPECT_EQ(r.mock.triggers().size(), n) << "sent once, no retries";
+}
+
+TEST(Measurement11B, CompletedAutogainSendsEndSessionOnce) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    r.c->trigger("autogain2");
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
+    auto t = r.mock.triggers();
+    ASSERT_GE(t.size(), 3u);
+    EXPECT_EQ(t[t.size() - 3], 4);
+    EXPECT_EQ(t[t.size() - 2], 2);
+    EXPECT_EQ(t.back(), 5);
+}
+
+// Real device: the autogain button asks first; nothing is sent until Start.
+TEST(Measurement11B, AutogainButtonAsksBeforeEveryMeasurement) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    MainView v(*r.c);
+    QQuickItem* btn = v.item("autogainButton1");
+    ASSERT_TRUE(btn && btn->isEnabled());
+    const auto n0 = r.mock.triggers().size();
+    v.mouse(btn, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(btn, QEvent::MouseButtonRelease, 0.5, 0.5);
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_EQ(r.mock.triggers().size(), n0) << "nothing sent by the button itself";
+    QQuickItem* dlg = findItem(v.w->contentItem(), "autogainConfirm1");
+    ASSERT_TRUE(dlg);
+    EXPECT_TRUE(dlg->isVisible());
+    QQuickItem* start = findItem(v.w->contentItem(), "autogainStart1");
+    ASSERT_TRUE(start);
+    v.mouse(start, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(start, QEvent::MouseButtonRelease, 0.5, 0.5);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.mock.triggers().size() >= n0 + 2; }));
+    EXPECT_FALSE(dlg->isVisible());
+}

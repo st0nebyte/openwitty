@@ -44,6 +44,8 @@ public:
     // Simulated auto-gain: progress 0..100 advances by 10 per status read.
     bool autoGainRunning() const { return agProgress_ >= 0; }
     void setAutoGainOutcome(std::uint8_t resultBits) { agOutcome_ = resultBits; }
+    // Tests: a measurement that never progresses (stays at 0 %).
+    void setAutoGainStalls(bool on) { agStalls_ = on; }
     // Simulates a change made on the device itself (hardware button, other software).
     void setSettingsBytes(Bytes b) { settings_ = std::move(b); }
     // Simulates the hardware "Panic Mute" (MUTE button hold), confirmed on real hardware
@@ -107,7 +109,8 @@ private:
 public:
     std::vector<std::uint16_t> triggers() const { return triggerLog_; }
 private:
-    std::uint8_t agOutcome_{0x20};  // SIMULATED result bits (meaning of values unverified)
+    std::uint8_t agOutcome_{0x20};
+    bool agStalls_{false};  // SIMULATED result bits (meaning of values unverified)
 };
 
 }  // namespace lewitt

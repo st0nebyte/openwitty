@@ -154,7 +154,7 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    capture channels in the 11C profile set (e.g. AUX0–3 instead of the surround labels) and/or offer optional virtual
    sources "CONNECT 2 Microphone" (ch 1), "Instrument" (ch 2), "Loopback" (ch 3/4) via a PipeWire loopback module
    example. Then LB-5 (how mono/stereo apps downmix the 4-channel source) with signal. Offline first, then one live test.
-3. **Session 4 — high-risk controls**, each with its own procedure and per-use confirmation: 48 V (dynamic mic or nothing
+3. **Session 4 — high-risk controls: procedure below ("Phase 11B session 4"), prepared offline 2026-10-29.** Original note: 48 V (dynamic mic or nothing
    connected — note: 48 V was **on** at every baseline so far, i.e. the owner's mic needs it; a test turns it off and on
    again), high-impedance headphones and high-volume speakers (outputs physically off, headphones unplugged), autogain
    (measurement permission; device changes the gain itself — expected-change handling like bytes 25/26 may be needed).
@@ -170,6 +170,30 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
 8. **Still open, owner decisions:** login-screen WirePlumber rule live test (postponed); GitHub `refs/pull/1..3` privacy
    blocker (first name in 18 commits); no merge to `main`, no tag, no release, repo stays private. The background
    service picks up the new binary at the next login.
+
+### Phase 11B session 4 — high-risk controls (procedure, prepared 2026-10-29)
+
+Offline preparation done: autogain asks before every measurement on the real device (`autogainConfirm<N>`); a
+measurement that does not report completion within 45 s gets the end-session word once (`auto.state = timeout`, no
+retry); `--hw-check` logs each trigger and the measurement result and treats the gain bytes of the measured input as
+expected to change after an autogain trigger. Tests `Measurement11B.*`.
+
+General: owner present; safety confirmed right before; `openwitty --hw-check`; one permission at a time (*inputs* for
+gain lock, *output modes*, *48 V*, *measurements*); one GUI action per step; log line checked before the restore;
+final compare; abort on an unexpected byte, "not confirmed", an error, or any audible event; no retries. A device byte
+that follows the written one (as 25/26 for Dim/Mono) stops the session as "not confirmed" — restore with one deliberate
+action after re-arming the permission, record it, teach OpenWitty offline, then continue.
+
+| # | Control | Conditions | Action → expected | Restore | Extra observation |
+|---|---|---|---|---|---|
+| 4a | Gain lock (57, *inputs*) | standard | 1 → 0 (byte 57) | 0 → 1 | `alsactl monitor` on the card and the PipeWire input route: any FU 5 event while unlocked (11C: nothing writes FU 5) |
+| 4b | High-impedance headphones (31, *output modes*, per-use dialog) | headphones **unplugged** | 0 → 1 | 1 → 0 | followers (byte 30?) |
+| 4c | High-volume speakers (24, *output modes*, per-use dialog) | speakers **powered off** | 0 → 1 | 1 → 0 | followers |
+| 4d | 48 V (5, *48 V*, per-use dialog) | mic muted on the device; speakers off, headphones off | 1 → 0 (pop possible) | 0 → 1 via the dialog; wait 10 s before any unmute (condenser recharge) | none expected |
+| 4e | Autogain mic (*measurements*, per-use dialog) | mic unmuted only for the measurement; speakers off, headphones off; owner speaks at normal level ~10 s | trigger 4 → 1; progress → 100; result code; the device sets gain bytes 0–1 | gain back to the start value with the knob (≤ 6 dB per SET), mic muted | result code meaning (1 failed / 2 succeeded), measured gain, whether the device unmutes or changes anything else |
+
+Not in session 4: instrument autogain (no real instrument; a cable hum is not a usable signal), Denoise measurement
+and Autosetup (need research first), mix-to-speakers, streaming modes.
 
 ### Phase 11B session 1 — low-risk settings via the GUI (procedure)
 

@@ -90,7 +90,7 @@ Result<Bytes> MockTransport::read(MessageId id) {
                     status_[0x24] = 100;
                     agProgress_ = -1;
                 }
-                else agProgress_ += 10;
+                else if (!agStalls_) agProgress_ += 10;
             }
             return st;
         }

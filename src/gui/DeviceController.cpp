@@ -851,9 +851,22 @@ void DeviceWorker::publish() {
         QString state = autoState_;
         if (autoState_ == "running" && mock_ && !mock_->autoGainRunning() && prog >= 100) state = "finished";
         if (autoState_ == "running" && !mock_ && prog >= 100) state = "finished";
-        if (state == "finished" && autoState_ == "running" && inMeasureSession_) {
+        // Phase 11B session 4: a measurement that never reports completion must not leave the device in its
+        // measurement session; after the timeout the end-session word is sent once (as the official app does when
+        // its measurement window closes) and the state says so.
+        if (autoState_ == "running" && state == "running" && !mock_ &&
+            std::chrono::steady_clock::now() - autoStarted_ > std::chrono::milliseconds(kMeasurementTimeoutMs))
+            state = "timeout";
+        if ((state == "finished" || state == "timeout") && autoState_ == "running" && inMeasureSession_) {
             report(session_->sendTrigger(Trigger::EndMeasurementSession));
             inMeasureSession_ = false;
+            if (hwCheck_) {
+                hwCheckLog(QString("%1 %2: progress %3, result code %4; end-session sent")
+                               .arg(autoKey_, state).arg(prog).arg(int(st.autosetupResultRaw())));
+                if (hwBaseline_ && session_->settings())
+                    hwCheckLog("since baseline: " + QString::fromStdString(describeComparison(compareSettings(
+                                   *hwBaseline_, *session_->settings(), hwExpected_))));
+            }
         }
         autoState_ = state;
         v["auto.state"] = autoState_;
@@ -903,7 +916,19 @@ void DeviceWorker::trigger(const QString& name) {
     if (!b) { report(b); publish(); return; }
     inMeasureSession_ = true;
     auto s = session_->sendTrigger(map[name]);
-    if (s) autoState_ = "running"; else { report(s); (void)session_->sendTrigger(Trigger::EndMeasurementSession); inMeasureSession_ = false; }
+    if (s) { autoState_ = "running"; autoStarted_ = std::chrono::steady_clock::now(); autoKey_ = name; }
+    else { report(s); (void)session_->sendTrigger(Trigger::EndMeasurementSession); inMeasureSession_ = false; }
+    if (hwCheck_) {
+        // The device sets the measured gain itself: those bytes are expected to change from here on.
+        namespace o = settings_off;
+        std::vector<std::size_t> offs;
+        if (name != "autogain2") { offs.push_back(o::kGain[0]); offs.push_back(o::kGain[0] + 1); }
+        if (name != "autogain1") { offs.push_back(o::kGain[1]); offs.push_back(o::kGain[1] + 1); }
+        for (auto off : offs)
+            if (std::find(hwExpected_.begin(), hwExpected_.end(), off) == hwExpected_.end()) hwExpected_.push_back(off);
+        hwCheckLog(QString("trigger %1: %2").arg(name, s ? "begin + measurement sent; the device may now change the gain"
+                                                      : "measurement word failed; end-session sent"));
+    }
     publish();
 }
 
@@ -1319,6 +1344,10 @@ void DeviceController::enableHardwareCheck() { QMetaObject::invokeMethod(worker_
 void DeviceController::hwCheckRecordBaseline() { QMetaObject::invokeMethod(worker_, "hwCheckRecordBaseline"); }
 void DeviceController::hwCheckReplaceBaseline() { QMetaObject::invokeMethod(worker_, "hwCheckReplaceBaseline"); }
 void DeviceController::hwCheckCompare() { QMetaObject::invokeMethod(worker_, "hwCheckCompare"); }
+void DeviceController::ageMeasurementForTesting(int ms) {
+    QMetaObject::invokeMethod(worker_, [this, ms] { worker_->ageMeasurementForTesting(ms); }, Qt::BlockingQueuedConnection);
+}
+
 void DeviceController::reconnectForTesting() {
     QMetaObject::invokeMethod(worker_, [this] { worker_->reconnectForTesting(); }, Qt::BlockingQueuedConnection);
 }

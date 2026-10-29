@@ -61,7 +61,9 @@ Item {
 
     ToggleButton { objectName: "autogainButton" + root.index; x: 29; y: 147; width: 24; height: 24; text: "A"; fontSize: 15; flat: true
                    tip: "Automatically set up your input gain"
-                   enabled: root.can("autogain" + root.index); onClicked: device.trigger("autogain" + root.index) }
+                   enabled: root.can("autogain" + root.index)
+                   // simulated device: start at once; real device: confirm every measurement (the device sets the gain itself)
+                   onClicked: { if (device.simulated) device.trigger("autogain" + root.index); else autogainConfirm.visible = true; } }
 
     Row {
         x: 32; y: 180; spacing: 1
@@ -86,6 +88,24 @@ Item {
     ToggleButton { objectName: "inputMute" + root.index; x: 58; y: 240; width: 64; height: 24; text: "MUTE"; danger: true; tip: "Mute the signal"
                    enabled: root.can(root.p + "mute"); active: root.v("mute", false)
                    onClicked: device.setValue(root.p + "mute", !active) }
+
+    Rectangle {   // autogain confirmation (every measurement on the real device)
+        id: autogainConfirm
+        objectName: "autogainConfirm" + root.index
+        visible: false; z: 20; anchors.centerIn: parent; width: 150; height: 118; radius: 5
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 8
+            Text { width: 134; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
+                   color: Theme.text; font.pixelSize: 10
+                   text: "Start autogain? The device sets the gain by itself and may raise it. Turn monitoring and "
+                       + "speakers down, then play or speak at your normal level." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 56; text: "Cancel"; onClicked: autogainConfirm.visible = false }
+                ToggleButton { objectName: "autogainStart" + root.index; width: 56; text: "Start"; active: true
+                               activeColor: Theme.warn
+                               onClicked: { autogainConfirm.visible = false; device.trigger("autogain" + root.index); } } }
+        }
+    }
 
     Rectangle {   // 48 V safety confirmation (always before enabling)
         id: phantom
