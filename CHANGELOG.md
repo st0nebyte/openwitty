@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Optional separate desktop inputs "CONNECT 2 Microphone / Instrument / Loopback" (PipeWire loopback module, written
+  for the user's device from Settings ▸ Desktop integration) and a descriptive name for the 4-channel input (Phase 11A.4).
+- Headless Ardour DAW test and audio analysis tools in `tools/audio/` (DAW-1…4 passed with the ALSA backend).
 - Desktop input mute that really mutes: optional per-device ALSA profile + WirePlumber rule (software input
   mute/volume for the CONNECT 2), detected in Settings ▸ Desktop integration (Phase 11C, hardware-verified).
 - Hardware-verified (Phase 11B): all low-risk settings, outputs, loopback and input channel identity via the GUI.

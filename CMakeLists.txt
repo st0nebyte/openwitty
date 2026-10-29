@@ -100,7 +100,8 @@ endif()
 # Desktop (ALSA) volume integration: policy glue is always built and tested; the libasound backend
 # and the openwitty-volumed daemon need alsa-lib and the USB transport.
 add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp
-            src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp src/desktop/DeviceSampleRate.cpp)
+            src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp src/desktop/DeviceSampleRate.cpp
+            src/desktop/SplitSources.cpp)
 target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
 target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
 option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
@@ -158,7 +159,8 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
                  COMMAND sh -c "out=\$(\"$1\" \"$2\") || exit 1; \
                                 printf '%s' \"\$out\" | grep -q '\"device.vendor.id\": \"0x29c2\"' || exit 2; \
                                 printf '%s' \"\$out\" | grep -q '\"device.product.id\": \"0x0004\"' || exit 3; \
-                                printf '%s' \"\$out\" | grep -q '\"device.profile-set\": \"openwitty-connect2.conf\"' || exit 4; echo RULE OK"
+                                printf '%s' \"\$out\" | grep -q '\"device.profile-set\": \"openwitty-connect2.conf\"' || exit 4; \
+                                printf '%s' \"\$out\" | grep -q '\"node.description\": \"CONNECT 2 (1 Mic' || exit 5; echo RULE OK"
                  sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/52-openwitty-connect2-input.conf)
         set_tests_properties(wireplumber_input_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
     endif()
@@ -238,6 +240,7 @@ if(LEWITT_BUILD_TESTS)
                                         tests/cpp/test_settings_comparison.cpp  # Phase 10B.1 hw-check, SET bookkeeping
                                         tests/cpp/test_permissions_11a.cpp  # Phase 11A grouped permissions
                                         tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
+                                        tests/cpp/test_split_sources.cpp       # Phase 11A.4 separate inputs
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
     if(LEWITT_ENABLE_USB)

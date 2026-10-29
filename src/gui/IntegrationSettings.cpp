@@ -1,6 +1,11 @@
 #include "IntegrationSettings.hpp"
 
 #include <QClipboard>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QStandardPaths>
@@ -8,6 +13,7 @@
 #include "GuiActivation.hpp"
 #include "ServiceState.hpp"
 #include "TrayAutostart.hpp"
+#include "desktop/SplitSources.hpp"
 
 using namespace lewitt;
 
@@ -82,8 +88,71 @@ bool IntegrationSettings::setTrayAutostart(bool on) {
     return ok && err.isEmpty();
 }
 
+QString IntegrationSettings::findConnect2CaptureNode(const QByteArray& pwDumpJson) {
+    const auto doc = QJsonDocument::fromJson(pwDumpJson);
+    for (const auto& v : doc.array()) {
+        const auto props = v.toObject().value("info").toObject().value("props").toObject();
+        const QString name = props.value("node.name").toString();
+        if (props.value("media.class").toString() == "Audio/Source" && isConnect2CaptureNodeName(name.toStdString()))
+            return name;
+    }
+    return {};
+}
+
+QString IntegrationSettings::currentCaptureNode() {
+    QString out;
+    if (run("pw-dump", {}, &out) != 0) return {};
+    return findConnect2CaptureNode(out.toUtf8());
+}
+
+bool IntegrationSettings::setSplitSources(bool on) {
+    const QString path = QString::fromStdString(splitSourcesPath(userConfigHome()));
+    lastError_.clear();
+    if (path.isEmpty()) { lastError_ = "Separate inputs: no configuration directory."; emit changed(); return false; }
+    if (!on) {
+        if (QFile::exists(path) && !QFile::remove(path)) lastError_ = "Separate inputs: could not remove " + path + ".";
+        else audioRestartNeeded_ = true;
+    } else {
+        const QString node = currentCaptureNode();
+        const auto text = renderSplitSourcesConfig(node.toStdString());
+        if (!text) {
+            lastError_ = "Separate inputs: the CONNECT 2 input was not found in PipeWire (is it connected?).";
+        } else {
+            QDir().mkpath(QFileInfo(path).absolutePath());
+            QFile f(path);
+            if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(QByteArray::fromStdString(*text)) < 0)
+                lastError_ = "Separate inputs: could not write " + path + ".";
+            else audioRestartNeeded_ = true;
+        }
+    }
+    refreshSetup();
+    emit changed();
+    return lastError_.isEmpty();
+}
+
+bool IntegrationSettings::restartAudio(bool confirmed) {
+    if (!confirmed) return false;
+    const int rc = run("systemctl", {"--user", "restart", "pipewire.service", "pipewire-pulse.service", "wireplumber.service"});
+    if (rc != 0) lastError_ = "Restarting desktop audio failed (systemctl exit " + QString::number(rc) + ").";
+    else { lastError_.clear(); audioRestartNeeded_ = false; }
+    refreshSetup();
+    emit changed();
+    return rc == 0;
+}
+
 void IntegrationSettings::refreshSetup() {
     softwareInputMute_ = softwareInputMuteConfigured(userConfigHome());
+    {
+        const QString path = QString::fromStdString(splitSourcesPath(userConfigHome()));
+        QFile f(path);
+        if (!path.isEmpty() && f.open(QIODevice::ReadOnly)) {
+            const auto target = splitSourcesTarget(f.readAll().toStdString());
+            const QString node = currentCaptureNode();
+            splitSources_ = (target && QString::fromStdString(*target) == node) ? "on" : "stale";
+        } else {
+            splitSources_ = currentCaptureNode().isEmpty() ? "unavailable" : "off";
+        }
+    }
     const auto probed = probe_();
     setupAvailable_ = probed.has_value();
     if (!probed) return;

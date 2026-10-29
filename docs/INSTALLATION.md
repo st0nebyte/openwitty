@@ -199,6 +199,18 @@ act on what apps receive (all four channels, loopback included). The device's ow
 silences the input at the source. OpenWitty's Settings ▸ Desktop integration shows whether it is installed.
 Undo: delete the three files and restart WirePlumber.
 
+### Separate inputs for apps (optional)
+
+The CONNECT 2 delivers one 4-channel input (1 microphone, 2 instrument, 3/4 loopback of the computer audio; order
+verified on hardware). Voice-chat and streaming apps usually want a single microphone. OpenWitty can add three extra
+inputs — **CONNECT 2 Microphone** (mono), **CONNECT 2 Instrument** (mono) and **CONNECT 2 Loopback** (stereo) — with
+PipeWire's loopback module: Settings ▸ Desktop integration ▸ *Separate inputs for apps*, then *Restart desktop audio*
+(all sound stops for a moment). OpenWitty writes `~/.config/pipewire/pipewire.conf.d/53-openwitty-connect2-split.conf`
+for your device (the file names the device's PipeWire node, which contains its serial number, so it is generated on
+your machine). Each extra input is active only while an app records from it; the 4-channel input stays available for
+DAWs. Switching it off removes the file. With the software input mute above installed, muting the main input in the
+desktop also silences the extra inputs.
+
 ### Show the volume knob in the desktop volume
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move

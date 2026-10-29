@@ -38,6 +38,9 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(bool quirkConfigured READ quirkConfigured NOTIFY changed)
     Q_PROPERTY(bool quirkActive READ quirkActive NOTIFY changed)
     Q_PROPERTY(bool softwareInputMute READ softwareInputMute NOTIFY changed)   // Phase 11C files installed
+    // Phase 11A.4 separate inputs: "off" | "on" | "stale" (file targets another node) | "unavailable" (no CONNECT 2 input)
+    Q_PROPERTY(QString splitSources READ splitSources NOTIFY changed)
+    Q_PROPERTY(bool audioRestartNeeded READ audioRestartNeeded NOTIFY changed)
     Q_PROPERTY(QStringList findings READ findings NOTIFY changed)
     Q_PROPERTY(QString quirkInstructions READ quirkInstructions CONSTANT)
     // Optional system tray icon (openwitty-tray): installed at all, and started at login (XDG autostart).
@@ -78,6 +81,10 @@ public:
     bool quirkConfigured() const { return quirkConfigured_; }
     bool quirkActive() const { return quirkActive_; }
     bool softwareInputMute() const { return softwareInputMute_; }
+    QString splitSources() const { return splitSources_; }
+    bool audioRestartNeeded() const { return audioRestartNeeded_; }
+    // The CONNECT 2's capture node name in `pw-dump` output (empty if none).
+    static QString findConnect2CaptureNode(const QByteArray& pwDumpJson);
     QStringList findings() const { return findings_; }
     QString quirkInstructions() const;
     bool trayInstalled() const;
@@ -103,6 +110,11 @@ public:
     // On: write the login autostart entry and start the tray icon now (it is single-instance). Off: remove
     // the entry and ask a running tray icon to quit. Never touches the background service.
     Q_INVOKABLE bool setTrayAutostart(bool on);
+    // Writes (on) or removes (off) the PipeWire config for separate inputs; takes effect after restartAudio().
+    Q_INVOKABLE bool setSplitSources(bool on);
+    // Restarts the user's PipeWire, PipeWire-Pulse and WirePlumber (desktop audio stops for a moment). Needs the
+    // UI's confirmation.
+    Q_INVOKABLE bool restartAudio(bool confirmed);
 
 signals:
     void changed();
@@ -129,5 +141,8 @@ private:
     bool setupAvailable_{false}, cardFound_{false}, mixerLoads_{false}, volumeControl_{false};
     bool quirkConfigured_{false}, quirkActive_{false};
     bool softwareInputMute_{false};
+    QString splitSources_{"off"};
+    bool audioRestartNeeded_{false};
+    QString currentCaptureNode();
     QStringList findings_;
 };

@@ -2614,3 +2614,56 @@ TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     fakeIntegration()->refresh();
     fs::remove_all(h);
 }
+
+// Phase 11A.4: separate inputs - node discovery from pw-dump, file written/removed, restart only when confirmed.
+TEST(SplitSources11A4, WritesConfigForTheCurrentNodeAndRestartsOnlyWhenConfirmed) {
+    app();
+    namespace fs = std::filesystem;
+    const fs::path h = fs::temp_directory_path() / ("ow-split-" + std::to_string(QCoreApplication::applicationPid()));
+    fs::remove_all(h);
+    fs::create_directories(h);
+    const QByteArray oldXdg = qgetenv("XDG_CONFIG_HOME");
+    qputenv("XDG_CONFIG_HOME", QByteArray::fromStdString(h.string()));
+    QString node = "alsa_input.usb-Lewitt_GmbH_CONNECT_2_X000XXX00000-00.analog-surround-40";
+    auto dump = [&] {
+        return QString("[{\"id\":1,\"info\":{\"props\":{\"media.class\":\"Audio/Sink\",\"node.name\":\"alsa_output.usb-Lewitt_GmbH_CONNECT_2_X-00.analog-stereo\"}}},"
+                       "{\"id\":2,\"info\":{\"props\":{\"media.class\":\"Audio/Source\",\"node.name\":\"alsa_input.pci-0000_0c_00.4.analog-stereo\"}}},"
+                       "{\"id\":3,\"info\":{\"props\":{\"media.class\":\"Audio/Source\",\"node.name\":\"%1\"}}}]").arg(node);
+    };
+    QStringList calls;
+    IntegrationSettings s(nullptr,
+        [&](const QString& prog, const QStringList& args, QString* out) {
+            calls << prog + " " + args.join(" ");
+            if (prog == "pw-dump") { if (out) *out = dump(); return 0; }
+            if (out) *out = "LoadState=not-found\n";
+            return 0;
+        },
+        [] { return std::optional<lewitt::AudioSetupStatus>(); });
+    EXPECT_EQ(IntegrationSettings::findConnect2CaptureNode(dump().toUtf8()), node);
+    s.refresh();
+    EXPECT_EQ(s.splitSources(), "off");
+    ASSERT_TRUE(s.setSplitSources(true));
+    const fs::path file = h / "pipewire/pipewire.conf.d/53-openwitty-connect2-split.conf";
+    ASSERT_TRUE(fs::exists(file));
+    EXPECT_EQ(s.splitSources(), "on");
+    EXPECT_TRUE(s.audioRestartNeeded());
+    for (const auto& c : calls) EXPECT_FALSE(c.startsWith("systemctl --user restart")) << "no restart without the dialog";
+    EXPECT_FALSE(s.restartAudio(false));
+    for (const auto& c : calls) EXPECT_FALSE(c.startsWith("systemctl --user restart"));
+    EXPECT_TRUE(s.restartAudio(true));
+    EXPECT_TRUE(calls.contains("systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service"));
+    EXPECT_FALSE(s.audioRestartNeeded());
+    node = "alsa_input.usb-Lewitt_GmbH_CONNECT_2_Y111YYY11111-00.analog-surround-40";   // another unit
+    s.refresh();
+    EXPECT_EQ(s.splitSources(), "stale");
+    ASSERT_TRUE(s.setSplitSources(false));
+    EXPECT_FALSE(fs::exists(file));
+    EXPECT_EQ(s.splitSources(), "off");
+    node = "alsa_input.pci-0000_0c_00.4.analog-stereo";   // no CONNECT 2 present
+    s.refresh();
+    EXPECT_EQ(s.splitSources(), "unavailable");
+    EXPECT_FALSE(s.setSplitSources(true));
+    EXPECT_FALSE(fs::exists(file));
+    if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
+    fs::remove_all(h);
+}

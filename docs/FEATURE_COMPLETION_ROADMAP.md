@@ -141,7 +141,16 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    DAW-2 four mono tracks (mic speech, instrument cable hum, loopback tone L/R via `tools/audio/`); DAW-3 mic → mono
    track, loopback → one stereo track; DAW-4 stereo playback L/R (speakers muted, meters/loopback as evidence);
    DAW-10 compare changed: none. Then DAW-5… (latency, xruns, long run) as listed in the parity section.
-2. **11A.4 channel naming / split inputs (opt-in).** Now that the channel order is verified: either name the four
+2. **11A.4 channel naming / split inputs (opt-in) — implemented offline 2026-10-29, live test 11A.4-1 pending.**
+   Done: `src/desktop/SplitSources` (config for three loopback-module sources: Microphone ← FL/ch 1, Instrument ←
+   FR/ch 2, Loopback ← RL RR/ch 3–4; `node.passive`; node name validated), Settings ▸ Desktop integration switch +
+   confirmed "Restart desktop audio", state off/on/stale/unavailable; the 11C WirePlumber rule names the 4-channel input
+   "CONNECT 2 (1 Mic, 2 Instrument, 3+4 Loopback)" (positions unchanged). Tests `SplitSources.*`,
+   `SplitSources11A4.*`. **Live test 11A.4-1** (owner present, usual safety): copy the updated 52 rule, switch on,
+   restart audio once; check the three nodes and the description; record each virtual source with `pw-record` while
+   the owner unmutes mic, then instrument (device mute), and a loopback tone plays (loopback unmuted): Microphone carries
+   only speech, Instrument only the hum, Loopback L/R the tones; desktop mute of the main input silences all three;
+   restore, final compare. Earlier idea for reference: Now that the channel order is verified: either name the four
    capture channels in the 11C profile set (e.g. AUX0–3 instead of the surround labels) and/or offer optional virtual
    sources "CONNECT 2 Microphone" (ch 1), "Instrument" (ch 2), "Loopback" (ch 3/4) via a PipeWire loopback module
    example. Then LB-5 (how mono/stereo apps downmix the 4-channel source) with signal. Offline first, then one live test.

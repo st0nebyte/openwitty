@@ -321,6 +321,23 @@ Rectangle {
                        + "window. It never uses the device. Closing this window keeps the background service running; "
                        + "\"Quit tray icon\" in its menu removes only the icon." }
             Rectangle { width: 310; height: 1; color: "#333" }
+            // Phase 11A.4: separate desktop inputs from the four capture channels (order verified on hardware)
+            ToggleSwitch { objectName: "splitSourcesSwitch"; width: 310; label: "Separate inputs for apps"
+                           enabled: integration.splitSources !== "unavailable" || checked
+                           checked: integration.splitSources === "on" || integration.splitSources === "stale"
+                           tip: "Adds \"CONNECT 2 Microphone\", \"CONNECT 2 Instrument\" and \"CONNECT 2 Loopback\" as inputs "
+                              + "that apps (voice chat, streaming) can pick directly."
+                           onToggled: (b) => integration.setSplitSources(b) }
+            Text { objectName: "splitSourcesText"; width: 310; wrapMode: Text.WordWrap; font.pixelSize: 10
+                   color: integration.splitSources === "stale" ? Theme.warn : Theme.textDim
+                   text: ({"on": "On: Microphone (channel 1), Instrument (2) and Loopback (3/4) are separate inputs.",
+                           "off": "Off: apps see one 4-channel CONNECT 2 input (1 microphone, 2 instrument, 3/4 loopback).",
+                           "stale": "The separate inputs were set up for another CONNECT 2 input; switch off and on again.",
+                           "unavailable": "The CONNECT 2 input is not present in the desktop audio right now."})[integration.splitSources]
+                         + (integration.audioRestartNeeded ? " Takes effect after restarting desktop audio." : "") }
+            ToggleButton { objectName: "restartAudioButton"; visible: integration.audioRestartNeeded; width: 170; height: 22
+                           text: "Restart desktop audio"; onClicked: confirmRestartAudio.visible = true }
+            Rectangle { width: 310; height: 1; color: "#333" }
             Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background service option that writes the device" }
             ToggleSwitch { width: 310; label: "Vendor fallback (writes the device)"
                            enabled: integration.desktopSync
@@ -534,6 +551,22 @@ Rectangle {
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmReset.visible = false }
                 ToggleButton { width: 70; text: "Reset"; primary: true
                                onClicked: { confirmReset.visible = false; integration.resetToDefaults(); } } }
+        }
+    }
+
+    Rectangle {
+        id: confirmRestartAudio
+        objectName: "confirmRestartAudioDialog"
+        visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 130; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "Restart PipeWire and WirePlumber now? All sound stops for a moment and apps that are recording or "
+                       + "playing may need to reconnect. Levels are restored as at login." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmRestartAudio.visible = false }
+                ToggleButton { objectName: "confirmRestartAudioButton"; width: 70; text: "Restart"; primary: true
+                               onClicked: { confirmRestartAudio.visible = false; integration.restartAudio(true); } } }
         }
     }
 
