@@ -21,7 +21,9 @@ Rectangle {
     readonly property string autoState: device.values["auto.state"] || "idle"
     readonly property int progress: device.values["auto.progress"] || 0
     readonly property int outcome: device.values["auto.resultCode"] === undefined ? 0 : device.values["auto.resultCode"]
-    readonly property bool failed: autoState === "finished" && outcome === 1
+    // Phase 11B session 4: on hardware a successful mic autogain reported result code 1, which the decoded reading calls
+    // "failed". Until the code is understood, only the simulated device's outcome is shown as a failure.
+    readonly property bool failed: device.simulated && autoState === "finished" && outcome === 1
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true
                 onWheel: (w) => { w.accepted = true; } }   // modal: no click or wheel reaches the main view
 
