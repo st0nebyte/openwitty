@@ -130,7 +130,8 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 38–52 | LED colours: Icons = channel icons of unmuted channels, Mute = icons of muted channels, Parameter = gain/volume display of the selected channel, Metering = level meter, Gain reduction = its meter part |
 | 53 | custom button: value 2 = "Toggle mute: hp + mic/spkr" (official label), 12 = another function |
 | 57 | was 1 on the owner's device (GUI label "gain lock"); each toggle makes the device report UAC2 FU 5 mute changes (ch 1, ch 2); locked ⇒ FU 5 reads muted — consistent with 1 = host control locked out (unlocked value not sampled) |
-| 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes |
+| 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes. The rear-panel 48 V button toggles byte 5 itself (same setting) |
+| 53 = 2 | custom button "Toggle mute: hp + mic/spkr": one press flips bytes 2, 22 and 29 together |
 
 Capture channel order (LB-1/LB-2): ch 1 microphone, ch 2 instrument, ch 3 loopback L, ch 4 loopback R; no crosstalk.
 

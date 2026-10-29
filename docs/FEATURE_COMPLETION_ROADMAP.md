@@ -382,9 +382,13 @@ changed: none; permissions off. The separate inputs stay installed on the owner'
 | 4d | 48 V | 5: 1 → 0 → 1 (dialog on enable) | PASS |
 | 4e | Mic autogain | triggers 4, 1, then 5 after progress 100 | PASS. The device dropped the gain to 0, listened while the owner spoke, set **39 dB**; the gain change appeared in the settings shortly **after** progress 100. **Result code read 1** although the measurement succeeded → the decoded meaning (1 = failed) is doubtful; the GUI must not report failure from it. Gain restored to 27 dB with the knob (one decrease) |
 
-Final compare changed: none; all permissions off. Open question from the owner: the rear-panel 48 V button — same
-setting as byte 5 or a hardware master switch? Planned read-only check: owner presses it off/on while OpenWitty
-(no permissions) watches byte 5.
+Final compare changed: none; all permissions off. Owner question answered the same evening (read-only check,
+no permissions): the **rear-panel 48 V button toggles the same setting, byte 5** (1 → 0 → 1, OpenWitty's 48V indicator
+followed) — no separate hardware master switch. During that check the custom button was also pressed by accident
+(front panel): one press toggled bytes 2, 22 and 29 together (mic 1→0, speaker 0→1, headphone 1→0) = its function
+"Toggle mute: hp + mic/spkr" (value 2) confirmed on hardware; a second press restored all three; byte 56 (selected
+channel) 3→2 from touching the surface. The knob mirror mirrored the device speaker mute to the desktop and, by design,
+did not unmute the desktop afterwards ("an alignment never unmutes") — the owner unmutes it in KDE.
 
 ## Feature matrix
 
