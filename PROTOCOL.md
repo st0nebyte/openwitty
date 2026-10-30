@@ -132,6 +132,7 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 57 | was 1 on the owner's device (GUI label "gain lock"); each toggle makes the device report UAC2 FU 5 mute changes (ch 1, ch 2); locked ⇒ FU 5 reads muted — consistent with 1 = host control locked out (unlocked value not sampled) |
 | 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes. The rear-panel 48 V button toggles byte 5 itself (same setting) |
 | 53 = 2 | custom button "Toggle mute: hp + mic/spkr": one press flips bytes 2, 22 and 29 together |
+| sample rates | device follows 44.1 / 48 / 96 kHz (kernel hw_params), channel order unchanged at each rate; rare `usb_set_interface` timeout (-110) at stream start, recovered by PipeWire (session 7) |
 | 8 / 17 scale | **int8 dBFS ≈ peak level of the measured background noise** (session 6: phone noise peak −30 → stored −28; quiet room peak −51 → −53; open cable peak −39.9 → −41) |
 | 67 | mobile streaming: while 1, capture ch 1 and ch 2 both carry the mic + instrument mix; ch 3/4 unchanged; no re-enumeration |
 | 23 | mix to speakers: accepted 0/1, no followers (audible effect not judged; speakers off) |

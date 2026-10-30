@@ -197,6 +197,22 @@ action after re-arming the permission, record it, teach OpenWitty offline, then 
 Not in session 4: instrument autogain (no real instrument; a cable hum is not a usable signal), Denoise measurement
 and Autosetup (need research first), mix-to-speakers, streaming modes.
 
+### Phase 11B session 7 — sample rates, JACK latency, long run (2026-10-30, PASS)
+
+Owner present, safety confirmed; "Allow 44.1 and 96 kHz" on (PipeWire allows [ 44100 48000 96000 ]); instrument
+unmuted (open-cable hum as the ch 2 signal), loopback unmuted for the test, mic muted, speakers off.
+
+| # | Result |
+|---|---|
+| SR-1 | The device follows the client rate: kernel hw_params 48000 → 44100 → 96000 → 48000 for playback and capture (`pw-play`/`pw-record` with `node.rate`), when the device is idle between rates |
+| SR-2 | Channel identity at every rate: ch 1 digital zero (muted), ch 2 hum −44 dBFS, ch 3 1 kHz only, ch 4 2 kHz only (−38 dBFS RMS, unity loopback) |
+| SR-3 | At 96 kHz OpenWitty shows "96 kHz" and greys out Denoise/Comp; the tip now stays readable on hover (fixed) |
+| DAW-7 | Round trip through the loopback via `pipewire-jack` + `jack_iodelay`, 48 kHz: 64 frames **8.7 ms**, 128 frames 12.1–13.5 ms, 256 frames 23.4 ms; no xruns |
+| long run | 30 min at 128 frames: 7164 readings, 12.0–13.5 ms (mostly 12.08), no USB or PipeWire errors |
+| USB | `usb_set_interface failed (-110)` + PipeWire `set_hw_params` timeout twice in ~30 stream starts (a rate switch right after another stream, and a jack_iodelay start); PipeWire recovers (nodes recreated); 10/10 clean starts in a repeat test. Cause open (concurrent control polling is one hypothesis) |
+
+Open: the Ardour GUI with its JACK backend (headless `ardour9-lua` cannot instantiate it).
+
 ### Phase 11B session 6 — next hardware session (prepared 2026-10-30)
 
 Research done offline: Windows 5.2.2 binary in Ghidra (PROTOCOL.md "Windows 5.2.2 cross-check"); `pipewire-jack`
