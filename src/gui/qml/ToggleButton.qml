@@ -20,7 +20,7 @@ Rectangle {
     color: flat ? "transparent" : primary ? Theme.accentFill
          : (active && danger) ? Theme.danger
          : active ? "#1f1f1f"
-         : (mouse.pressed ? "#5a5a5a" : (mouse.containsMouse ? "#525252" : Theme.button))
+         : (root.unavailable ? Theme.button : mouse.pressed ? "#5a5a5a" : (mouse.containsMouse ? "#525252" : Theme.button))
     border.color: flat ? "transparent" : primary ? Theme.accentFill : (active && danger) ? Theme.danger
                 : active ? activeColor : Theme.buttonBorder
     border.width: active && !danger ? 2 : 1
@@ -32,9 +32,10 @@ Rectangle {
     GlyphIcon { visible: root.icon !== ""; anchors.centerIn: parent
                 width: Math.min(parent.height - 6, 18); height: width
                 kind: root.icon; color: root.flat ? Theme.accent : (root.active ? root.activeColor : "#d0d0d0") }
+    // An unavailable button still shows its tip on hover (why it is unavailable); only the click is blocked.
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true
-                enabled: root.enabled && !root.unavailable
-                onClicked: root.clicked()
+                enabled: root.enabled
+                onClicked: if (!root.unavailable) root.clicked()
                 onEntered: if (root.tip.length) Hint.show(root.tip)
                 onExited: Hint.clear() }
 }

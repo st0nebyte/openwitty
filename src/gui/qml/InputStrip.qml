@@ -22,7 +22,8 @@ Item {
     Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
                 border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
 
-    LevelMeter { x: -9; y: 40; height: 187; scale: true; barWidth: 8
+    z: inputMeter.noiseTipShown ? 10 : 0
+    LevelMeter { id: inputMeter; x: -9; y: 40; height: 187; scale: true; barWidth: 8
                  stageScale: root.stageScale
                  objectName: root.mic ? "meterMic" : "meterInstrument"
                  meterL: device.meters.channel(root.mic ? 0 : 1)

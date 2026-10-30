@@ -18,6 +18,7 @@ Item {
     // Measured noise floor (dBFS) shown as a blue line; NaN = none. Below the scale it sits at the bottom edge.
     property real noiseFloorDb: NaN
     readonly property bool hasNoiseFloor: !isNaN(noiseFloorDb)
+    property bool noiseTipShown: false   // the parent raises itself while the tooltip is open (it overlaps neighbours)
     property int barWidth: 8
     property real stageScale: 1
     readonly property real pixelRatio: root.Window.window ? root.Window.window.devicePixelRatio : Screen.devicePixelRatio
@@ -73,7 +74,8 @@ Item {
                     x: -2; width: parent.width + 4; height: Math.max(1.5, 1.5 / root.pixelsPerUnit)
                     y: Math.min(parent.height - height, parent.height * (1 - root.frac(root.noiseFloorDb)) - height / 2)
                     color: "#75b9ff"
-                    MouseArea { id: nfHover; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true }
+                    MouseArea { id: nfHover; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
+                                onContainsMouseChanged: root.noiseTipShown = containsMouse }
                     ToolTip_ { visible: nfHover.containsMouse && Hint.enabled; x: 12
                                text: "Measured noise floor: " + Math.round(root.noiseFloorDb) + " dB"
                                      + (root.noiseFloorDb < root.minDb ? " (below the scale)" : "")

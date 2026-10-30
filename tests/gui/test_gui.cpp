@@ -2967,3 +2967,27 @@ TEST(SampleRatesSR, WritesAndRemovesOnlyItsOwnFile) {
     if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
     fs::remove_all(h);
 }
+
+// Session 7 (owner report): at 96 kHz Denoise/Comp are greyed out; hovering still explains why, a click does nothing.
+TEST(SampleRatesSR, UnavailableDenoiseExplainsItselfAndIgnoresClicks) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.connection() == "Connected"; }));
+    c.setSampleRate(96000);
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values().value("dsp.state").toString() == "unavailable"; }));
+    MainView v(c);
+    QQuickItem* btn = nullptr;
+    for (QQuickItem* it : v.root->findChildren<QQuickItem*>())
+        if (it->property("text").toString() == "Denoise" && it->property("unavailable").toBool()) { btn = it; break; }
+    ASSERT_TRUE(btn);
+    const bool before = c.values().value("in1.denoise").toBool();
+    v.mouse(btn, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(btn, QEvent::MouseButtonRelease, 0.5, 0.5);
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); c.flush(); }
+    EXPECT_EQ(c.values().value("in1.denoise").toBool(), before) << "no change while unavailable";
+    bool hoverOk = false;
+    for (QQuickItem* ch : btn->childItems())
+        if (QString(ch->metaObject()->className()).contains("MouseArea")) hoverOk = ch->isEnabled() && ch->property("hoverEnabled").toBool();
+    EXPECT_TRUE(hoverOk) << "the tip must stay reachable";
+}
