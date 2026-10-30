@@ -2902,3 +2902,21 @@ TEST(SettingsLayout, OpenSectionSitsBetweenItsHeaderAndTheNext) {
             EXPECT_GE(top("sectionHeader_" + keys[j + 1]) - top("sectionHeader_" + keys[j]), 26) << keys[i].toStdString();
     }
 }
+
+// Session 6: the mic meter shows the noise floor of the last Denoise measurement (bytes 8/17, int8 dBFS); nothing
+// before a measurement.
+TEST(NoiseFloor, MeterShowsTheMeasuredLevelOnlyAfterADenoiseMeasurement) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.connection() == "Connected"; }));
+    MainView v(c);
+    QQuickItem* marker = findItem(v.w->contentItem(), "noiseFloorMarker0");
+    ASSERT_TRUE(marker);
+    EXPECT_FALSE(marker->isVisible()) << "no measurement yet";
+    c.trigger("denoise1");
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values().value("in1.noiseFloor").toInt() == -60; }, 5000));
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    EXPECT_TRUE(marker->isVisible());
+    EXPECT_EQ(c.values().value("in2.noiseFloor").toInt(), 0);   // instrument not measured
+}

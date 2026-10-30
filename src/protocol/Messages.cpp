@@ -44,6 +44,9 @@ bool SettingsMessage::phantom1() const { return raw_[settings_off::kPhantom1] !=
 std::uint8_t SettingsMessage::preampRaw(int i) const { return raw_[settings_off::kPreamp[i & 1]]; }
 PreampType SettingsMessage::preamp(int i) const { return static_cast<PreampType>(preampRaw(i)); }
 bool SettingsMessage::denoise(int i) const { return raw_[settings_off::kDenoise[i & 1]] != 0; }
+int SettingsMessage::denoiseLevelDb(int i) const {
+    return static_cast<int>(static_cast<std::int8_t>(raw_[settings_off::kDenoiseLevel[i & 1]]));
+}
 bool SettingsMessage::compress(int i) const { return raw_[settings_off::kCompress[i & 1]] != 0; }
 bool SettingsMessage::dim() const { return raw_[settings_off::kDim] != 0; }
 bool SettingsMessage::mono() const { return raw_[settings_off::kMono] != 0; }

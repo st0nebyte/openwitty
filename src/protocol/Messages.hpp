@@ -138,6 +138,9 @@ public:
     PreampType preamp(int input) const;
     std::uint8_t preampRaw(int input) const;
     bool denoise(int input) const;
+    // Noise level the device stored at its last Denoise measurement (bytes 8 / 17, int8 dBFS, about the peak level of
+    // the background noise; session 6). 0 = never measured on the simulated device.
+    int denoiseLevelDb(int input) const;
     bool compress(int input) const;
     double speakerVolumeDb() const;
     double headphoneVolumeDb() const;

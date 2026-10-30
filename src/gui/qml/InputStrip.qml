@@ -27,7 +27,10 @@ Item {
                  objectName: root.mic ? "meterMic" : "meterInstrument"
                  meterL: device.meters.channel(root.mic ? 0 : 1)
                  sourceFreshness: device.meters.freshness
-                 levelL: root.v("level", -60) }
+                 levelL: root.v("level", -60)
+                 // the device's last Denoise measurement (bytes 8/17); 0 = never measured, nothing shown
+                 noiseFloorDb: { var n = device.values[root.p + "noiseFloor"];
+                                 return (typeof n === "number" && n < 0 && n >= -100) ? n : NaN; } }
 
     GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"; color: "#ececec" }
 

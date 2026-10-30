@@ -15,6 +15,9 @@ Item {
     property bool stereo: false
     property bool scale: false
     property real minDb: -60
+    // Measured noise floor (dBFS) shown as a blue line; NaN = none. Below the scale it sits at the bottom edge.
+    property real noiseFloorDb: NaN
+    readonly property bool hasNoiseFloor: !isNaN(noiseFloorDb)
     property int barWidth: 8
     property real stageScale: 1
     readonly property real pixelRatio: root.Window.window ? root.Window.window.devicePixelRatio : Screen.devicePixelRatio
@@ -63,6 +66,18 @@ Item {
                     y: parent.height * (1 - root.frac(parent.v)); width: parent.width
                     height: parent.height * (root.frac(parent.v) - root.frac(-12))
                     color: Theme.meterAmber
+                }
+                Rectangle {   // measured noise floor (Denoise measurement)
+                    objectName: "noiseFloorMarker" + bar.channelIndex
+                    visible: root.hasNoiseFloor
+                    x: -2; width: parent.width + 4; height: Math.max(1.5, 1.5 / root.pixelsPerUnit)
+                    y: Math.min(parent.height - height, parent.height * (1 - root.frac(root.noiseFloorDb)) - height / 2)
+                    color: "#75b9ff"
+                    MouseArea { id: nfHover; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true }
+                    ToolTip_ { visible: nfHover.containsMouse && Hint.enabled; x: 12
+                               text: "Measured noise floor: " + Math.round(root.noiseFloorDb) + " dB"
+                                     + (root.noiseFloorDb < root.minDb ? " (below the scale)" : "")
+                                     + "\nfrom the last Denoise measurement" }
                 }
                 Shape {   // sampled peak hold; not an unobserved inter-sample peak
                     id: peak

@@ -797,6 +797,7 @@ void DeviceWorker::publish() {
             v[p + "clipguard"] = s.clipguard(i);
             v[p + "preamp"] = int(s.preampRaw(i));
             v[p + "denoise"] = s.denoise(i);
+            v[p + "noiseFloor"] = s.denoiseLevelDb(i);   // dBFS of the last Denoise measurement (display only)
             v[p + "compress"] = s.compress(i);
         }
         v["in1.phantom"] = s.phantom1();

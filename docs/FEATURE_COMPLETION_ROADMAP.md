@@ -225,6 +225,7 @@ If 6a confirms the scale: a "measured noise floor" marker in the input meters (m
   Headless `ardour9-lua` cannot instantiate its JACK backend ("shared_ptr is nil", also via `pw-jack`); the Ardour GUI
   is untested. `tools/audio/daw_ardour_test.sh` got `DAW_BACKEND`/`DAW_LIST_ONLY`/prefix options for that test.
 * 6e (latency, long run) open.
+* Noise-floor marker built (blue line in the input meters, test `NoiseFloor.MeterShowsTheMeasuredLevelOnlyAfterADenoiseMeasurement`).
 * GUI: Settings categories are now an accordion (the open section directly under its header, the others below;
   every section scrolls) — owner report; test `SettingsLayout.OpenSectionSitsBetweenItsHeaderAndTheNext`.
 
