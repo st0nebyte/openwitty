@@ -89,6 +89,12 @@ Result<Bytes> MockTransport::read(MessageId id) {
                     status_[0x23] = agOutcome_;   // outcome persists after the measurement
                     status_[0x24] = 100;
                     agProgress_ = -1;
+                    // As the real device (session 5): a Denoise measurement switches Denoise on and stores a level.
+                    for (int i : {0, 1})
+                        if (agWord_ == 8 || agWord_ == 6 + i) {
+                            settings_[settings_off::kDenoise[i]] = 1;
+                            settings_[settings_off::kDenoiseLevel[i]] = 0xC4;   // simulated level
+                        }
                 }
                 else if (!agStalls_) agProgress_ += 10;
             }
@@ -119,7 +125,7 @@ Status MockTransport::write(MessageId id, std::span<const std::uint8_t> data) {
         auto cmd = static_cast<std::uint16_t>(data[0] | (data[1] << 8));
         triggerLog_.push_back(cmd);
         // autogain (1-3) and Denoise (6-8) measurements share the progress/result bytes
-        if (cmd == 1 || cmd == 2 || cmd == 3 || cmd == 6 || cmd == 7 || cmd == 8) { agProgress_ = 0; status_[0x23] = 0x40; }
+        if (cmd == 1 || cmd == 2 || cmd == 3 || cmd == 6 || cmd == 7 || cmd == 8) { agProgress_ = 0; agWord_ = cmd; status_[0x23] = 0x40; }
         if (cmd == 0x104) mode_ = DeviceMode::MacOSStreaming;
         if (cmd == 0x105) mode_ = DeviceMode::Normal;
     }

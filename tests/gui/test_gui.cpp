@@ -2802,6 +2802,9 @@ TEST(Measurement11B, DenoiseOnOffersTheMeasurement) {
     EXPECT_EQ(t[n0], 4);
     EXPECT_EQ(t[n0 + 1], 6);
     EXPECT_EQ(t.back(), 5);
+    // the device switches Denoise on itself after the measurement (session 5); OpenWitty shows it from the read-back
+    EXPECT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("in1.denoise").toBool(); }, 3000));
+    EXPECT_EQ(r.hw->writeCalls - w0, int(r.mock.triggers().size() - n0)) << "Measure sends only trigger words, no settings write";
 }
 
 TEST(Measurement11B, PolicyAllowsOnlySingleInputDenoiseWords) {

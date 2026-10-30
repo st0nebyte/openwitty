@@ -67,6 +67,10 @@ inline constexpr std::size_t kClipguard[2] = {4, 14};
 inline constexpr std::size_t kPhantom1 = 5;            // input 1 only (input 2 not located)
 inline constexpr std::size_t kPreamp[2] = {6, 15};     // 0/1/2
 inline constexpr std::size_t kDenoise[2] = {7, 16};
+// Set by the device after a Denoise measurement, together with switching Denoise on (session 5, 2026-10-30: mic
+// 202 -> 196, instrument 211 -> 215). Most likely the measured noise level; scale unknown. OpenWitty never writes it
+// on its own: a settings write carries the read-back value through.
+inline constexpr std::size_t kDenoiseLevel[2] = {8, 17};
 inline constexpr std::size_t kCompress[2] = {9, 18};
 // Output groups: names are the app's own tree-group identifiers
 // (Loopback / Speaker / Headphone / Monitor), confirmed by name in the binary.

@@ -94,6 +94,7 @@ private:
     Bytes api_;
     std::vector<MessageId> log_;
     int agProgress_{-1};
+    std::uint16_t agWord_{0};  // the measurement word that started the running measurement
     std::atomic<bool> cancel_{false};
     std::function<void()> readHook_;
     std::function<void()> writeHook_;

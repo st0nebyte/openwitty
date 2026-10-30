@@ -36,7 +36,9 @@ std::string settingsFieldName(std::size_t off) {
         {kInputPlaybackMix + 1, "monitoring mix"}, {kLedBrightness, "LED brightness"},
         {kCustomButton, "custom button"}, {kSelectedChannel, "selected channel"},
         {kExternalGainLock, "gain lock"}, {kNativeVolumeMapping, "volume mapping"},
-        {kMobileStreaming, "mobile streaming"}};
+        {kMobileStreaming, "mobile streaming"},
+        {kDenoiseLevel[0], "mic Denoise level (set by the device)"},
+        {kDenoiseLevel[1], "instrument Denoise level (set by the device)"}};
     for (const auto& [o, n] : fields)
         if (o == off) return n;
     if (off >= kLedColorIcons && off < kLedColorIcons + 15) return "LED colour";

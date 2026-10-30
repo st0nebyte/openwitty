@@ -922,11 +922,11 @@ void DeviceWorker::trigger(const QString& name) {
     if (hwCheck_) {
         // The device sets the measured gain itself: those bytes are expected to change from here on.
         namespace o = settings_off;
-        // Autogain: the measured input's gain. Denoise measurement: that input's Denoise byte (whether the device sets
-        // it itself is what session 5 observes).
+        // Autogain: the measured input's gain. Denoise measurement: the device switches that input's Denoise on and
+        // stores its measured level (session 5).
         std::vector<std::size_t> offs;
-        if (name == "denoise1") offs.push_back(o::kDenoise[0]);
-        else if (name == "denoise2") offs.push_back(o::kDenoise[1]);
+        if (name == "denoise1") { offs.push_back(o::kDenoise[0]); offs.push_back(o::kDenoiseLevel[0]); }
+        else if (name == "denoise2") { offs.push_back(o::kDenoise[1]); offs.push_back(o::kDenoiseLevel[1]); }
         else {
             if (name != "autogain2") { offs.push_back(o::kGain[0]); offs.push_back(o::kGain[0] + 1); }
             if (name != "autogain1") { offs.push_back(o::kGain[1]); offs.push_back(o::kGain[1] + 1); }

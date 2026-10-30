@@ -212,6 +212,15 @@ with the 45 s timeout; `--hw-check` treats the Denoise byte of that input as exp
 | 5b | (only if 5a left byte 7 at 0) Denoise → Only switch on | as 5a | byte 7 0 → 1 | off |
 | 5c | Instrument Denoise → Measure (open cable) | as 5a | same for byte 16 | as 5a |
 
+**Result (2026-10-30, PASS):** 5a mic: progress → 100 in about 10 s, the device set byte 7 to 1 itself and byte 8
+202 → 196; 5b not needed; 5c instrument (open cable): byte 16 → 1, byte 17 211 → 215; mic repeated: byte 7 → 1, byte 8
+stayed 196. Result codes 1, 0, 0 (no success meaning). Restored: Denoise off on both inputs (plain writes), mutes as
+baseline; bytes 8/17 keep the device's new values. An unexpected speaker-volume change (−20.5 → −15.5 dB) happened
+before the first measurement, reported by the device as a knob change (likely an accidental touch); restored with the
+knob. OpenWitty now names 8/17 "Denoise level (set by the device)", `--hw-check` expects them after a Denoise
+measurement, and the mock switches Denoise on after one. Open: the scale of 8/17 (int8 dB? compare with a recorded room
+noise level) — needed before a noise-level marker in the meters.
+
 Audible effect of Denoise (noise reduction) is not judged here; a recording of the room noise with Denoise off/on
 (as LB-1) can follow.
 
