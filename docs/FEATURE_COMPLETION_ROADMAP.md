@@ -165,7 +165,7 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    mix-to-speakers `OutputSource` value set (byte 23), mobile/macOS streaming, custom-button value↔function map
    (2 and 12 known), native volume mapping (byte 59).
 6. **Small GUI items:** *done 2026-10-29:* Shift + wheel/drag moves the output faders in 0.1 dB steps (test
-   `Controls11B.ShiftWheelGivesFineFaderSteps` restores −32.4 dB = bytes 154/223 exactly); show "set by the device" bytes in `--hw-check` output (done) and in diagnostics.
+   `Controls11B.ShiftWheelGivesFineFaderSteps` restores −32.4 dB = bytes 154/223 exactly); show "set by the device" bytes in `--hw-check` output (done) and in diagnostics (done 2026-10-30: `openwitty-cli read settings` prints dim/mono state and the Denoise levels 8/17).
 7. **Obsolete / closed:** GAIN-1 steps 3–5 (FU 5 volume requests) — with 11C nothing writes FU 5 any more; kept as
    history in `docs/PHASE10E_GAIN_CONTROL_PATH.md`.
 8. **Still open, owner decisions:** login-screen WirePlumber rule live test (postponed); GitHub `refs/pull/1..3` privacy

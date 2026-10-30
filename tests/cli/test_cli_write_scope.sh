@@ -40,5 +40,8 @@ for bad in "write" "write mic-gain 10 --mock" "write byte 12 1 --mock" "write in
     "$cli" $bad >/dev/null 2>&1; rc=$?
     check "rejected: $bad" 64 $rc
 done
+# the settings read names the bytes the device maintains itself
+"$cli" read settings --mock 2>&1 | grep -q "^set by the device: dim state=0 mono state=0 denoise level mic=0 instrument=0$" \
+    || { echo "  FAIL read settings does not list the device-set bytes"; fail=1; }
 [ $fail -eq 0 ] && echo "CLI WRITE SCOPE: PASS" || echo "CLI WRITE SCOPE: FAIL"
 exit $fail

@@ -72,6 +72,13 @@ void printSettings(const SettingsMessage& s) {
                 s.phantom1(), s.speakerVolumeDb(), s.speakerMute() ? " (muted)" : "", s.headphoneVolumeDb(),
                 s.headphoneMute() ? " (muted)" : "", s.dim(), s.mono(), s.inputPlaybackMix(),
                 unsigned(s.monitorSource()), s.customButton());
+    // Bytes the device maintains itself (never written on their own by OpenWitty); raw values, scale of the Denoise
+    // levels unknown.
+    namespace o = settings_off;
+    const auto b = s.bytes();
+    std::printf("set by the device: dim state=%u mono state=%u denoise level mic=%u instrument=%u\n",
+                unsigned(b[o::kSpeakerDimState]), unsigned(b[o::kSpeakerMonoState]), unsigned(b[o::kDenoiseLevel[0]]),
+                unsigned(b[o::kDenoiseLevel[1]]));
     std::printf("raw=");
     hex(s.bytes());
 }
