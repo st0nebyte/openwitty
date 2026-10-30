@@ -2653,6 +2653,9 @@ TEST(SplitSources11A4, WritesConfigForTheCurrentNodeAndRestartsOnlyWhenConfirmed
     EXPECT_TRUE(s.restartAudio(true));
     EXPECT_TRUE(calls.contains("systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service"));
     EXPECT_FALSE(s.audioRestartNeeded());
+    node = "alsa_input.pci-0000_0c_00.4.analog-stereo";   // right after an audio restart: CONNECT 2 not back yet
+    s.refresh();
+    EXPECT_EQ(s.splitSources(), "on") << "an absent device is not 'another device'";
     node = "alsa_input.usb-Lewitt_GmbH_CONNECT_2_Y111YYY11111-00.analog-surround-40";   // another unit
     s.refresh();
     EXPECT_EQ(s.splitSources(), "stale");

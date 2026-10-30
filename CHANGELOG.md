@@ -68,6 +68,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   you to reconfirm the controls you want.
 
 ### Fixed
+- Separate inputs: no false "set up for another CONNECT 2" warning right after restarting desktop audio.
 - Settings: each category opens directly under its header (accordion); long sections scroll instead of overlapping.
 
 - After a successful write the GUI write status stayed "prepared"; it now reads "verified".

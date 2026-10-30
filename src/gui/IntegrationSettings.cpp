@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QDir>
 #include <QFile>
+#include <QTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -164,6 +165,8 @@ bool IntegrationSettings::restartAudio(bool confirmed) {
     else { lastError_.clear(); audioRestartNeeded_ = false; }
     refreshSetup();
     emit changed();
+    // PipeWire brings the devices back a few seconds after the restart: look again then.
+    if (rc == 0) QTimer::singleShot(4000, this, [this] { refreshSetup(); emit changed(); });
     return rc == 0;
 }
 
@@ -175,7 +178,9 @@ void IntegrationSettings::refreshSetup() {
         if (!path.isEmpty() && f.open(QIODevice::ReadOnly)) {
             const auto target = splitSourcesTarget(f.readAll().toStdString());
             const QString node = currentCaptureNode();
-            splitSources_ = (target && QString::fromStdString(*target) == node) ? "on" : "stale";
+            // "stale" only when ANOTHER CONNECT 2 input is present; right after an audio restart (or while the device
+            // is unplugged) no input is present yet, and the file is still right for it.
+            splitSources_ = (target && (node.isEmpty() || QString::fromStdString(*target) == node)) ? "on" : "stale";
         } else {
             splitSources_ = currentCaptureNode().isEmpty() ? "unavailable" : "off";
         }
