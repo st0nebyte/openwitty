@@ -1,17 +1,21 @@
--- OpenWitty DAW-1..4 test for Ardour 9 (headless, ALSA backend). See docs/FEATURE_COMPLETION_ROADMAP.md "DAW".
+-- OpenWitty DAW-1..4 test for Ardour 9 (headless; ALSA backend, or JACK = pipewire-jack). See docs/FEATURE_COMPLETION_ROADMAP.md "DAW".
 -- Run: tools/audio/daw_ardour_test.sh <session-dir> [seconds]  (owner present; speakers muted; headphones off).
 local IN_DEV  = IN_DEV  or "CONNECT 2"
 local OUT_DEV = OUT_DEV or "CONNECT 2"
 local SECS    = SECONDS or 10
 local DIR     = SESSION_DIR
+local BACKEND = BACKEND or "ALSA"
+local LIST_ONLY = LIST_ONLY or false   -- only list the ports, no tracks, no tones
 local function log(...) print("DAW", ...) end
 
-local be = AudioEngine:set_backend("ALSA", "", "")
-be:set_input_device_name(IN_DEV)
-be:set_output_device_name(OUT_DEV)
+local be = AudioEngine:set_backend(BACKEND, "", "")
+if BACKEND == "ALSA" then
+  be:set_input_device_name(IN_DEV)
+  be:set_output_device_name(OUT_DEV)
+end
 be:set_sample_rate(48000)
-be:set_buffer_size(1024)
-log("backend ALSA in=" .. IN_DEV .. " out=" .. OUT_DEV)
+be:set_buffer_size(BUFFER or 1024)
+log("backend " .. BACKEND .. " in=" .. IN_DEV .. " out=" .. OUT_DEV)
 local s = create_session(DIR, "daw", 48000)
 assert(s, "session not created (engine start failed?)")
 log("engine running:", AudioEngine:running(), "rate", Session:nominal_sample_rate())
@@ -26,6 +30,15 @@ local caps  = ports(ARDOUR.PortFlags.IsOutput | ARDOUR.PortFlags.IsPhysical)
 local plays = ports(ARDOUR.PortFlags.IsInput  | ARDOUR.PortFlags.IsPhysical)
 for _, n in ipairs(caps)  do log("DAW-1 capture port:", n, e:get_pretty_name_by_name(n)) end
 for _, n in ipairs(plays) do log("DAW-1 playback port:", n, e:get_pretty_name_by_name(n)) end
+-- JACK (PipeWire) lists every device: keep only the ports whose name starts with IN_PREFIX / OUT_PREFIX
+local function keep(list, prefix)
+  if not prefix then return list end
+  local out = {} for _, n in ipairs(list) do if n:sub(1, #prefix) == prefix then out[#out+1] = n end end return out
+end
+caps, plays = keep(caps, IN_PREFIX), keep(plays, OUT_PREFIX)
+for _, n in ipairs(caps)  do log("selected capture port:", n) end
+for _, n in ipairs(plays) do log("selected playback port:", n) end
+if LIST_ONLY then Session:save_state("", false, false, false, false, false); log("list only: done"); return end
 
 -- tracks: 4 mono + 1 stereo, inputs wired explicitly, outputs disconnected (no monitoring path)
 local function track(nin, name)

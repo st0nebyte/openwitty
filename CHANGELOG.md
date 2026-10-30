@@ -66,6 +66,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   you to reconfirm the controls you want.
 
 ### Fixed
+- Settings: each category opens directly under its header (accordion); long sections scroll instead of overlapping.
 
 - After a successful write the GUI write status stayed "prepared"; it now reads "verified".
 - Triggers (e.g. Autogain) could have been sent under the speaker/headphone permission; triggers now need their

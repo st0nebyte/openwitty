@@ -212,6 +212,22 @@ replaced `jack2` on the owner's system (owner decision). Same safety rules as se
 
 If 6a confirms the scale: a "measured noise floor" marker in the input meters (meter range extended below −60 dB).
 
+**Results (2026-10-30):**
+* **6a PASS — scale confirmed:** bytes 8/17 = int8 dBFS ≈ the **peak** level of the background noise. Mic, phone
+  noise: recording RMS −44 / peak −30 dBFS, device meter −36, stored 228 = **−28**. Mic, quiet room (same day):
+  RMS −68.5 / peak −51, stored 203 = **−53**. Instrument, open cable: RMS −43.5 / peak −39.9, stored 215 = **−41**.
+  Result code 0 every time. Next: noise-floor marker in the meters.
+* **6b PASS:** mix to speakers byte 23 0 → 1 → 0 via the GUI (*routing*, dialog), no followers.
+* **6c PASS:** mobile streaming byte 67 0 → 1 → 0; while on, capture ch 1 **and** ch 2 both carry the mic +
+  instrument mix (instrument hum −43.6 dBFS on both, mic muted), ch 3/4 unchanged; no USB re-enumeration.
+* **6d partial:** `pipewire-jack` works for JACK clients (ffmpeg JACK client, 4 ports linked to the CONNECT 2 capture
+  ports with `pw-link`, 15 s recorded without errors; all channels digital zero as inputs were muted and nothing played).
+  Headless `ardour9-lua` cannot instantiate its JACK backend ("shared_ptr is nil", also via `pw-jack`); the Ardour GUI
+  is untested. `tools/audio/daw_ardour_test.sh` got `DAW_BACKEND`/`DAW_LIST_ONLY`/prefix options for that test.
+* 6e (latency, long run) open.
+* GUI: Settings categories are now an accordion (the open section directly under its header, the others below;
+  every section scrolls) — owner report; test `SettingsLayout.OpenSectionSitsBetweenItsHeaderAndTheNext`.
+
 ### Phase 11B session 5 — Denoise measurement (procedure, prepared 2026-10-29)
 
 Known (binary): Denoise uses the same bracket as autogain (word 4, then 6 mic / 7 instrument / 8 both, word 5 at

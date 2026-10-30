@@ -132,6 +132,9 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 57 | was 1 on the owner's device (GUI label "gain lock"); each toggle makes the device report UAC2 FU 5 mute changes (ch 1, ch 2); locked ⇒ FU 5 reads muted — consistent with 1 = host control locked out (unlocked value not sampled) |
 | 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes. The rear-panel 48 V button toggles byte 5 itself (same setting) |
 | 53 = 2 | custom button "Toggle mute: hp + mic/spkr": one press flips bytes 2, 22 and 29 together |
+| 8 / 17 scale | **int8 dBFS ≈ peak level of the measured background noise** (session 6: phone noise peak −30 → stored −28; quiet room peak −51 → −53; open cable peak −39.9 → −41) |
+| 67 | mobile streaming: while 1, capture ch 1 and ch 2 both carry the mic + instrument mix; ch 3/4 unchanged; no re-enumeration |
+| 23 | mix to speakers: accepted 0/1, no followers (audible effect not judged; speakers off) |
 | 7, 8 / 16, 17 | Denoise measurement (words 4, 6 / 7, 5; session 5, 2026-10-30): the **device switches Denoise on itself** (7 / 16: 0 → 1) and stores a new value in 8 / 17 (mic 202 → 196, again 196; instrument with open cable 211 → 215). 8 / 17 = most likely the measured noise level; as int8 that would be −60 / −41 dB (unverified). Result code 0x23 read 1, then 0, 0 — not a success flag |
 
 Capture channel order (LB-1/LB-2): ch 1 microphone, ch 2 instrument, ch 3 loopback L, ch 4 loopback R; no crosstalk.

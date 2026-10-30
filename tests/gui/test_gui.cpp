@@ -2866,3 +2866,39 @@ TEST(Routing11B, SwitchesAskFirstAndWriteOnlyTheirByte) {
         EXPECT_FALSE(dlg->property("visible").toBool()) << sw;
     }
 }
+
+// Settings accordion (2026-10-30, owner report): the open section sits directly under its own header and ends above
+// the next header; the headers never overlap.
+TEST(SettingsLayout, OpenSectionSitsBetweenItsHeaderAndTheNext) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    QQmlEngine engine;
+    auto root = loadMain(c, engine);
+    ASSERT_TRUE(root);
+    root->setProperty("showSettings", true);
+    auto* sv = root->findChild<QQuickItem*>("settingsView");
+    ASSERT_TRUE(sv);
+    const QStringList keys{"audio", "leds", "button", "device", "desktop"};
+    const QStringList pages{"audioPage", "ledsPage", "buttonPage", "deviceInfoPage", "desktopIntegrationPage"};
+    for (int i = 0; i < keys.size(); ++i) {
+        sv->setProperty("open", keys[i]);
+        QCoreApplication::processEvents();
+        auto top = [&](const QString& n) {
+            auto* it = findItem(sv, n.toStdString().c_str());
+            EXPECT_TRUE(it) << n.toStdString();
+            return it ? it->mapToItem(sv, QPointF(0, 0)).y() : 0.0;
+        };
+        auto* page = findItem(sv, pages[i].toStdString().c_str());
+        ASSERT_TRUE(page) << pages[i].toStdString();
+        EXPECT_TRUE(page->isVisible()) << pages[i].toStdString();
+        const double header = top("sectionHeader_" + keys[i]);
+        const double pageTop = page->mapToItem(sv, QPointF(0, 0)).y();
+        EXPECT_GT(pageTop, header + 25) << keys[i].toStdString();
+        EXPECT_LT(pageTop, header + 40) << keys[i].toStdString();
+        const double next = i + 1 < keys.size() ? top("sectionHeader_" + keys[i + 1]) : sv->height();
+        EXPECT_LE(pageTop + page->height(), next) << keys[i].toStdString();
+        for (int j = 0; j + 1 < keys.size(); ++j)
+            EXPECT_GE(top("sectionHeader_" + keys[j + 1]) - top("sectionHeader_" + keys[j]), 26) << keys[i].toStdString();
+    }
+}

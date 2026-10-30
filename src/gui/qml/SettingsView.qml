@@ -93,12 +93,24 @@ Rectangle {
                    onClicked: root.closeRequested() }
     Rectangle { x: 0; y: 44; width: parent.width; height: 1; color: Theme.line }
 
-    Column {
-        x: 16; y: 60; width: 330; spacing: 6
+    // Accordion: headers up to the open one at the top, its section directly below it, the remaining headers at the
+    // bottom of the column.
+    readonly property var sections: ["audio", "leds", "button", "device", "desktop"]
+    readonly property int openIndex: Math.max(0, sections.indexOf(open))
+    readonly property int headerStep: 32
+    function headerY(i) {
+        return i <= openIndex ? 60 + i * headerStep : root.height - 8 - (sections.length - i) * headerStep + 6;
+    }
+    readonly property real bodyY: 60 + (openIndex + 1) * headerStep + 4
+    readonly property real bodyH: headerY(openIndex + 1 < sections.length ? openIndex + 1 : sections.length) - bodyY - 8
+    Item {
+        x: 16; y: 0; width: 330; height: root.height
         Repeater {
             model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"},
                     {k: "device", t: "Device control"}, {k: "desktop", t: "Desktop integration"}]
             Rectangle {
+                objectName: "sectionHeader_" + modelData.k
+                y: root.headerY(index)
                 width: 330; height: 26; color: Theme.panel; radius: 2
                 Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: Theme.text; font.pixelSize: 12; text: modelData.t }
                 Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
@@ -112,7 +124,7 @@ Rectangle {
     Flickable {
         objectName: "audioPage"
         visible: root.open === "audio"
-        x: 16; y: 222; width: 340; height: root.height - 232; clip: true
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
         contentHeight: audioCol.height
     Column {
         id: audioCol
@@ -144,9 +156,14 @@ Rectangle {
                        onToggled: (b) => confirmMode.ask(b) }
     }
     }
-    Column {
+    Flickable {
+        objectName: "ledsPage"
         visible: root.open === "leds"
-        x: 16; y: 222; width: 330; spacing: 10
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
+        contentHeight: ledsCol.height
+    Column {
+        id: ledsCol
+        width: 330; spacing: 10
         Text { color: Theme.text; font.pixelSize: 12
                text: ledFader.dragging && ledFader.commitOnRelease
                      ? "Brightness: " + ledFader.previewValue + " % (release to send; device: " + root.v("set.ledBrightness", 0) + " %)"
@@ -216,9 +233,15 @@ Rectangle {
             }
         }
     }
-    Column {
+    }
+    Flickable {
+        objectName: "buttonPage"
         visible: root.open === "button"
-        x: 16; y: 222; width: 330; spacing: 8
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
+        contentHeight: buttonCol.height
+    Column {
+        id: buttonCol
+        width: 330; spacing: 8
         Repeater {
             model: [{v: 0, t: "Show CONTROL CENTER"}, {v: 12, t: "Toggle mic preamp styles"},
                     {v: 13, t: "Toggle instrument preamp styles"},
@@ -245,6 +268,7 @@ Rectangle {
                text: root.v("set.customButtonKnown", true) ? "Stored value: " + root.v("set.customButton", "?")
                      : "Stored value " + root.v("set.customButton", "?") + " is not offered by the CONNECT 2 UI." }
     }
+    }
 
     // Desktop integration: desktop (KDE/PipeWire) volume sync, background service, vendor fallback,
     // direct output control, kernel compatibility quirk status. Device-writing options need a dialog.
@@ -252,7 +276,7 @@ Rectangle {
         id: desktopPage
         objectName: "desktopIntegrationPage"
         visible: root.open === "desktop"
-        x: 16; y: 222; width: 340; height: root.height - 232; clip: true
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
         contentHeight: desktopCol.height
         onVisibleChanged: if (visible) integration.refresh()
         Column {
@@ -374,14 +398,20 @@ Rectangle {
     }
 
     // Device control (Phase 10B): the independent permissions that let this window write the real CONNECT 2.
-    Column {
+    Flickable {
+        objectName: "deviceInfoPage"
         visible: root.open === "device"
-        x: 16; y: 222; width: 330; spacing: 8
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
+        contentHeight: deviceCol.height
+    Column {
+        id: deviceCol
+        width: 330; spacing: 8
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                text: "On the real CONNECT 2 every control is display-only unless you allow it here. Each permission is "
                    + "separate, off by default and covers only its own setting." }
         Text { objectName: "deviceControlSummary"; width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                text: "Currently allowed: " + (device.simulated ? "everything (simulated device)" : root.authorizedSummary()) }
+    }
     }
     Flickable {
         objectName: "deviceControlPage"
