@@ -50,7 +50,7 @@ bool isKnownWritableSettingsByte(std::size_t o) {
     if (o == kPhantom1 || o == kLoopbackMute || o == kSpeakerMute || o == kHeadphoneMute ||
         o == kMixToSpeakers || o == kHighVolumeSpeaker || o == kHighImpedanceHeadphone || o == kDim ||
         o == kMono || o == kMonitorSource || o == kLedBrightness || o == kCustomButton ||
-        o == kExternalGainLock)
+        o == kExternalGainLock || o == kMobileStreaming)
         return true;
     for (int i = 0; i < 2; ++i)
         if (o == kMute[i] || o == kHighPass[i] || o == kClipguard[i] || o == kPreamp[i] ||

@@ -59,6 +59,7 @@ std::vector<std::size_t> permissionOffsets(const std::string& name) {
     }
     if (name == "phantom") return {kPhantom1};
     if (name == "outputModes") return {kHighVolumeSpeaker, kHighImpedanceHeadphone};
+    if (name == "routing") return {kMixToSpeakers, kMobileStreaming};
     return {};
 }
 
@@ -80,6 +81,8 @@ WritePolicy guiWritePolicy(const UserConfig& c) {
         for (auto o : permissionOffsets(perm.name)) p.hardwareWriteOffsets.push_back(o);
         for (auto t : permissionTriggers(perm.name)) p.hardwareTriggers.push_back(t);
     }
+    // Mobile streaming changes what capture channels 1/2 carry (the device's routing gate in DeviceSession).
+    p.allowRoutingChanges = c.routingControl;
     return p;
 }
 

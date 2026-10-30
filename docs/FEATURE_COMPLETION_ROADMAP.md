@@ -134,7 +134,8 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
 `--hw-check` window, restore, final compare):
 
 1. **DAW-1…DAW-4 (rest of session 3) — done 2026-10-29 with option A (PASS, below).** Remaining: option B
-   (`pipewire-jack`, owner decision) and DAW-5… (latency, xruns, long run). Original plan:
+   (`pipewire-jack`: *installed 2026-10-30 on the owner's system, owner decision — replaced `jack2`, libjack now from
+   PipeWire; undo `sudo pacman -S jack2`; DAW test with it pending*) and DAW-5… (latency, xruns, long run). Original plan:
    *A (recommended start)* Ardour 9's ALSA backend — no system change; PipeWire releases the card through device
    reservation while Ardour runs (desktop audio on the CONNECT 2 pauses). *B* replace `jack2` with `pipewire-jack`
    (package swap with sudo; Ardour and desktop audio side by side). Procedure: DAW-1 record the port names per backend;
@@ -195,6 +196,21 @@ action after re-arming the permission, record it, teach OpenWitty offline, then 
 
 Not in session 4: instrument autogain (no real instrument; a cable hum is not a usable signal), Denoise measurement
 and Autosetup (need research first), mix-to-speakers, streaming modes.
+
+### Phase 11B session 6 — next hardware session (prepared 2026-10-30)
+
+Research done offline: Windows 5.2.2 binary in Ghidra (PROTOCOL.md "Windows 5.2.2 cross-check"); `pipewire-jack`
+replaced `jack2` on the owner's system (owner decision). Same safety rules as sessions 1–5.
+
+| # | Test | Conditions | Observe | Restore |
+|---|---|---|---|---|
+| 6a | Noise-floor scale: record ch 1 (mic unmuted ~10 s, Denoise off, quiet room) and ch 2 (open cable) | speakers off, headphones unplugged | RMS dBFS vs bytes 8/17 read as int8 dB (−60 / −41?) | mutes |
+| 6b | Mix to speakers on/off (*routing*, dialog) | speakers **off**, mic muted | byte 23 0 → 1 → 0, followers | off |
+| 6c | Mobile streaming on/off (*routing*, dialog) | as 6b; record ch 1–4 for a few seconds with the instrument (open cable) unmuted | byte 67, what ch 1/2 carry (mix?), USB re-enumeration (none expected) | off |
+| 6d | DAW with `pipewire-jack`: Ardour JACK backend, port names, 4-ch record, side by side with desktop audio | as DAW-1…4 | ports, xruns | close Ardour |
+| 6e | DAW-5 latency (loopback round trip, `jack_iodelay`-style) and a 30 min long run | speakers off | latency, xruns | — |
+
+If 6a confirms the scale: a "measured noise floor" marker in the input meters (meter range extended below −60 dB).
 
 ### Phase 11B session 5 — Denoise measurement (procedure, prepared 2026-10-29)
 

@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Settings ▸ Audio: "Input/playback mix applies to speakers" and "Mobile streaming mode" under a new *Routing*
+  permission (each switch-on asks first); the Audio section scrolls.
+- `openwitty-cli read settings` lists the bytes the device maintains itself.
 - Denoise: "Measure" runs the device's noise measurement; the device then switches Denoise on by itself (verified
   on the hardware).
 - Output faders: dB readout; Shift + wheel/drag for 0.1 dB steps. Autogain asks before every measurement and closes

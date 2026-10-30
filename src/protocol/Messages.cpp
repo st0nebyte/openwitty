@@ -53,6 +53,11 @@ std::optional<CustomButtonFunction> SettingsMessage::customButtonFunction() cons
     if (!isKnownCustomButton(v)) return std::nullopt;
     return static_cast<CustomButtonFunction>(v);
 }
+Status SettingsMessage::setMobileStreaming(bool v) {
+    setBoolByte(raw_[settings_off::kMobileStreaming], v);
+    return okStatus();
+}
+
 Status SettingsMessage::setMixToSpeakers(bool v) {
     setBoolByte(raw_[settings_off::kMixToSpeakers], v);
     return okStatus();

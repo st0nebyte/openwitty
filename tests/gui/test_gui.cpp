@@ -2820,3 +2820,49 @@ TEST(Measurement11B, PolicyAllowsOnlySingleInputDenoiseWords) {
     EXPECT_FALSE(has(lewitt::Trigger::ResetLedColors));
     EXPECT_TRUE(lewitt::guiWritePolicy(lewitt::UserConfig{}).hardwareTriggers.empty());
 }
+
+// Routing permission (2026-10-30): mix to speakers (23) and mobile streaming (67) ask before switching on and then
+// write exactly their byte; turning off needs no dialog.
+TEST(Routing11B, SwitchesAskFirstAndWriteOnlyTheirByte) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.routingControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    ASSERT_TRUE(r.can("set.mixToSpeakers"));
+    ASSERT_TRUE(r.can("set.mobileStreaming"));
+    EXPECT_FALSE(r.can("set.highVolume"));
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    auto* sv = root->findChild<QObject*>("settingsView");
+    ASSERT_TRUE(sv);
+    root->setProperty("showSettings", true);                  // the dialog lives in the Settings overlay
+    sv->setProperty("open", "audio");
+    QCoreApplication::processEvents();
+    auto* dlg = root->findChild<QObject*>("confirmLoudDialog");
+    ASSERT_TRUE(dlg);
+    for (const char* sw : {"mixToSpeakersSwitch", "mobileStreamingSwitch"}) {
+        const QString key = QString(sw) == "mixToSpeakersSwitch" ? "set.mixToSpeakers" : "set.mobileStreaming";
+        const std::size_t off = key == "set.mixToSpeakers" ? lewitt::settings_off::kMixToSpeakers
+                                                           : lewitt::settings_off::kMobileStreaming;
+        auto* s = root->findChild<QObject*>(sw);
+        ASSERT_TRUE(s) << sw;
+        EXPECT_TRUE(s->property("enabled").toBool()) << sw;
+        const int w0 = r.hw->writeCalls;
+        QMetaObject::invokeMethod(s, "toggled", Q_ARG(bool, true));
+        for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+        EXPECT_TRUE(dlg->property("visible").toBool()) << sw;
+        EXPECT_EQ(r.hw->writeCalls, w0) << "nothing sent before Enable: " << sw;
+        const auto before = r.mock.settingsBytes();
+        dlg->setProperty("visible", false);
+        r.c->setValue(key, true);                                // what the dialog's Enable does
+        ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value(key).toBool(); })) << sw;
+        const auto after = r.mock.settingsBytes();
+        for (std::size_t i = 0; i < before.size(); ++i)
+            if (i != off) EXPECT_EQ(before[i], after[i]) << sw << " changed byte " << i;
+        EXPECT_EQ(after[off], 1) << sw;
+        QMetaObject::invokeMethod(s, "toggled", Q_ARG(bool, false));   // off: no dialog
+        ASSERT_TRUE(waitFor([&] { r.c->flush(); return !r.c->values().value(key).toBool(); })) << sw;
+        EXPECT_FALSE(dlg->property("visible").toBool()) << sw;
+    }
+}

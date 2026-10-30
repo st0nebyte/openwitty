@@ -316,6 +316,22 @@ bool-convertible `juce::var` as a byte. Therefore the UI only ever writes
 **0 (off, default) and 1 (on)**; no other enumerators are reachable. Enumerator
 *names* are not present in the binary.
 
+### Windows 5.2.2 cross-check (Ghidra 12.1, 2026-10-30)  [V-bin]
+Binary `LEWITT CONTROL CENTER.exe` 5.2.2 (SHA-256 `aed77fbd…cf4a`, extracted with innoextract 1.10-dev; nothing
+tracked here). Findings:
+* **Result byte decode confirmed:** `FUN_1402ba420` / `FUN_1402bbb20` read status byte 0x23: bit 6 → 0, else
+  bit 5 set → 2, clear → 1. The autogain panel (`FUN_14022b3f0`) reads `AutoSetupResult` when `AutoSetupProgress`
+  reaches 100 and shows "No signal detected!" for value 1. On the hardware a successful autogain read 1 in the same
+  poll as progress 100 — so the byte is probably updated after progress; OpenWitty does not treat 1 as a failure.
+* Denoise has its own failure text "Background noise too loud! Please repeat measurement." (a flag in the
+  AutoSetup ambient-noise panel). The app warns "Attention! Microphone/Instrument will be unmuted if currently
+  muted." before a measurement (the official flow unmutes the input).
+* **Bytes 8 / 17 are not in the app's settings schema**: the official app never reads or shows the Denoise level, so
+  its scale can only be found by measurement.
+* `MixToSpeakers` (23) is labelled "Input/playback mix applies to speakers"; `MobileStreaming` (67) is labelled
+  "Mobile streaming mode" with "(Microphone and instrument mix to software input 1/2)". OpenWitty offers both under
+  the *routing* permission (each switch-on confirmed); not yet hardware-tested.
+
 ### macOS streaming mode and device mode  [V-bin, medium]
 * `MacOSStreaming` is an identifier that is **defined but never read or
   written by code** — it is not a settings property.

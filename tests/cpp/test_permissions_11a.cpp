@@ -27,7 +27,7 @@ UserConfig only(const DevicePermission& perm) {
 
 TEST(Permissions11A, EveryPermissionDefaultsOffAndIsParsedFailClosed) {
     EXPECT_FALSE(anyDeviceWritePermission(UserConfig{}));
-    EXPECT_EQ(devicePermissions().size(), 10u);
+    EXPECT_EQ(devicePermissions().size(), 11u);
     for (const auto& p : devicePermissions()) {
         EXPECT_FALSE(UserConfig{}.*(p.field)) << p.key;
         auto on = parseUserConfig(std::string(p.key) + " = true\n");
@@ -57,15 +57,17 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
         {"phantom", {"in1.phantom"}},
         {"outputModes", {"set.highVolume", "set.highImpedance"}},
         {"measurements", {"autogain1", "autogain2", "autogainBoth", "denoise1", "denoise2"}},
+        {"routing", {"set.mixToSpeakers", "set.mobileStreaming"}},
     };
     ASSERT_EQ(expected.size(), devicePermissions().size());
     for (const auto& p : devicePermissions())
         EXPECT_EQ(writableKeys(guiWritePolicy(only(p))), expected.at(p.name)) << p.name;
-    // everything on: still never mix-to-speakers or the streaming modes; Autosetup needs processing + 48 V + measurements
+    // everything on: still never the macOS streaming mode (device restart); Autosetup needs processing + 48 V + measurements
     UserConfig all;
     for (const auto& p : devicePermissions()) all.*(p.field) = true;
     const auto keys = writableKeys(guiWritePolicy(all));
-    EXPECT_FALSE(keys.count("set.mixToSpeakers"));
+    EXPECT_TRUE(keys.count("set.mixToSpeakers"));
+    EXPECT_TRUE(keys.count("set.mobileStreaming"));
     EXPECT_FALSE(keys.count("set.macosStreaming"));
     EXPECT_TRUE(keys.count("autosetup"));
     UserConfig noPhantom = all;
@@ -73,15 +75,16 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
     EXPECT_FALSE(writableKeys(guiWritePolicy(noPhantom)).count("autosetup"));
 }
 
-TEST(Permissions11A, PolicyNeverGrantsRoutingPersistenceUndecodedBytesOrDangerousTriggers) {
+TEST(Permissions11A, PolicyGrantsRoutingOnlyViaItsPermissionAndNeverPersistenceOrDangerousTriggers) {
     UserConfig all;
     for (const auto& p : devicePermissions()) all.*(p.field) = true;
     const WritePolicy w = guiWritePolicy(all);
     EXPECT_TRUE(w.allowHardwareWrites);
-    EXPECT_FALSE(w.allowRoutingChanges);
+    EXPECT_TRUE(w.allowRoutingChanges);    // only through the routing permission (below)
     EXPECT_FALSE(w.allowPersistentChanges);
-    for (std::size_t forbidden : {settings_off::kMixToSpeakers, settings_off::kMobileStreaming,
-                                  settings_off::kSelectedChannel, settings_off::kNativeVolumeMapping,
+    for (const auto& p : devicePermissions())
+        EXPECT_EQ(guiWritePolicy(only(p)).allowRoutingChanges, std::string(p.name) == "routing") << p.name;
+    for (std::size_t forbidden : {settings_off::kSelectedChannel, settings_off::kNativeVolumeMapping,
                                   std::size_t(54), std::size_t(55), std::size_t(58), std::size_t(70)})
         EXPECT_EQ(std::count(w.hardwareWriteOffsets.begin(), w.hardwareWriteOffsets.end(), forbidden), 0) << forbidden;
     for (Trigger t : {Trigger::FactoryReset, Trigger::SwitchToMacOSStreamingMode, Trigger::SwitchToNormalMode,

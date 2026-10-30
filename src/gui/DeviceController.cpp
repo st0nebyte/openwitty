@@ -1019,6 +1019,7 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
         } else if (g == "set") {
             if (f == "gainLock") return s.setExternalGainLock(v.toBool());
             if (f == "mixToSpeakers") return s.setMixToSpeakers(v.toBool());
+            if (f == "mobileStreaming") return s.setMobileStreaming(v.toBool());
             if (f == "customButton") {
                 int n = v.toInt();
                 if (!isKnownCustomButton(static_cast<std::uint8_t>(n)))

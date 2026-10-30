@@ -77,7 +77,7 @@ inline constexpr std::size_t kCompress[2] = {9, 18};
 inline constexpr std::size_t kLoopbackMute = 19;
 inline constexpr std::size_t kSpeakerVolume = 20;      // i16 Q8.8, -60..0 dB
 inline constexpr std::size_t kSpeakerMute = 22;
-inline constexpr std::size_t kMixToSpeakers = 23;      // OutputSource enum (value set unknown)
+inline constexpr std::size_t kMixToSpeakers = 23;      // OutputSource enum; the official UI writes only 0/1 (switch)
 inline constexpr std::size_t kHighVolumeSpeaker = 24;  // bool
 inline constexpr std::size_t kHeadphoneVolume = 27;    // i16 Q8.8, -60..0 dB
 inline constexpr std::size_t kHeadphoneMute = 29;
@@ -101,7 +101,7 @@ inline constexpr std::size_t kCustomButton = 53;       // enum
 inline constexpr std::size_t kSelectedChannel = 56;    // physical touch-surface focus (HW-read)
 inline constexpr std::size_t kExternalGainLock = 57;   // bool (ExternalGainControl)
 inline constexpr std::size_t kNativeVolumeMapping = 59;// enum (MasterSliderMap)
-inline constexpr std::size_t kMobileStreaming = 67;    // bool
+inline constexpr std::size_t kMobileStreaming = 67;    // bool; official text: "Microphone and instrument mix to software input 1/2"
 }  // namespace settings_off
 
 // Bytes the device itself changes as a consequence of a write to `written` (observed on hardware). A write
@@ -191,6 +191,7 @@ public:
     Status setMonitorMicrophone(bool on);
     Status setMonitorInstrument(bool on);
     Status setMixToSpeakers(bool v);
+    Status setMobileStreaming(bool v);
     Status setCustomButtonFunction(CustomButtonFunction f);
     // Field-wise merge used by the original app's sync loop: for every schema field
     // whose device value changed between `snapshot` and `device`, take the device

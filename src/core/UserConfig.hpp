@@ -34,6 +34,7 @@ struct UserConfig {
     bool phantomControl{false};        // 48 V phantom power (each switch-on is confirmed again): byte 5
     bool outputModesControl{false};    // high-volume speakers, high-impedance headphones (confirmed per use): 24, 31
     bool measurementControl{false};    // autogain measurements: measurement-session and autogain triggers
+    bool routingControl{false};        // mix to speakers, mobile streaming mode (confirmed per use): bytes 23, 67
     // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
     // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.
     bool legacyOutputControlPending{false};

@@ -50,7 +50,7 @@ Rectangle {
         ["input processing", ["in1.highPass", "in1.clipguard", "in1.preamp", "in1.denoise", "in1.compress"]],
         ["monitoring", ["mon.mix", "mon.mic", "out.dim", "out.mono", "loop.mute"]],
         ["LED colours and custom button", ["set.led.icons", "set.customButton"]], ["48 V", ["in1.phantom"]],
-        ["output modes", ["set.highVolume", "set.highImpedance"]], ["autogain", ["autogain1"]]]
+        ["output modes", ["set.highVolume", "set.highImpedance"]], ["routing", ["set.mixToSpeakers", "set.mobileStreaming"]], ["autogain", ["autogain1"]]]
     function authorizedSummary() {
         var out = [];
         for (var i = 0; i < capabilityGroups.length; ++i) {
@@ -81,6 +81,9 @@ Rectangle {
         {n: "outputModes", label: "Output modes (louder)",
          confirm: "OpenWitty will be able to switch high-volume speaker mode and high-impedance headphone mode; each "
                 + "switch-on asks again. Both can make the output much louder."},
+        {n: "routing", label: "Routing (mix to speakers, mobile streaming)",
+         confirm: "OpenWitty will be able to send the monitoring mix to the speakers and switch mobile streaming mode "
+                + "(inputs 1/2 carry the mic + instrument mix); each switch-on asks again."},
         {n: "measurements", label: "Autogain and Denoise measurements",
          confirm: "OpenWitty will be able to start the CONNECT 2's autogain and Denoise measurements (each asks again). The "
                 + "device then sets the input gain or Denoise by itself. Keep speakers down and headphones off during a measurement."}]
@@ -106,30 +109,40 @@ Rectangle {
     }
 
     // Section bodies
-    Column {
+    Flickable {
+        objectName: "audioPage"
         visible: root.open === "audio"
-        x: 16; y: 222; width: 330; spacing: 6
+        x: 16; y: 222; width: 340; height: root.height - 232; clip: true
+        contentHeight: audioCol.height
+    Column {
+        id: audioCol
+        width: 330; spacing: 6
         ToggleSwitch { objectName: "gainLockSwitch"; width: 330; label: "Gain lock (block external gain changes)"; enabled: root.can("set.gainLock")
                        checked: root.v("set.gainLock", false)
                        onToggled: (b) => device.setValue("set.gainLock", b) }
-        ToggleSwitch { width: 330; label: "Input/playback mix applies to speakers"; enabled: root.can("set.mixToSpeakers")
+        ToggleSwitch { objectName: "mixToSpeakersSwitch"; width: 330; label: "Input/playback mix applies to speakers"
+                       enabled: root.can("set.mixToSpeakers")
                        checked: root.v("set.mixToSpeakers", false)
-                       tip: device.simulated ? "Simulated" : "Display only: the values the CONNECT 2 uses for this setting are not known yet"
-                       onToggled: (b) => device.setValue("set.mixToSpeakers", b) }
+                       tip: "The speakers play the monitoring mix (inputs + computer) instead of the computer only"
+                       onToggled: (b) => confirmLoud.ask("set.mixToSpeakers", b) }
         ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.can("set.highImpedance")
                        checked: root.v("set.highImpedance", false)
                        onToggled: (b) => confirmLoud.ask("set.highImpedance", b) }
         ToggleSwitch { width: 330; label: "High volume speaker mode"; enabled: root.can("set.highVolume")
                        checked: root.v("set.highVolume", false)
                        onToggled: (b) => confirmLoud.ask("set.highVolume", b) }
-        ToggleSwitch { width: 330; label: "Mobile streaming mode (routing change)"; enabled: false
-                       checked: root.v("set.mobileStreaming", false) }
+        ToggleSwitch { objectName: "mobileStreamingSwitch"; width: 330; label: "Mobile streaming mode"
+                       enabled: root.can("set.mobileStreaming")
+                       checked: root.v("set.mobileStreaming", false)
+                       tip: "Microphone and instrument mix to software input 1/2 (official description)"
+                       onToggled: (b) => confirmLoud.ask("set.mobileStreaming", b) }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               text: "Streaming modes change USB channel routing and (macOS mode) restart the device. They are not enabled in this build." }
+               text: "macOS streaming mode restarts the device with another USB identity; it is not enabled in this build." }
         ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: root.can("set.macosStreaming")
                        checked: root.v("set.macosStreaming", false)
                        tip: device.simulated ? "Simulated: restarts the (simulated) device" : "Not enabled on real hardware"
                        onToggled: (b) => confirmMode.ask(b) }
+    }
     }
     Column {
         visible: root.open === "leds"
@@ -572,7 +585,7 @@ Rectangle {
 
     Rectangle {
         id: confirmLoud
-        visible: false; z: 20; anchors.centerIn: parent; width: 260; height: 110; radius: 6
+        visible: false; z: 20; anchors.centerIn: parent; width: 260; height: 140; radius: 6
         color: Theme.panelHi; border.color: Theme.warn
         property string key: "set.highVolume"
         objectName: "confirmLoudDialog"
@@ -581,6 +594,10 @@ Rectangle {
             Text { width: 230; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                    text: confirmLoud.key === "set.highImpedance"
                          ? "High-impedance headphone mode raises the headphone output level. Take your headphones off first."
+                         : confirmLoud.key === "set.mixToSpeakers"
+                         ? "The speakers will also play the microphone and instrument. A microphone near the speakers can feed back: lower your monitors first."
+                         : confirmLoud.key === "set.mobileStreaming"
+                         ? "Software inputs 1/2 will carry the microphone + instrument mix instead of separate inputs. Recordings and calls change."
                          : "High volume speaker mode raises the maximum speaker output level. Lower your monitors first." }
             Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmLoud.visible = false }
