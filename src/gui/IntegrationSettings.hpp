@@ -41,6 +41,9 @@ class IntegrationSettings : public QObject {
     // Phase 11A.4 separate inputs: "off" | "on" | "stale" (file targets another node) | "unavailable" (no CONNECT 2 input)
     Q_PROPERTY(QString splitSources READ splitSources NOTIFY changed)
     Q_PROPERTY(bool audioRestartNeeded READ audioRestartNeeded NOTIFY changed)
+    // SR: OpenWitty's PipeWire file allowing 44.1/48/96 kHz is present; the rates PipeWire uses now ("" = unknown).
+    Q_PROPERTY(bool extraSampleRates READ extraSampleRates NOTIFY changed)
+    Q_PROPERTY(QString liveSampleRates READ liveSampleRates NOTIFY changed)
     Q_PROPERTY(QStringList findings READ findings NOTIFY changed)
     Q_PROPERTY(QString quirkInstructions READ quirkInstructions CONSTANT)
     // Optional system tray icon (openwitty-tray): installed at all, and started at login (XDG autostart).
@@ -83,6 +86,8 @@ public:
     bool softwareInputMute() const { return softwareInputMute_; }
     QString splitSources() const { return splitSources_; }
     bool audioRestartNeeded() const { return audioRestartNeeded_; }
+    bool extraSampleRates() const { return extraSampleRates_; }
+    QString liveSampleRates() const { return liveSampleRates_; }
     // The CONNECT 2's capture node name in `pw-dump` output (empty if none).
     static QString findConnect2CaptureNode(const QByteArray& pwDumpJson);
     QStringList findings() const { return findings_; }
@@ -112,6 +117,9 @@ public:
     Q_INVOKABLE bool setTrayAutostart(bool on);
     // Writes (on) or removes (off) the PipeWire config for separate inputs; takes effect after restartAudio().
     Q_INVOKABLE bool setSplitSources(bool on);
+    // Writes (on) or removes (off) the PipeWire file allowing 44.1/48/96 kHz; takes effect after restartAudio().
+    // Never removes a file OpenWitty did not write.
+    Q_INVOKABLE bool setExtraSampleRates(bool on);
     // Restarts the user's PipeWire, PipeWire-Pulse and WirePlumber (desktop audio stops for a moment). Needs the
     // UI's confirmation.
     Q_INVOKABLE bool restartAudio(bool confirmed);
@@ -143,6 +151,8 @@ private:
     bool softwareInputMute_{false};
     QString splitSources_{"off"};
     bool audioRestartNeeded_{false};
+    bool extraSampleRates_{false};
+    QString liveSampleRates_;
     QString currentCaptureNode();
     QStringList findings_;
 };

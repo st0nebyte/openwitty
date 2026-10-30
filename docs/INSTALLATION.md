@@ -211,6 +211,15 @@ your machine). Each extra input is active only while an app records from it; the
 DAWs. Switching it off removes the file. With the software input mute above installed, muting the main input in the
 desktop also silences the extra inputs.
 
+### Allow 44.1 and 96 kHz for apps (optional)
+
+By default PipeWire runs at 48 kHz only (`pw-metadata -n settings 0 clock.allowed-rates` shows `[ 48000 ]`), so the
+CONNECT 2 always runs at 48 kHz and other rates are converted. *Settings ▸ Desktop integration ▸ Allow 44.1 and 96 kHz
+for apps* writes `~/.config/pipewire/pipewire.conf.d/54-openwitty-sample-rates.conf` with
+`default.clock.allowed-rates = [ 44100 48000 96000 ]`; after *Restart desktop audio*, PipeWire runs the device at the
+rate a DAW or player asks for. It applies to all sound cards. At 96 kHz the CONNECT 2 offers no Denoise and Comp.
+Undo: switch it off (OpenWitty removes only its own file) or delete the file, then restart desktop audio.
+
 ### Show the volume knob in the desktop volume
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move

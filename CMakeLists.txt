@@ -101,7 +101,7 @@ endif()
 # and the openwitty-volumed daemon need alsa-lib and the USB transport.
 add_library(lewitt_desktop STATIC src/desktop/DesktopMixer.cpp src/desktop/DesktopVolumeLink.cpp
             src/desktop/AudioSetupCheck.cpp src/desktop/RouteVolume.cpp src/desktop/DeviceSampleRate.cpp
-            src/desktop/SplitSources.cpp)
+            src/desktop/SplitSources.cpp src/desktop/SampleRates.cpp)
 target_link_libraries(lewitt_desktop PUBLIC lewitt_core)
 target_compile_options(lewitt_desktop PRIVATE -Wall -Wextra -Wpedantic)
 option(LEWITT_ENABLE_ALSA "Build the ALSA desktop-volume backend and openwitty-volumed" ON)
@@ -241,6 +241,7 @@ if(LEWITT_BUILD_TESTS)
                                         tests/cpp/test_permissions_11a.cpp  # Phase 11A grouped permissions
                                         tests/cpp/test_audio_setup_check.cpp   # Phase 8F setup diagnosis
                                         tests/cpp/test_split_sources.cpp       # Phase 11A.4 separate inputs
+                                        tests/cpp/test_sample_rates.cpp        # SR: allowed rates for apps
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
     if(LEWITT_ENABLE_USB)

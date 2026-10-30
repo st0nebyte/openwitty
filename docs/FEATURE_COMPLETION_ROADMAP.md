@@ -874,6 +874,10 @@ classic JACK where relevant.
 
 ### Sample rates and monitoring (read-only investigation first)
 
+* **SR-0 (done 2026-10-30, offline):** the owner's PipeWire allows only 48 kHz (`clock.allowed-rates [ 48000 ]`), so a
+  per-device rule cannot change the device rate; OpenWitty offers *Allow 44.1 and 96 kHz for apps* (user file
+  `54-openwitty-sample-rates.conf`, global, restart needed, removes only its own file; tests `SampleRates.*`,
+  `SampleRatesSR.*`). Hardware tests SR-1…3 go into session 7 together with 6d/6e.
 * **SR-1 (read-only, now possible):** record the stream rate the kernel reports while a client plays/records at 44.1,
   48 and 96 kHz — the client chooses; OpenWitty only displays. PipeWire's `default.clock.allowed-rates` decides
   whether the device follows a client's rate; OpenWitty documents it and never changes it silently.

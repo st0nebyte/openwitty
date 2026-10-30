@@ -13,6 +13,7 @@
 #include "GuiActivation.hpp"
 #include "ServiceState.hpp"
 #include "TrayAutostart.hpp"
+#include "desktop/SampleRates.hpp"
 #include "desktop/SplitSources.hpp"
 
 using namespace lewitt;
@@ -130,6 +131,32 @@ bool IntegrationSettings::setSplitSources(bool on) {
     return lastError_.isEmpty();
 }
 
+bool IntegrationSettings::setExtraSampleRates(bool on) {
+    const QString path = QString::fromStdString(sampleRatesPath(userConfigHome()));
+    lastError_.clear();
+    if (path.isEmpty()) { lastError_ = "Sample rates: no configuration directory."; emit changed(); return false; }
+    if (!on) {
+        QFile f(path);
+        if (f.open(QIODevice::ReadOnly)) {
+            const bool ours = isOpenWittySampleRatesConfig(f.readAll().toStdString());
+            f.close();
+            if (!ours) lastError_ = "Sample rates: " + path + " was not written by OpenWitty; left unchanged.";
+            else if (!QFile::remove(path)) lastError_ = "Sample rates: could not remove " + path + ".";
+            else audioRestartNeeded_ = true;
+        }
+    } else {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            || f.write(QByteArray::fromStdString(renderSampleRatesConfig())) < 0)
+            lastError_ = "Sample rates: could not write " + path + ".";
+        else audioRestartNeeded_ = true;
+    }
+    refreshSetup();
+    emit changed();
+    return lastError_.isEmpty();
+}
+
 bool IntegrationSettings::restartAudio(bool confirmed) {
     if (!confirmed) return false;
     const int rc = run("systemctl", {"--user", "restart", "pipewire.service", "pipewire-pulse.service", "wireplumber.service"});
@@ -152,6 +179,20 @@ void IntegrationSettings::refreshSetup() {
         } else {
             splitSources_ = currentCaptureNode().isEmpty() ? "unavailable" : "off";
         }
+    }
+    {
+        const QString path = QString::fromStdString(sampleRatesPath(userConfigHome()));
+        QFile f(path);
+        extraSampleRates_ = !path.isEmpty() && f.open(QIODevice::ReadOnly)
+                            && isOpenWittySampleRatesConfig(f.readAll().toStdString());
+        QString out;
+        liveSampleRates_.clear();
+        if (run("pw-metadata", {"-n", "settings", "0", "clock.allowed-rates"}, &out) == 0)
+            if (auto r = parseAllowedRates(out.toStdString())) {
+                QStringList parts;
+                for (int hz : *r) parts << QString::number(hz / 1000.0, 'f', hz % 1000 ? 1 : 0) + " kHz";
+                liveSampleRates_ = parts.join(", ");
+            }
     }
     const auto probed = probe_();
     setupAvailable_ = probed.has_value();

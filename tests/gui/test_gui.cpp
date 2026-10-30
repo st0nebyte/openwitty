@@ -2920,3 +2920,47 @@ TEST(NoiseFloor, MeterShowsTheMeasuredLevelOnlyAfterADenoiseMeasurement) {
     EXPECT_TRUE(marker->isVisible());
     EXPECT_EQ(c.values().value("in2.noiseFloor").toInt(), 0);   // instrument not measured
 }
+
+// SR: "Allow 44.1 and 96 kHz" writes OpenWitty's PipeWire file, shows PipeWire's live rates, removes only its own file.
+TEST(SampleRatesSR, WritesAndRemovesOnlyItsOwnFile) {
+    app();
+    namespace fs = std::filesystem;
+    const fs::path h = fs::temp_directory_path() / ("ow-rates-" + std::to_string(QCoreApplication::applicationPid()));
+    fs::remove_all(h);
+    fs::create_directories(h);
+    const QByteArray oldXdg = qgetenv("XDG_CONFIG_HOME");
+    qputenv("XDG_CONFIG_HOME", QByteArray::fromStdString(h.string()));
+    QString live = "[ 48000 ]";
+    QStringList calls;
+    IntegrationSettings s(nullptr,
+        [&](const QString& prog, const QStringList& args, QString* out) {
+            calls << prog + " " + args.join(" ");
+            if (prog == "pw-metadata") { if (out) *out = "update: id:0 key:'clock.allowed-rates' value:'" + live + "' type:''\n"; return 0; }
+            if (out) *out = "LoadState=not-found\n";
+            return 0;
+        },
+        [] { return std::optional<lewitt::AudioSetupStatus>(); });
+    s.refresh();
+    EXPECT_FALSE(s.extraSampleRates());
+    EXPECT_EQ(s.liveSampleRates(), "48 kHz");
+    ASSERT_TRUE(s.setExtraSampleRates(true));
+    const fs::path file = h / "pipewire/pipewire.conf.d/54-openwitty-sample-rates.conf";
+    ASSERT_TRUE(fs::exists(file));
+    EXPECT_TRUE(s.extraSampleRates());
+    EXPECT_TRUE(s.audioRestartNeeded());
+    for (const auto& c : calls) EXPECT_FALSE(c.startsWith("systemctl --user restart")) << "no restart without the dialog";
+    live = "[ 44100 48000 96000 ]";
+    s.refresh();
+    EXPECT_EQ(s.liveSampleRates(), "44.1 kHz, 48 kHz, 96 kHz");
+    ASSERT_TRUE(s.setExtraSampleRates(false));
+    EXPECT_FALSE(fs::exists(file));
+    EXPECT_FALSE(s.extraSampleRates());
+    {   // a file with that name that OpenWitty did not write is left alone
+        std::ofstream(file) << "context.properties = { default.clock.allowed-rates = [ 48000 192000 ] }\n";
+    }
+    EXPECT_FALSE(s.setExtraSampleRates(false));
+    EXPECT_TRUE(fs::exists(file));
+    EXPECT_FALSE(s.extraSampleRates());
+    if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
+    fs::remove_all(h);
+}
