@@ -174,7 +174,9 @@ the touch surface showed the headphones selected; back to speakers the same. Opt
 still holds that base function (another function, e.g. "Show CONTROL CENTER", leaves it inactive). Choosing it asks
 once (it authorizes the follow writes 59/56 for the service and the window); choosing any other function removes it
 for this device; the manual switch keeps its own value. In the GUI the follow switch is then on, greyed out, with a
-note. Tests `ButtonFollow.*`. Live test pending.
+note. Tests `ButtonFollow.*`. **Live test PASS (2026-10-31)** with the manual switch off: the service followed the
+custom button (mapping + focus verified); the window first opened read-only (an extended mode alone did not count as a
+write authorization; fixed in 630f725), afterwards the window followed too (focus moved to the headphones).
 
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
