@@ -9,6 +9,10 @@ Item {
     property bool physicalSelected: false
     property real stageScale: 1
     readonly property string p: "in" + index + "."
+    // Denoise level the device stored at its last measurement (bytes 8/17); 0 = never measured
+    readonly property bool hasNoiseLevel: { var n = device.values[p + "noiseFloor"];
+                                            return typeof n === "number" && n < 0 && n >= -100; }
+    readonly property bool canMeasureDenoise: !device.simulated && can("denoise" + index)
     readonly property bool mic: index === 1
     function v(k, d) { var x = device.values[p + k]; return x === undefined ? d : x; }
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
@@ -30,8 +34,8 @@ Item {
                  sourceFreshness: device.meters.freshness
                  levelL: root.v("level", -60)
                  // the device's last Denoise measurement (bytes 8/17); 0 = never measured, nothing shown
-                 noiseFloorDb: { var n = device.values[root.p + "noiseFloor"];
-                                 return (typeof n === "number" && n < 0 && n >= -100) ? n : NaN; } }
+                 // shown only while Denoise is on (owner wish 2026-10-31)
+                 noiseFloorDb: (root.hasNoiseLevel && root.v("denoise", false)) ? device.values[root.p + "noiseFloor"] : NaN }
 
     GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"; color: "#ececec" }
 
@@ -80,13 +84,20 @@ Item {
     }
     Row {
         x: 31; y: 211; spacing: 4
-        ToggleButton { width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
-                       tip: root.dsp ? "Good for live streaming" + root.dspTip : "Choose lower sample rate to enable this function"
+        ToggleButton { id: denoiseButton; objectName: "denoiseButton" + root.index
+                       width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
+                       tip: !root.dsp ? "Choose lower sample rate to enable this function"
+                            : "Good for live streaming" + root.dspTip
+                              + (root.canMeasureDenoise ? " - right-click: measure the background noise again" : "")
                        active: root.v("denoise", false)
-                       // Phase 11B session 5: switching Denoise on can include the device's noise measurement (as the
-                       // official app does) when measurements are authorized; switching off is always a plain write.
-                       onClicked: { if (!active && !device.simulated && root.can("denoise" + root.index)) denoiseConfirm.visible = true;
-                                    else device.setValue(root.p + "denoise", !active); } }
+                       // The device keeps the measured level (bytes 8/17) while Denoise is off, so switching on reuses it
+                       // (owner wish 2026-10-31); the measurement dialog only comes up when no level was ever measured.
+                       // Right-click measures again. Switching off is always a plain write.
+                       onClicked: { if (!active && root.canMeasureDenoise && !root.hasNoiseLevel) denoiseConfirm.visible = true;
+                                    else device.setValue(root.p + "denoise", !active); }
+                       MouseArea { anchors.fill: parent; acceptedButtons: Qt.RightButton
+                                   enabled: root.canMeasureDenoise && !denoiseButton.unavailable
+                                   onClicked: denoiseConfirm.visible = true } }
         ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.can(root.p + "compress"); unavailable: !root.dsp
                        tip: root.dsp ? "Consistent level, louder signal, finished sound" + root.dspTip : "Choose lower sample rate to enable this function"
                        active: root.v("compress", false)

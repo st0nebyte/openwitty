@@ -2988,7 +2988,8 @@ TEST(SampleRatesSR, UnavailableDenoiseExplainsItselfAndIgnoresClicks) {
     EXPECT_EQ(c.values().value("in1.denoise").toBool(), before) << "no change while unavailable";
     bool hoverOk = false;
     for (QQuickItem* ch : btn->childItems())
-        if (QString(ch->metaObject()->className()).contains("MouseArea")) hoverOk = ch->isEnabled() && ch->property("hoverEnabled").toBool();
+        if (QString(ch->metaObject()->className()).contains("MouseArea") && ch->isEnabled() && ch->property("hoverEnabled").toBool())
+            hoverOk = true;
     EXPECT_TRUE(hoverOk) << "the tip must stay reachable";
 }
 
@@ -3025,4 +3026,33 @@ TEST(Routing11B, VolumeMappingAsksBeforeHeadphonesAndWritesOnlyByte59) {
     QMetaObject::invokeMethod(spk, "clicked");                              // back to speakers: no dialog
     ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.volumeMapping").toInt() == 1; }));
     EXPECT_FALSE(dlg->property("visible").toBool());
+}
+
+// Owner wish 2026-10-31: with a stored Denoise level, switching Denoise on reuses it (no dialog, one plain write); the
+// meter's noise-floor line is shown only while Denoise is on.
+TEST(Measurement11B, DenoiseOnReusesTheStoredLevelAndTheLineFollowsDenoise) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    cfg.processingControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    auto b = r.mock.settingsBytes();
+    b[lewitt::settings_off::kDenoiseLevel[0]] = 0xCB;           // -53 dB from an earlier measurement
+    b[lewitt::settings_off::kDenoise[0]] = 0;
+    r.mock.setSettingsBytes(b);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("in1.noiseFloor").toInt() == -53; }));
+    MainView v(*r.c);
+    QQuickItem* marker = findItem(v.w->contentItem(), "noiseFloorMarker0");
+    QQuickItem* btn = findItem(v.w->contentItem(), "denoiseButton1");
+    QQuickItem* dlg = findItem(v.w->contentItem(), "denoiseConfirm1");
+    ASSERT_TRUE(marker && btn && dlg);
+    EXPECT_FALSE(marker->isVisible()) << "Denoise off: no line";
+    const auto n0 = r.mock.triggers().size();
+    v.mouse(btn, QEvent::MouseButtonPress, 0.5, 0.5);
+    v.mouse(btn, QEvent::MouseButtonRelease, 0.5, 0.5);
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("in1.denoise").toBool(); }));
+    EXPECT_FALSE(dlg->isVisible()) << "no measurement dialog with a stored level";
+    EXPECT_EQ(r.mock.triggers().size(), n0) << "no measurement started";
+    for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
+    EXPECT_TRUE(marker->isVisible()) << "Denoise on: the stored level is shown";
 }
