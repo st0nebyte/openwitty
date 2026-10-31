@@ -189,6 +189,13 @@ measurement 1 / 2 / both), 0x103 and 0x106 (attached to "ResetLedColors"
 callbacks — treated as unknown, **never sent**). Assignment is inferred from
 callback order and is unverified.
 
+## Firmware version shown by OpenWitty (2026-10-31)
+
+The Windows app shows "CONNECT 2 firmware version <text>" from a string member of `Connect2Component` (+0xe748) that
+is filled indirectly; it uses the Thesycon driver (`TUSBAUDIO_GetDeviceProperties`, which reports the USB revision).
+OpenWitty shows the USB `bcdDevice` from sysfs as "1.21 (USB revision)" (owner's device: 0x0121); whether the
+official app formats it the same way is unconfirmed.
+
 ## iface_version_t (0x40)  [V-bin: no typed consumer]
 
 Layout not recovered, and probably not recoverable from the app: the message

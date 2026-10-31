@@ -576,7 +576,9 @@ Rectangle {
         x: 390; y: 60; width: 310; spacing: 10
         Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 12; text: "OpenWitty " + Qt.application.version + " — unofficial, experimental; not affiliated with LEWITT" }
         Text { color: Theme.textDim; font.pixelSize: 12
-               text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated" : "not decoded yet") }
+               text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated"
+                     : (root.v("device.usbRevision", "") !== "" && root.v("device.usbRevision", "") !== "-")
+                       ? root.v("device.usbRevision", "") + " (USB revision)" : "unknown") }
         Row { spacing: 8
             ToggleButton { width: 120; height: 26; text: "Check for updates"; primary: true; enabled: false; tip: "Not implemented" }
             ToggleButton { width: 100; height: 26; text: "Manual update"; enabled: false; tip: "Firmware update is out of scope" } }

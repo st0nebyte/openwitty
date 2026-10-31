@@ -189,6 +189,7 @@ private:
     bool followWanted_{false};
     lewitt::FollowConfig followCfg_;
     lewitt::UserConfig followUserCfg_;
+    QString usbRevision_;                 // bcdDevice of the connected CONNECT 2 from sysfs ("" = not read yet)
     void serviceFollower();
     void configureFollower(const lewitt::UserConfig& c);
     bool desktopLinkWanted_{false};

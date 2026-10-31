@@ -198,6 +198,7 @@ void DeviceWorker::serviceFollower() {
 }
 
 void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t, WritePolicy policy) {
+    usbRevision_.clear();
     follower_.reset();                   // like the link, it refers to the session that is about to go away
     link_.reset();                       // the link refers to the session that is about to go away
     {
@@ -875,6 +876,16 @@ void DeviceWorker::publish() {
         v["set.led.metering"] = hex(s.ledColor(LedElement::Metering));
         v["set.led.gainReduction"] = hex(s.ledColor(LedElement::GainReduction));
         v["set.customButton"] = int(s.customButton());
+        // USB device revision (bcdDevice) from sysfs, once per connection: no USB traffic. Shown as the firmware
+        // version; the Windows app reads the device properties through its driver (exact formatting unconfirmed).
+        if (!session_->isSimulated() && usbRevision_.isEmpty()) {
+            usbRevision_ = "-";
+            const auto pid = session_->info().pid;
+            for (const auto& r : scanSysfs(kLewittVendorId))
+                if (r.pid == pid && r.bcdDevice)
+                    usbRevision_ = QString("%1.%2").arg(r.bcdDevice >> 8, 0, 16).arg(r.bcdDevice & 0xFF, 2, 16, QChar('0'));
+        }
+        v["device.usbRevision"] = session_->isSimulated() ? QString() : usbRevision_;
         // Phase 12D: anonymous per-device key for the extended custom-button modes (real device only)
         v["device.followKey"] = session_->isSimulated() ? QString("simulated")
                                                         : QString::fromStdString(deviceKey(session_->info().serial));
