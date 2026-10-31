@@ -157,6 +157,15 @@ on; audit-pinned) and in the window while it owns the device (GUI gates: no writ
 unconfirmed write). Needs desktop volume sync (the service only runs with it). The manual mapping buttons are locked
 while it is on. Tests `OutputFollow.*`. Live test pending.
 
+**12C live test (2026-10-31, PASS):** follow on, window closed (service). Custom button → headphones: mapping
+speakers → headphones verified 22 ms after the mute change was read, KDE showed headphones −32.5 dB; volume keys moved
+**only the headphones** (−32.5 → −60 dB); custom button → speakers: mapping back, KDE showed speakers −40.5 dB.
+Fixed afterwards: the follower now runs before the link (no brief mirror of the old output's mute) and the log says
+"device output" instead of "device speaker".
+**Owner wish (2026-10-31):** the custom button should also move the touch-wheel focus (byte 56: 3 speakers,
+4 headphones). The CONNECT 2 app never writes byte 56 (its only setters belong to the CONNECT 6 tree), so whether the
+device accepts a host write is unknown → one hardware test before implementing.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour

@@ -163,7 +163,7 @@ SyncAction VolumeSync::onHardware(OutputLevel hw, TimePoint now) {
     if (isIntermediate(hw, now)) {                     // keeps the newer desktop request (and any queued one)
         char lvl[64];
         std::snprintf(lvl, sizeof lvl, "%.2f dB %s", hw.db, hw.muted ? "muted" : "unmuted");
-        a.note = std::string("hardware: device speaker now ") + lvl +
+        a.note = std::string("hardware: device output now ") + lvl +
                  ", an earlier step of the desktop change; desktop kept at the newer level";
         return a;
     }
@@ -172,8 +172,8 @@ SyncAction VolumeSync::onHardware(OutputLevel hw, TimePoint now) {
     // tool, or a desktop change that the kernel applied to the device.
     char lvl[64];
     std::snprintf(lvl, sizeof lvl, "%.2f dB %s", hw.db, hw.muted ? "muted" : "unmuted");
-    auto r = alignDesktop(now, std::string("hardware: device speaker now ") + lvl + ", mirrored to the desktop");
-    if (r.empty()) r.note = std::string("hardware: device speaker now ") + lvl + ", desktop already matches";
+    auto r = alignDesktop(now, std::string("hardware: device output now ") + lvl + ", mirrored to the desktop");
+    if (r.empty()) r.note = std::string("hardware: device output now ") + lvl + ", desktop already matches";
     return r;
 }
 

@@ -364,9 +364,10 @@ int main(int argc, char** argv) {
         }
         if (r == 1) link->onDesktopEvent(now);
         if (now >= nextPoll) {
+            // Follow active output first (own fresh read), so the link never mirrors the old output's state after a
+            // custom-button press; it then re-targets on its own read. Within one poll (<= 250 ms).
+            if (follower && session->refreshSettings()) follower->step();
             link->onPollTick(now);            // fresh settings read
-            // Follow active output: after a custom-button press the mapping follows within one poll (<= 250 ms).
-            if (follower && link->healthy()) follower->step();
             nextPoll = now + std::chrono::milliseconds(follower ? std::min(a.pollMs, 250) : a.pollMs);
         }
         if (link->notice() != lastNotice) {

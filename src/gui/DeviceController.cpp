@@ -588,8 +588,8 @@ void DeviceWorker::poll() {
         const auto before = session_->settings();
         auto result = refreshDeviceState(traceEnabled_ ? &timing : nullptr);
         if (result && before && session_->settings()) kinds = changedKinds(*before, *session_->settings());
+        if (result && usbMode_) serviceFollower();       // before the link: it re-targets on the new mapping
         if (result && usbMode_) serviceDesktopLink();
-        if (result && usbMode_) serviceFollower();
     }
     qint64 sequence = 0;
     if (traceEnabled_) {
