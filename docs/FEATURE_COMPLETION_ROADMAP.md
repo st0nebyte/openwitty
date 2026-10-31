@@ -213,6 +213,15 @@ unmuted (open-cable hum as the ch 2 signal), loopback unmuted for the test, mic 
 
 Open: the Ardour GUI with its JACK backend (headless `ardour9-lua` cannot instantiate it).
 
+**USB timeout follow-up (2026-10-31, silent playback only, no audible signal):** 40 starts with the background
+service (1 Hz polling), 40 without it, 40 with the window polling at 48 Hz: 120/120 clean, no timeout — polling is
+**not** the cause. Then 30 starts alternating 96 / 44.1 / 48 kHz (device idle between them): **0/30 ran, 29 timeouts**;
+afterwards the capture interface (2:1) timed out every ~23 s and playback no longer started — the CONNECT 2's USB audio
+was hung until unplugged (owner replugged; everything worked again). Conclusion: repeated sample-rate changes can hang
+the device's audio firmware (control still answered after a short timeout). Consequences: the rate option is marked
+experimental with a warning; rate changes should be rare and with the device idle; a mitigation (e.g. one rate per
+session, or a cool-down) and a report to LEWITT are open.
+
 ### Phase 11B session 6 — next hardware session (prepared 2026-10-30)
 
 Research done offline: Windows 5.2.2 binary in Ghidra (PROTOCOL.md "Windows 5.2.2 cross-check"); `pipewire-jack`

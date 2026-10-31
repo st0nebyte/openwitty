@@ -217,7 +217,9 @@ By default PipeWire runs at 48 kHz only (`pw-metadata -n settings 0 clock.allowe
 CONNECT 2 always runs at 48 kHz and other rates are converted. *Settings ▸ Desktop integration ▸ Allow 44.1 and 96 kHz
 for apps* writes `~/.config/pipewire/pipewire.conf.d/54-openwitty-sample-rates.conf` with
 `default.clock.allowed-rates = [ 44100 48000 96000 ]`; after *Restart desktop audio*, PipeWire runs the device at the
-rate a DAW or player asks for. It applies to all sound cards. At 96 kHz the CONNECT 2 offers no Denoise and Comp.
+rate a DAW or player asks for. It applies to all sound cards. **Experimental:** in a test with repeated rate changes
+(96 → 44.1 → 48 kHz, one every few seconds) the CONNECT 2's audio stopped responding (`usb_set_interface failed
+(-110)` in `dmesg`) until the device was unplugged and plugged in again; single changes with the device idle worked. At 96 kHz the CONNECT 2 offers no Denoise and Comp.
 Undo: switch it off (OpenWitty removes only its own file) or delete the file, then restart desktop audio.
 
 ### Show the volume knob in the desktop volume

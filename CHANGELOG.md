@@ -85,6 +85,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 - The monitoring mix used a −1…+1 scale in the simulator and the setter; it now uses the device scale −100…0.
 
 ### Known limitations
+- Sample rates other than 48 kHz are experimental: repeated rate changes can hang the CONNECT 2's audio until it is replugged.
 
 See `docs/RELEASE_READINESS.md`. In short: one device and one distribution tested; with the kernel quirk a
 login screen resets the speaker to its default level (optional login-screen rule provided as an example); most controls change the

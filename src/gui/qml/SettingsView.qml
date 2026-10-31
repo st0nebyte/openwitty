@@ -373,13 +373,14 @@ Rectangle {
                            "unavailable": "The CONNECT 2 input is not present in the desktop audio right now."})[integration.splitSources]
                          + (integration.audioRestartNeeded ? " Takes effect after restarting desktop audio." : "") }
             // SR: allow 44.1 / 48 / 96 kHz in PipeWire (otherwise everything is resampled to 48 kHz)
-            ToggleSwitch { objectName: "sampleRatesSwitch"; width: 310; label: "Allow 44.1 and 96 kHz for apps"
+            ToggleSwitch { objectName: "sampleRatesSwitch"; width: 310; label: "Allow 44.1 and 96 kHz for apps (experimental)"
                            checked: integration.extraSampleRates
                            tip: "PipeWire then runs the CONNECT 2 at the rate a DAW or player asks for (44.1, 48 or 96 kHz) "
                               + "instead of converting to 48 kHz. Applies to all sound cards."
                            onToggled: (b) => integration.setExtraSampleRates(b) }
             Text { objectName: "sampleRatesText"; width: 310; wrapMode: Text.WordWrap; font.pixelSize: 10; color: Theme.textDim
-                   text: (integration.extraSampleRates ? "On: apps can switch between 44.1, 48 and 96 kHz. At 96 kHz the CONNECT 2 has no Denoise and Comp."
+                   text: (integration.extraSampleRates ? "On: apps can switch between 44.1, 48 and 96 kHz. At 96 kHz the CONNECT 2 has no Denoise and Comp. "
+                                                         + "Warning: repeated rate changes made the CONNECT 2's audio hang until it was unplugged (2026-10-31)."
                                                        : "Off: desktop audio runs at PipeWire's default rate; other rates are converted.")
                          + (integration.liveSampleRates !== "" ? " PipeWire now allows: " + integration.liveSampleRates + "." : "")
                          + (integration.audioRestartNeeded ? " Takes effect after restarting desktop audio." : "") }
