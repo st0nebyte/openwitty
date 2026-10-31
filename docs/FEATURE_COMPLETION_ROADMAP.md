@@ -178,6 +178,11 @@ note. Tests `ButtonFollow.*`. **Live test PASS (2026-10-31)** with the manual sw
 custom button (mapping + focus verified); the window first opened read-only (an extended mode alone did not count as a
 write authorization; fixed in 630f725), afterwards the window followed too (focus moved to the headphones).
 
+**Owner decisions (2026-10-31):** 12E stays as built — X closes the window while the tray icon and the background
+service keep running (keys, follow and focus keep working; the tray reopens the window); "start minimized" = the tray
+autostart (Desktop integration). **No volume limit** (requirement 9 dropped). Phase 12 is complete apart from the
+later single device-owning service.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour
