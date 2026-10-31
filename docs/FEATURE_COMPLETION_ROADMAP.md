@@ -135,6 +135,14 @@ native (kernel/PipeWire) volume to the headphones; "follow active output" = Open
 `openwitty-cli` now uses the vendor control interface by default (`--interface auto`), the AudioControl interface
 answers GETs with an IO error.
 
+**12B result (2026-10-31, PASS with two findings):** byte 59 1 → 2 via the GUI (*routing*); one keyboard "volume down"
+changed **only the headphone volume** (−32.5 → −37.0 dB, bytes 27/28), speakers untouched — the device routes the
+native volume to the mapped output, exactly what the spec needs. Findings: (1) the mute key toggles the native mute,
+which KDE tracked as "unmuted" while the headphones were muted, so the second press **unmuted the headphones** —
+when the target changes, KDE must first be aligned to that output's level *and* mute; (2) OpenWitty's desktop link is
+speaker-only: with the mapping on headphones it looped (~5 log lines/s, no device writes) until the mapping was back on
+speakers. Both are 12C work. Restored exactly (compare: changed none); permissions off.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour
