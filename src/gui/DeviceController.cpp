@@ -161,7 +161,7 @@ void DeviceWorker::serviceDesktopLink() {
         return;
     }
     if (r == 1) link_->onDesktopEvent(now);
-    else link_->onHardwareSample(outputLevel(*session_->settings(), Output::Speaker), now);
+    else link_->onSettingsSample(*session_->settings(), now);   // follows byte 59 (Phase 12)
     if (!link_->healthy()) link_.reset();               // restarts read-only on the next sample
 }
 

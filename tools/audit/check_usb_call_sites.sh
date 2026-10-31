@@ -129,8 +129,10 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
    && [ "$(grep -cE 'a\.writes *=' src/daemon/main.cpp)" -eq 1 ] \
    && ! grep -nE 'hardwareWriteOffsets|allowHardwareWrites|sendTrigger|commit\(' src/daemon/main.cpp src/desktop/*.cpp >/dev/null \
    && [ "$(grep -c 'session_.commitAndVerify(' src/desktop/DesktopVolumeLink.cpp)" -eq 1 ] \
-   && grep -q 'stageOutput(m, Output::Speaker' src/desktop/DesktopVolumeLink.cpp; then
-    echo "ok   openwitty-volumed: read-only mirror default, vendor writes only via --vendor-fallback (speaker bytes, exact double opt-in), one verified write path"
+   && grep -q 'stageOutput(m, out, target.db, target.muted)' src/desktop/DesktopVolumeLink.cpp; then
+    # Phase 12: the link stages the mapped output (byte 59); the daemon's policy above still allows only speaker bytes,
+    # so a headphone target is refused by the session in the daemon.
+    echo "ok   openwitty-volumed: read-only mirror default, vendor writes only via --vendor-fallback (policy: speaker bytes, exact double opt-in), one verified write path"
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
 grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }

@@ -558,3 +558,56 @@ TEST(DesktopLinkFallback, IncreaseLimitStillAppliesAfterTheGracePeriod) {
     EXPECT_DOUBLE_EQ(r.device().db, -20);                      // at most 10 dB louder per step
     EXPECT_DOUBLE_EQ(r.mixer.level.db, -20);                   // and the desktop shows what was applied
 }
+
+namespace {
+void setMapping(Rig& r, std::uint8_t v, double hpDb, bool hpMuted) {
+    auto m = SettingsMessage::fromBytes(r.mock.settingsBytes()).value();
+    ASSERT_TRUE(m.setNativeVolumeMapping(v).ok());
+    ASSERT_TRUE(stageOutput(m, Output::Headphone, hpDb, hpMuted).ok());
+    auto b = m.bytes();
+    r.mock.setSettingsBytes(Bytes(b.begin(), b.end()));
+}
+}  // namespace
+
+// Phase 12B findings: when byte 59 moves the native volume to the headphones, the desktop first shows the headphone
+// level AND its mute (so a mute key press acts on the real state), nothing is written to the device, and the link
+// does not loop on the speaker level.
+TEST(DesktopLink, FollowsTheNativeVolumeMappingWithLevelAndMute) {
+    Rig r(DeviceWriteMode::Native);
+    ASSERT_TRUE(r.link->start(r.t0));
+    ASSERT_EQ(r.link->target(), Output::Speaker);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -30);
+    setMapping(r, 2, -32.5, true);                              // headphones, muted
+    r.link->onPollTick(r.t0 + 1s);
+    EXPECT_EQ(r.link->target(), Output::Headphone);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -32.5);
+    EXPECT_TRUE(r.mixer.level.muted) << "the desktop must show the headphones' mute";
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    // later polls are quiet: no repeated desktop writes, no device writes
+    const int dw = r.mixer.writes;
+    for (int i = 2; i < 12; ++i) r.link->onPollTick(r.t0 + std::chrono::seconds(i));
+    EXPECT_EQ(r.mixer.writes, dw);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    // back to the speakers: the desktop shows the speaker level, unmuted
+    setMapping(r, 1, -32.5, true);
+    r.link->onPollTick(r.t0 + 20s);
+    EXPECT_EQ(r.link->target(), Output::Speaker);
+    EXPECT_DOUBLE_EQ(r.mixer.level.db, -30);
+    EXPECT_FALSE(r.mixer.level.muted);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+}
+
+TEST(DesktopLink, NoneMappingLeavesEverythingAlone) {
+    Rig r(DeviceWriteMode::Fallback);
+    ASSERT_TRUE(r.link->start(r.t0));
+    setMapping(r, 0, -32.5, true);
+    r.link->onPollTick(r.t0 + 1s);
+    EXPECT_FALSE(r.link->target().has_value());
+    const int dw = r.mixer.writes;
+    r.mixer.level = {-6.0, false};                              // the user moves KDE: nothing reaches the device
+    r.link->onDesktopEvent(r.t0 + 8s);
+    r.link->onPollTick(r.t0 + 10s);
+    EXPECT_EQ(r.hw->writeCalls, 0);
+    EXPECT_EQ(r.mixer.writes, dw);
+    EXPECT_TRUE(r.link->healthy());
+}

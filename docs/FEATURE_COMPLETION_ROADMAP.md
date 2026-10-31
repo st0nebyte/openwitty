@@ -143,6 +143,12 @@ when the target changes, KDE must first be aligned to that output's level *and* 
 speaker-only: with the mapping on headphones it looped (~5 log lines/s, no device writes) until the mapping was back on
 speakers. Both are 12C work. Restored exactly (compare: changed none); permissions off.
 
+**12C step 1 (2026-10-31):** the desktop link follows byte 59: it mirrors the mapped output (speakers or headphones),
+re-targets on a change by first showing that output's level *and* mute in KDE (no device write; an ALSA write reaches the
+new output with the values it already has), and stays idle with "none". Tests
+`DesktopLink.FollowsTheNativeVolumeMappingWithLevelAndMute`, `DesktopLink.NoneMappingLeavesEverythingAlone`. The
+daemon's vendor fallback stays speaker-only by policy.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour

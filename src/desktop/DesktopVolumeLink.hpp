@@ -60,6 +60,11 @@ public:
     // Same as onPollTick() for a host that has just read the settings itself (the GUI worker):
     // no additional device I/O.
     void onHardwareSample(const OutputLevel& hw, Clock::time_point now);
+    // Phase 12: a fresh settings snapshot; the link follows the output byte 59 maps the native volume to (speakers or
+    // headphones; "none" = idle) and re-targets when that changes.
+    void onSettingsSample(const SettingsMessage& s, Clock::time_point now);
+    // The output the native volume is mapped to now (nullopt: "none", or not read yet).
+    std::optional<Output> target() const { return target_; }
     void reset() { sync_.reset(); }
 
     const VolumeSync& sync() const { return sync_; }
@@ -73,6 +78,11 @@ public:
 
 private:
     std::optional<OutputLevel> readHardware();
+    // Byte 59 -> output; nullopt for "none" (and unknown values).
+    static std::optional<Output> mappedOutput(const SettingsMessage& s);
+    // Adopt a new target: KDE first shows that output's level AND mute (Phase 12B finding), then a fresh baseline.
+    bool noteTarget(const SettingsMessage& s);
+    void retarget(const OutputLevel& hw, Clock::time_point now);
     void apply(const SyncAction& a, Clock::time_point now);
     void writeDevice(const OutputLevel& target, Clock::time_point now);
     void alignDesktop(const DesktopLevel& target, Clock::time_point now);
@@ -99,6 +109,10 @@ private:
     std::optional<FollowCheck> followCheck_;   // waiting for the device to report a desktop change
     void checkFollow(Clock::time_point now);
     int alignDepth_{0};
+    std::optional<Output> target_{Output::Speaker};
+    bool targetChanged_{false};
+    bool started_{false};
+    bool idleLogged_{false};
     std::string notice_;
 };
 

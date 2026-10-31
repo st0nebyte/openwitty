@@ -25,19 +25,68 @@ DesktopVolumeLink::DesktopVolumeLink(DeviceSession& session, IDesktopMixer& mixe
     : session_(session), mixer_(mixer), sync_(withFollowWindow(cfg, opt.followGrace)), opt_(std::move(opt)),
       log_(std::move(log)) {}
 
+std::optional<Output> DesktopVolumeLink::mappedOutput(const SettingsMessage& s) {
+    switch (s.nativeVolumeMapping()) {
+        case 1: return Output::Speaker;
+        case 2: return Output::Headphone;
+        default: return std::nullopt;   // 0 = none: the native volume controls no output
+    }
+}
+
+bool DesktopVolumeLink::noteTarget(const SettingsMessage& s) {
+    const auto t = mappedOutput(s);
+    if (t != target_) {
+        target_ = t;
+        targetChanged_ = true;
+        idleLogged_ = false;
+    }
+    if (!target_ && !idleLogged_) {
+        log("native volume mapped to no output: the desktop link is idle");
+        idleLogged_ = true;
+        sync_.reset();
+        followCheck_.reset();
+        notFollowed_ = false;
+    }
+    return target_.has_value();
+}
+
 std::optional<OutputLevel> DesktopVolumeLink::readHardware() {
     if (auto s = session_.refreshSettings(); !s || !session_.settings()) {
         healthy_ = false;
         log("device read failed: " + (s ? std::string("no settings") : s.error().message));
         return std::nullopt;
     }
-    return outputLevel(*session_.settings(), Output::Speaker);
+    if (!noteTarget(*session_.settings())) return std::nullopt;
+    return outputLevel(*session_.settings(), *target_);
+}
+
+// The native volume now drives another output. Whatever the desktop showed belonged to the old one: show the new
+// output's level and mute first (an ALSA write reaches the device's mapped output, i.e. the new one, with the values it
+// already has), then start a fresh read-only baseline (its hold window keeps echoes from acting on the device).
+void DesktopVolumeLink::retarget(const OutputLevel& hw, Clock::time_point now) {
+    targetChanged_ = false;
+    log(fmt(*target_ == Output::Speaker ? "volume target: speakers %.2f dB %s" : "volume target: headphones %.2f dB %s",
+            hw.db, hw.muted));
+    sync_.reset();
+    followCheck_.reset();
+    notFollowed_ = false;
+    if (opt_.desktopWrites) {
+        auto cur = mixer_.read();
+        const DesktopLevel want{hw.db, hw.muted};
+        if (!cur || cur->muted != want.muted || std::fabs(cur->db - want.db) > 0.25) {
+            if (auto s = mixer_.write(want); !s) log("desktop update failed: " + s.error().message);
+            else ++desktopWrites_;
+        }
+    }
+    apply(sync_.start(hw, mixer_.read(), now), now);
 }
 
 bool DesktopVolumeLink::start(Clock::time_point now) {
     healthy_ = true;
     auto hw = readHardware();
-    if (!hw) return false;
+    started_ = healthy_;
+    if (!hw) return healthy_;            // "none" mapping: idle but healthy
+    targetChanged_ = false;
     auto desk = mixer_.read();
     auto a = sync_.start(*hw, desk, now);
     log(fmt("start: hardware speaker %.2f dB %s", hw->db, hw->muted));
@@ -50,9 +99,10 @@ void DesktopVolumeLink::onDesktopEvent(Clock::time_point now) {
     beginStep();
     // Fresh device state first: the device may already have followed the desktop by itself, or
     // the knob may have moved since the last poll. Both are adopted before the desktop is judged.
-    if (sync_.phase() != SyncPhase::Writing) {
+    if (sync_.phase() != SyncPhase::Writing || !target_) {
         auto hw = readHardware();
         if (!hw) return;
+        if (targetChanged_ || sync_.phase() == SyncPhase::Unknown) { retarget(*hw, now); endStep(); return; }
         apply(sync_.onHardware(*hw, now), now);
     }
     // Read the desktop only now: the hardware step may have re-aligned it (after an unverified
@@ -65,13 +115,28 @@ void DesktopVolumeLink::onDesktopEvent(Clock::time_point now) {
 }
 
 void DesktopVolumeLink::onPollTick(Clock::time_point now) {
-    if (sync_.phase() == SyncPhase::Unknown) return;
+    if (!started_) return;
     beginStep();
-    if (auto hw = readHardware()) apply(sync_.onHardware(*hw, now), now);
-    else return;
+    auto hw = readHardware();
+    if (!hw) return;
+    if (targetChanged_ || sync_.phase() == SyncPhase::Unknown) { retarget(*hw, now); endStep(); return; }
+    apply(sync_.onHardware(*hw, now), now);
     apply(sync_.tick(now), now);
     checkFollow(now);
     endStep();
+}
+
+void DesktopVolumeLink::onSettingsSample(const SettingsMessage& s, Clock::time_point now) {
+    if (!noteTarget(s)) return;
+    const OutputLevel hw = outputLevel(s, *target_);
+    if (targetChanged_ || sync_.phase() == SyncPhase::Unknown) {
+        if (!healthy_ || !started_) return;
+        beginStep();
+        retarget(hw, now);
+        endStep();
+        return;
+    }
+    onHardwareSample(hw, now);
 }
 
 void DesktopVolumeLink::onHardwareSample(const OutputLevel& hw, Clock::time_point now) {
@@ -207,7 +272,9 @@ void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point
         return;
     }
     // Stage against the snapshot DeviceSession holds (commitAndVerify re-reads before the SET).
-    auto e = session_.edit([&](SettingsMessage& m) { return stageOutput(m, Output::Speaker, target.db, target.muted); });
+    if (!target_) { sync_.abandonWrite(); return; }   // "none": nothing to apply
+    const Output out = *target_;
+    auto e = session_.edit([&](SettingsMessage& m) { return stageOutput(m, out, target.db, target.muted); });
     if (!e) {
         log("speaker write not staged: " + e.error().message);
         apply(sync_.onWriteResult(WriteState::Failed, std::nullopt, now), now);
@@ -221,9 +288,10 @@ void DesktopVolumeLink::writeDevice(const OutputLevel& target, Clock::time_point
     WriteResult r = session_.commitAndVerify(opt_.verify);
     if (r.state != WriteState::Verified) session_.discardPending();
     std::optional<OutputLevel> after;
-    if (session_.settings()) after = outputLevel(*session_.settings(), Output::Speaker);
+    if (session_.settings()) after = outputLevel(*session_.settings(), out);
     ++writes_;
-    log(fmt("speaker write %.2f dB %s: ", target.db, target.muted) + writeStateName(r.state));
+    log(fmt(out == Output::Speaker ? "speaker write %.2f dB %s: " : "headphone write %.2f dB %s: ", target.db, target.muted)
+        + writeStateName(r.state));
     if (r.state == WriteState::Failed) healthy_ = session_.state() == ConnectionState::Connected;
     apply(sync_.onWriteResult(r.state, after, now), now);
 }
