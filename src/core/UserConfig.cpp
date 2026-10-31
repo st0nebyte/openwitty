@@ -59,7 +59,8 @@ const std::vector<DevicePermission>& devicePermissions() {
         {"measurements", "measurement_control", &UserConfig::measurementControl,
          "autogain and Denoise measurements (the device then changes the input gain or Denoise by itself)."},
         {"routing", "routing_control", &UserConfig::routingControl,
-         "input/playback mix to the speakers and mobile streaming mode (bytes 23, 67); each switch-on is confirmed again."},
+         "input/playback mix to the speakers, mobile streaming mode and which output the system volume controls "
+         "(bytes 23, 59, 67); each risky change is confirmed again."},
     };
     return t;
 }

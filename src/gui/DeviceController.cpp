@@ -831,6 +831,7 @@ void DeviceWorker::publish() {
         v["set.highImpedance"] = s.highImpedanceHeadphone();
         v["set.highVolume"] = s.highVolumeSpeaker();
         v["set.mobileStreaming"] = s.mobileStreaming();
+        v["set.volumeMapping"] = int(s.nativeVolumeMapping());
         v["set.ledBrightness"] = int(s.ledBrightness());
         v["set.led.icons"] = hex(s.ledColor(LedElement::Icons));
         v["set.led.mute"] = hex(s.ledColor(LedElement::Mute));
@@ -1021,6 +1022,7 @@ void DeviceWorker::setValue(const QString& key, const QVariant& v) {
             if (f == "gainLock") return s.setExternalGainLock(v.toBool());
             if (f == "mixToSpeakers") return s.setMixToSpeakers(v.toBool());
             if (f == "mobileStreaming") return s.setMobileStreaming(v.toBool());
+            if (f == "volumeMapping") return s.setNativeVolumeMapping(static_cast<std::uint8_t>(v.toInt()));
             if (f == "customButton") {
                 int n = v.toInt();
                 if (!isKnownCustomButton(static_cast<std::uint8_t>(n)))

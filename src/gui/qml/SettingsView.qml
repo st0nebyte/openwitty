@@ -148,6 +148,18 @@ Rectangle {
                        checked: root.v("set.mobileStreaming", false)
                        tip: "Microphone and instrument mix to software input 1/2 (official description)"
                        onToggled: (b) => confirmLoud.ask("set.mobileStreaming", b) }
+        // Phase 12: byte 59 "Map native volume controls to" (0 none, 1 speakers, 2 headphones)
+        Text { width: 330; color: Theme.text; font.pixelSize: 12; text: "Map native volume controls to:" }
+        Row { spacing: 6
+            Repeater {
+                model: [{v: 0, t: "None"}, {v: 1, t: "Speakers"}, {v: 2, t: "Headphones"}]
+                ToggleButton { objectName: "volumeMapping" + modelData.v; width: 90; height: 22; text: modelData.t
+                               enabled: root.can("set.volumeMapping")
+                               active: root.v("set.volumeMapping", -1) === modelData.v
+                               tip: "Which CONNECT 2 output the system volume (keyboard keys, desktop slider) controls"
+                               onClicked: { if (active) return;
+                                            if (modelData.v === 2 && !device.simulated) confirmLoud.askValue("set.volumeMapping", 2);
+                                            else device.setValue("set.volumeMapping", modelData.v); } } } }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                text: "macOS streaming mode restarts the device with another USB identity; it is not enabled in this build." }
         ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: root.can("set.macosStreaming")
@@ -630,21 +642,25 @@ Rectangle {
         visible: false; z: 20; anchors.centerIn: parent; width: 260; height: 140; radius: 6
         color: Theme.panelHi; border.color: Theme.warn
         property string key: "set.highVolume"
+        property var enableValue: true
         objectName: "confirmLoudDialog"
-        function ask(k, on) { key = k; if (!on) device.setValue(k, false); else visible = true; }
+        function ask(k, on) { key = k; enableValue = true; if (!on) device.setValue(k, false); else visible = true; }
+        function askValue(k, value) { key = k; enableValue = value; visible = true; }
         Column { anchors.centerIn: parent; spacing: 10
             Text { width: 230; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                    text: confirmLoud.key === "set.highImpedance"
                          ? "High-impedance headphone mode raises the headphone output level. Take your headphones off first."
                          : confirmLoud.key === "set.mixToSpeakers"
                          ? "The speakers will also play the microphone and instrument. A microphone near the speakers can feed back: lower your monitors first."
+                         : confirmLoud.key === "set.volumeMapping"
+                         ? "The keyboard volume keys and the desktop slider will set the headphone volume directly. Take your headphones off and check the level first."
                          : confirmLoud.key === "set.mobileStreaming"
                          ? "Software inputs 1/2 will carry the microphone + instrument mix instead of separate inputs. Recordings and calls change."
                          : "High volume speaker mode raises the maximum speaker output level. Lower your monitors first." }
             Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmLoud.visible = false }
                 ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
-                               onClicked: { confirmLoud.visible = false; device.setValue(confirmLoud.key, true); } } }
+                               onClicked: { confirmLoud.visible = false; device.setValue(confirmLoud.key, confirmLoud.enableValue); } } }
         }
     }
 }

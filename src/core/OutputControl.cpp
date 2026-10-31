@@ -59,7 +59,7 @@ std::vector<std::size_t> permissionOffsets(const std::string& name) {
     }
     if (name == "phantom") return {kPhantom1};
     if (name == "outputModes") return {kHighVolumeSpeaker, kHighImpedanceHeadphone};
-    if (name == "routing") return {kMixToSpeakers, kMobileStreaming};
+    if (name == "routing") return {kMixToSpeakers, kMobileStreaming, kNativeVolumeMapping};
     return {};
 }
 

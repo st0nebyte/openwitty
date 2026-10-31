@@ -2991,3 +2991,38 @@ TEST(SampleRatesSR, UnavailableDenoiseExplainsItselfAndIgnoresClicks) {
         if (QString(ch->metaObject()->className()).contains("MouseArea")) hoverOk = ch->isEnabled() && ch->property("hoverEnabled").toBool();
     EXPECT_TRUE(hoverOk) << "the tip must stay reachable";
 }
+
+// Phase 12A: "Map native volume controls to" (byte 59). Headphones asks first; only byte 59 changes; None/Speakers
+// need no dialog.
+TEST(Routing11B, VolumeMappingAsksBeforeHeadphonesAndWritesOnlyByte59) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.routingControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    ASSERT_TRUE(r.can("set.volumeMapping"));
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    root->setProperty("showSettings", true);
+    root->findChild<QObject*>("settingsView")->setProperty("open", "audio");
+    QCoreApplication::processEvents();
+    auto* dlg = root->findChild<QObject*>("confirmLoudDialog");
+    auto* hp = findItem(qobject_cast<QQuickWindow*>(root.get())->contentItem(), "volumeMapping2");
+    auto* spk = findItem(qobject_cast<QQuickWindow*>(root.get())->contentItem(), "volumeMapping1");
+    ASSERT_TRUE(dlg && hp && spk);
+    const int w0 = r.hw->writeCalls;
+    QMetaObject::invokeMethod(hp, "clicked");
+    for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); r.c->flush(); }
+    EXPECT_TRUE(dlg->property("visible").toBool());
+    EXPECT_EQ(r.hw->writeCalls, w0) << "nothing sent before Enable";
+    const auto before = r.mock.settingsBytes();
+    dlg->setProperty("visible", false);
+    r.c->setValue("set.volumeMapping", dlg->property("enableValue"));   // what Enable does
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.volumeMapping").toInt() == 2; }));
+    const auto after = r.mock.settingsBytes();
+    for (std::size_t i = 0; i < before.size(); ++i)
+        if (i != lewitt::settings_off::kNativeVolumeMapping) EXPECT_EQ(before[i], after[i]) << "byte " << i;
+    QMetaObject::invokeMethod(spk, "clicked");                              // back to speakers: no dialog
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("set.volumeMapping").toInt() == 1; }));
+    EXPECT_FALSE(dlg->property("visible").toBool());
+}

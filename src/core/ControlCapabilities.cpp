@@ -40,6 +40,7 @@ const std::map<std::string, ControlFootprint, std::less<>>& table() {
         m["set.gainLock"] = {{o::kExternalGainLock}, {}};
         m["set.mixToSpeakers"] = {{o::kMixToSpeakers}, {}};
         m["set.mobileStreaming"] = {{o::kMobileStreaming}, {}};
+        m["set.volumeMapping"] = {{o::kNativeVolumeMapping}, {}};
         m["set.highImpedance"] = {{o::kHighImpedanceHeadphone}, {}};
         m["set.highVolume"] = {{o::kHighVolumeSpeaker}, {}};
         m["set.ledBrightness"] = {{o::kLedBrightness}, {}};

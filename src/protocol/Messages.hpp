@@ -166,6 +166,8 @@ public:
     // (bound to a boolean toggle); other raw values are preserved and read as "on".
     bool mixToSpeakers() const { return mixToSpeakersRaw() != 0; }
     std::uint8_t nativeVolumeMapping() const;
+    // "Map native volume controls to": 0 None, 1 Speakers, 2 Headphones; other values are refused.
+    Status setNativeVolumeMapping(std::uint8_t v);
     std::uint8_t ledBrightness() const;
     std::uint8_t selectedChannelRaw() const;
     std::optional<SelectedChannel> selectedChannel() const;

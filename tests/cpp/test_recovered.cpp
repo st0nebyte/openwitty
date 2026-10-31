@@ -335,3 +335,15 @@ TEST(Triggers, AllCommandWordsAreDistinct) {
     EXPECT_EQ(static_cast<int>(Trigger::BeginMeasurementSession), 4);
     EXPECT_EQ(static_cast<int>(Trigger::EndMeasurementSession), 5);
 }
+
+// Byte 59 "Map native volume controls to" (2026-10-31): 0 none, 1 speakers, 2 headphones; nothing else is accepted.
+TEST(NativeVolumeMapping, AcceptsOnlyTheThreeOfficialValues) {
+    SettingsMessage s = SettingsMessage::fromBytes(Bytes(SettingsMessage::kSize, 0)).value();
+    for (std::uint8_t v : {0, 1, 2}) {
+        ASSERT_TRUE(s.setNativeVolumeMapping(v).ok());
+        EXPECT_EQ(s.nativeVolumeMapping(), v);
+        EXPECT_EQ(s.bytes()[settings_off::kNativeVolumeMapping], v);
+    }
+    EXPECT_FALSE(s.setNativeVolumeMapping(3).ok());
+    EXPECT_EQ(s.nativeVolumeMapping(), 2);   // unchanged after a refused value
+}

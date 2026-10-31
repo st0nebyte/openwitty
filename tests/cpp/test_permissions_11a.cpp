@@ -57,7 +57,7 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
         {"phantom", {"in1.phantom"}},
         {"outputModes", {"set.highVolume", "set.highImpedance"}},
         {"measurements", {"autogain1", "autogain2", "autogainBoth", "denoise1", "denoise2"}},
-        {"routing", {"set.mixToSpeakers", "set.mobileStreaming"}},
+        {"routing", {"set.mixToSpeakers", "set.mobileStreaming", "set.volumeMapping"}},
     };
     ASSERT_EQ(expected.size(), devicePermissions().size());
     for (const auto& p : devicePermissions())
@@ -84,7 +84,7 @@ TEST(Permissions11A, PolicyGrantsRoutingOnlyViaItsPermissionAndNeverPersistenceO
     EXPECT_FALSE(w.allowPersistentChanges);
     for (const auto& p : devicePermissions())
         EXPECT_EQ(guiWritePolicy(only(p)).allowRoutingChanges, std::string(p.name) == "routing") << p.name;
-    for (std::size_t forbidden : {settings_off::kSelectedChannel, settings_off::kNativeVolumeMapping,
+    for (std::size_t forbidden : {settings_off::kSelectedChannel,
                                   std::size_t(54), std::size_t(55), std::size_t(58), std::size_t(70)})
         EXPECT_EQ(std::count(w.hardwareWriteOffsets.begin(), w.hardwareWriteOffsets.end(), forbidden), 0) << forbidden;
     for (Trigger t : {Trigger::FactoryReset, Trigger::SwitchToMacOSStreamingMode, Trigger::SwitchToNormalMode,

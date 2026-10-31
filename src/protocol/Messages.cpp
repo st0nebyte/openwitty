@@ -81,6 +81,11 @@ void SettingsMessage::mergeExternalChanges(const SettingsMessage& snap, const Se
     }
 }
 std::uint8_t SettingsMessage::nativeVolumeMapping() const { return raw_[settings_off::kNativeVolumeMapping]; }
+Status SettingsMessage::setNativeVolumeMapping(std::uint8_t v) {
+    if (v > 2) return makeError(Errc::InvalidArgument, "native volume mapping must be 0 (none), 1 (speakers) or 2 (headphones)");
+    raw_[settings_off::kNativeVolumeMapping] = v;
+    return okStatus();
+}
 
 Status SettingsMessage::setGainDb(int i, double db) {
     if (!inputOk(i)) return Status{badInput()};
