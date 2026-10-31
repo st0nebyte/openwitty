@@ -164,7 +164,9 @@ Fixed afterwards: the follower now runs before the link (no brief mirror of the 
 "device output" instead of "device speaker".
 **Owner wish (2026-10-31):** the custom button should also move the touch-wheel focus (byte 56: 3 speakers,
 4 headphones). The CONNECT 2 app never writes byte 56 (its only setters belong to the CONNECT 6 tree), so whether the
-device accepts a host write is unknown → one hardware test before implementing.
+device accepts a host write is unknown → one hardware test before implementing. **Tested 2026-10-31, PASS:** the
+device keeps a host write of byte 56 — custom button → mapping and focus to headphones (each verified, ~21 ms apart),
+the touch surface showed the headphones selected; back to speakers the same. Option `follow_move_focus` (default on).
 
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both

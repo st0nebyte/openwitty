@@ -133,6 +133,7 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 5, 24, 31 | 48 V, high-volume speakers, high-impedance headphones: accepted and reported; no follower bytes. The rear-panel 48 V button toggles byte 5 itself (same setting) |
 | 53 = 2 | custom button "Toggle mute: hp + mic/spkr": one press flips bytes 2, 22 and 29 together |
 | sample rates | device follows 44.1 / 48 / 96 kHz (kernel hw_params), channel order unchanged at each rate; rare `usb_set_interface` timeout (-110) at stream start (session 7); **repeated rate changes (96/44.1/48 every few seconds) hung the audio interfaces until replug** (2026-10-31); constant-rate starts 120/120 clean regardless of control polling |
+| 56 (host write) | the device **accepts** a host write of the touch focus (3 speakers, 4 headphones) and shows it on the touch surface (2026-10-31); the CONNECT 2 app itself never writes it |
 | 8 / 17 scale | **int8 dBFS ≈ peak level of the measured background noise** (session 6: phone noise peak −30 → stored −28; quiet room peak −51 → −53; open cable peak −39.9 → −41) |
 | 67 | mobile streaming: while 1, capture ch 1 and ch 2 both carry the mic + instrument mix; ch 3/4 unchanged; no re-enumeration |
 | 23 | mix to speakers: accepted 0/1, no followers (audible effect not judged; speakers off) |
