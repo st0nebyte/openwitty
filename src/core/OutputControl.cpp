@@ -33,6 +33,7 @@ WritePolicy outputWritePolicy(bool speaker, bool headphone) {
 WritePolicy withFollowOutput(WritePolicy base) {
     base.allowHardwareWrites = true;
     base.hardwareWriteOffsets.push_back(settings_off::kNativeVolumeMapping);
+    base.hardwareWriteOffsets.push_back(settings_off::kSelectedChannel);   // touch focus follows (owner wish)
     return base;
 }
 
@@ -66,7 +67,7 @@ std::vector<std::size_t> permissionOffsets(const std::string& name) {
     if (name == "phantom") return {kPhantom1};
     if (name == "outputModes") return {kHighVolumeSpeaker, kHighImpedanceHeadphone};
     if (name == "routing") return {kMixToSpeakers, kMobileStreaming, kNativeVolumeMapping};
-    if (name == "followOutput") return {kNativeVolumeMapping};
+    if (name == "followOutput") return {kNativeVolumeMapping, kSelectedChannel};
     return {};
 }
 

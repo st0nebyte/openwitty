@@ -26,6 +26,7 @@ class IntegrationSettings : public QObject {
     // Phase 12C: follow active output choices: "speakers" | "headphones" | "keep" (| "disable" for both muted).
     Q_PROPERTY(QString followBothOn READ followBothOn NOTIFY changed)
     Q_PROPERTY(QString followBothMuted READ followBothMuted NOTIFY changed)
+    Q_PROPERTY(bool followMoveFocus READ followMoveFocus NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
     Q_PROPERTY(QStringList configWarnings READ configWarnings NOTIFY changed)
     // not-installed | disabled | enabled | active | unknown
@@ -75,6 +76,8 @@ public:
     // Unknown values are ignored; "disable" only for both muted.
     Q_INVOKABLE void setFollowBothOn(const QString& v);
     Q_INVOKABLE void setFollowBothMuted(const QString& v);
+    bool followMoveFocus() const { return cfg_.followMoveFocus; }
+    Q_INVOKABLE void setFollowMoveFocus(bool on);
     // Turning a permission on needs `confirmed` (the GUI's dialog); turning it off never does. Unknown names: no-op.
     Q_INVOKABLE void setPermission(const QString& name, bool on, bool confirmed);
     Q_INVOKABLE QString permissionDescription(const QString& name) const;

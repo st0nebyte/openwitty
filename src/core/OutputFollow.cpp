@@ -50,9 +50,35 @@ bool OutputFollower::step() {
     ++writes_;
     if (log_) log_(std::string("follow active output: volume target ") + name(current) + " -> " + name(want) + ": " +
                    writeStateName(r.state));
-    if (r.state == WriteState::Verified) { failedState_.reset(); lastActive_ = want ? want : lastActive_; }
-    else failedState_ = state;
+    if (r.state == WriteState::Verified) {
+        failedState_.reset();
+        lastActive_ = want ? want : lastActive_;
+        if (cfg_.moveFocus && want != 0) moveFocus(want);
+    } else {
+        failedState_ = state;
+    }
     return true;
+}
+
+// Its own SET after the verified mapping change: a device that does not keep it cannot spoil that change.
+void OutputFollower::moveFocus(std::uint8_t mapping) {
+    if (focusUnsupported_ || session_.pendingSettings() || !session_.settings()) return;
+    const std::uint8_t focus = mapping == 1 ? 3 : 4;
+    if (session_.settings()->selectedChannelRaw() == focus) return;
+    auto e = session_.edit([&](SettingsMessage& m) { return m.setSelectedChannelRaw(focus); });
+    if (!e) {
+        if (log_) log_("follow active output: focus not staged: " + e.error().message);
+        focusUnsupported_ = true;
+        return;
+    }
+    WriteResult r = session_.commitAndVerify(verify_);
+    if (r.state != WriteState::Verified) {
+        session_.discardPending();
+        focusUnsupported_ = true;    // logged once, not retried
+    }
+    ++writes_;
+    if (log_) log_(std::string("follow active output: touch focus -> ") + (focus == 3 ? "speakers" : "headphones") + ": " +
+                   writeStateName(r.state) + (r.state == WriteState::Verified ? "" : " (not tried again)"));
 }
 
 }  // namespace lewitt

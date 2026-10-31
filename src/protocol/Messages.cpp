@@ -150,6 +150,11 @@ bool SettingsMessage::externalGainLock() const { return raw_[settings_off::kExte
 bool SettingsMessage::mobileStreaming() const { return raw_[settings_off::kMobileStreaming] != 0; }
 std::uint8_t SettingsMessage::ledBrightness() const { return raw_[settings_off::kLedBrightness]; }
 std::uint8_t SettingsMessage::selectedChannelRaw() const { return raw_[settings_off::kSelectedChannel]; }
+Status SettingsMessage::setSelectedChannelRaw(std::uint8_t v) {
+    if (v < 1 || v > 4) return makeError(Errc::InvalidArgument, "focus must be 1..4 (mic, instrument, speakers, headphones)");
+    raw_[settings_off::kSelectedChannel] = v;
+    return okStatus();
+}
 std::optional<SelectedChannel> SettingsMessage::selectedChannel() const {
     switch (selectedChannelRaw()) {
         case static_cast<std::uint8_t>(SelectedChannel::Microphone): return SelectedChannel::Microphone;

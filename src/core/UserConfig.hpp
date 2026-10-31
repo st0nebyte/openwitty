@@ -40,6 +40,7 @@ struct UserConfig {
     bool followActiveOutput{false};
     FollowPref followBothOn{FollowPref::Speakers};    // both outputs unmuted: speakers | headphones | keep
     FollowPref followBothMuted{FollowPref::Keep};     // both muted: keep | speakers | headphones | disable
+    bool followMoveFocus{true};                       // also move the touch-wheel focus (byte 56)
     bool routingControl{false};        // mix to speakers, mobile streaming, native volume mapping (confirmed): 23, 59, 67
     // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
     // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.

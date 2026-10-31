@@ -85,7 +85,12 @@ TEST(Permissions11A, PolicyGrantsRoutingOnlyViaItsPermissionAndNeverPersistenceO
     EXPECT_FALSE(w.allowPersistentChanges);
     for (const auto& p : devicePermissions())
         EXPECT_EQ(guiWritePolicy(only(p)).allowRoutingChanges, std::string(p.name) == "routing") << p.name;
-    for (std::size_t forbidden : {settings_off::kSelectedChannel,
+    for (const auto& p : devicePermissions()) {   // the touch focus (56) only through follow active output
+        const auto o = guiWritePolicy(only(p)).hardwareWriteOffsets;
+        EXPECT_EQ(std::count(o.begin(), o.end(), settings_off::kSelectedChannel) == 1,
+                  std::string(p.name) == "followOutput") << p.name;
+    }
+    for (std::size_t forbidden : {
                                   std::size_t(54), std::size_t(55), std::size_t(58), std::size_t(70)})
         EXPECT_EQ(std::count(w.hardwareWriteOffsets.begin(), w.hardwareWriteOffsets.end(), forbidden), 0) << forbidden;
     for (Trigger t : {Trigger::FactoryReset, Trigger::SwitchToMacOSStreamingMode, Trigger::SwitchToNormalMode,

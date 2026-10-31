@@ -60,7 +60,7 @@ const std::vector<DevicePermission>& devicePermissions() {
          "autogain and Denoise measurements (the device then changes the input gain or Denoise by itself)."},
         {"followOutput", "follow_active_output", &UserConfig::followActiveOutput,
          "keep the system volume on the audible output: OpenWitty switches which output the native volume controls "
-         "(byte 59) when the speaker/headphone mutes change."},
+         "(byte 59) and the touch-wheel focus (byte 56) when the speaker/headphone mutes change."},
         {"routing", "routing_control", &UserConfig::routingControl,
          "input/playback mix to the speakers, mobile streaming mode and which output the system volume controls "
          "(bytes 23, 59, 67); each risky change is confirmed again."},
@@ -101,7 +101,8 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control" ||
-                           key == "follow_both_on" || key == "follow_both_muted" || isPermissionKey(key);
+                           key == "follow_both_on" || key == "follow_both_muted" || key == "follow_move_focus" ||
+                           isPermissionKey(key);
         if (!known) {
             r.warnings.push_back("unknown key '" + key + "' ignored");
             continue;
@@ -111,7 +112,11 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         } else {
             seen.push_back(key);
         }
-        if (key == "follow_both_on" || key == "follow_both_muted") {
+        if (key == "follow_move_focus") {
+            const int b = parseBool(value);
+            if (b < 0) r.warnings.push_back(key + ": '" + value + "' is not true|false, using true");
+            r.config.followMoveFocus = b != 0;
+        } else if (key == "follow_both_on" || key == "follow_both_muted") {
             const bool on = key == "follow_both_on";
             FollowPref& f = on ? r.config.followBothOn : r.config.followBothMuted;
             const FollowPref def = on ? FollowPref::Speakers : FollowPref::Keep;
@@ -142,6 +147,7 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         if (key == "desktop_volume_sync") r.config.desktopVolumeSync = DesktopVolumeSync::Off;
         else if (key == "follow_both_on") r.config.followBothOn = FollowPref::Speakers;
         else if (key == "follow_both_muted") r.config.followBothMuted = FollowPref::Keep;
+        else if (key == "follow_move_focus") r.config.followMoveFocus = true;
         else flag(r.config, key) = false;
     }
     // Legacy migration, fail-closed: the old combined output permission is never turned into the new ones. It
@@ -172,7 +178,9 @@ std::string serializeUserConfig(const UserConfig& c) {
     o << "# With follow_active_output: which output the system volume controls when both are unmuted\n"
       << "# (speakers | headphones | keep) and when both are muted (keep | speakers | headphones | disable).\n"
       << "follow_both_on = " << pref(c.followBothOn) << "\n"
-      << "follow_both_muted = " << pref(c.followBothMuted) << "\n";
+      << "follow_both_muted = " << pref(c.followBothMuted) << "\n"
+      << "# With follow_active_output: also move the touch-wheel focus to that output.\n"
+      << "follow_move_focus = " << (c.followMoveFocus ? "true" : "false") << "\n";
     if (c.legacyOutputControlPending)
         o << "# Legacy setting from an older OpenWitty. It grants NOTHING; it is kept only so that Settings can ask\n"
           << "# you to reconfirm the speaker/headphone control above. Removed when you do so or reset.\n"

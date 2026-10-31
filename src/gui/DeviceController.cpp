@@ -171,7 +171,7 @@ void DeviceWorker::configureFollower(const UserConfig& c) {
              : f == FollowPref::Keep ? FollowChoice::Keep : FollowChoice::Disable;
     };
     followWanted_ = c.followActiveOutput;
-    followCfg_ = FollowConfig{map(c.followBothOn), map(c.followBothMuted)};
+    followCfg_ = FollowConfig{map(c.followBothOn), map(c.followBothMuted), c.followMoveFocus};
     follower_.reset();
 }
 

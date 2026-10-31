@@ -102,3 +102,34 @@ TEST(OutputFollow, ConfigKeysParseFailClosed) {
     EXPECT_EQ(back.config.followBothOn, FollowPref::Keep);
     EXPECT_TRUE(back.warnings.empty());
 }
+
+// Owner wish: the touch-wheel focus follows too (byte 56: 3 speakers, 4 headphones), as its own SET after the mapping.
+TEST(OutputFollow, MovesTheTouchFocusWithTheOutput) {
+    Rig r({settings_off::kNativeVolumeMapping, settings_off::kSelectedChannel});
+    OutputFollower f(*r.session, FollowConfig{}, fast(), [&](const std::string& s) { r.log.push_back(s); });
+    r.setMutes(true, false);                               // headphones on (mock focus: microphone)
+    EXPECT_TRUE(f.step());
+    EXPECT_EQ(r.mapping(), 2);
+    EXPECT_EQ(r.mock.settingsBytes()[settings_off::kSelectedChannel], 4);
+    r.setMutes(false, true);
+    EXPECT_TRUE(f.step());
+    EXPECT_EQ(r.mapping(), 1);
+    EXPECT_EQ(r.mock.settingsBytes()[settings_off::kSelectedChannel], 3);
+}
+
+TEST(OutputFollow, AFocusTheDeviceDoesNotKeepIsNotTriedAgain) {
+    Rig r({settings_off::kNativeVolumeMapping});           // focus not allowed: refused before sending
+    OutputFollower f(*r.session, FollowConfig{}, fast(), [&](const std::string& s) { r.log.push_back(s); });
+    r.setMutes(true, false);
+    EXPECT_TRUE(f.step());
+    EXPECT_EQ(r.mapping(), 2) << "the mapping change stands on its own";
+    const int w = r.hw->writeCalls;
+    r.setMutes(false, true);
+    f.step();
+    r.setMutes(true, false);
+    f.step();
+    int focusLines = 0;
+    for (const auto& l : r.log) focusLines += l.find("focus") != std::string::npos;
+    EXPECT_EQ(focusLines, 1) << "reported once";
+    EXPECT_GE(r.hw->writeCalls, w);
+}

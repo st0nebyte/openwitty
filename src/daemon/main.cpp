@@ -155,7 +155,7 @@ FollowConfig followConfig(const UserConfig& c) {
         return f == FollowPref::Speakers ? FollowChoice::Speakers : f == FollowPref::Headphones ? FollowChoice::Headphones
              : f == FollowPref::Keep ? FollowChoice::Keep : FollowChoice::Disable;
     };
-    return FollowConfig{map(c.followBothOn), map(c.followBothMuted)};
+    return FollowConfig{map(c.followBothOn), map(c.followBothMuted), c.followMoveFocus};
 }
 
 // What the daemon is doing right now: from an explicit flag, or from the user configuration.

@@ -16,6 +16,7 @@ enum class FollowChoice { Speakers, Headphones, Keep, Disable };
 struct FollowConfig {
     FollowChoice bothOn{FollowChoice::Speakers};   // both outputs unmuted: Speakers | Headphones | Keep
     FollowChoice bothMuted{FollowChoice::Keep};    // both muted: Keep | Speakers | Headphones | Disable (mapping none)
+    bool moveFocus{true};                          // also move the touch-wheel focus (byte 56) to that output
 };
 
 // The byte-59 value OpenWitty wants. `current` is byte 59 now; `lastActive` the last speakers/headphones value (1/2)
@@ -41,6 +42,8 @@ private:
     Logger log_;
     std::uint8_t lastActive_{1};
     std::optional<std::uint32_t> failedState_;   // device state whose change failed (no retry for it)
+    bool focusUnsupported_{false};               // the device did not keep a focus write: stop trying
+    void moveFocus(std::uint8_t mapping);
     int writes_{0};
 };
 

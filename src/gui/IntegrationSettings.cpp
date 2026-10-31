@@ -273,6 +273,13 @@ void IntegrationSettings::setFollowBothMuted(const QString& v) {
     save(next);
 }
 
+void IntegrationSettings::setFollowMoveFocus(bool on) {
+    if (on == cfg_.followMoveFocus) return;
+    UserConfig next = cfg_;
+    next.followMoveFocus = on;
+    save(next);
+}
+
 QVariantMap IntegrationSettings::permissions() const {
     QVariantMap m;
     for (const auto& p : lewitt::devicePermissions()) m[QString::fromUtf8(p.name)] = cfg_.*(p.field);

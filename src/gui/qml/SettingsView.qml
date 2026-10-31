@@ -84,7 +84,8 @@ Rectangle {
         {n: "followOutput", label: "Follow active output (system volume)",
          confirm: "OpenWitty will switch which CONNECT 2 output the system volume keys control (\"Map native volume "
                 + "controls to\") to the output you can hear, whenever the speaker/headphone mutes change - also from "
-                + "the background service. Volume keys then act on that output directly; nothing else is written."},
+                + "the background service, and moves the touch-wheel focus along (can be switched off). Volume keys then "
+                + "act on that output directly; nothing else is written."},
         {n: "routing", label: "Routing (mix to speakers, mobile streaming)",
          confirm: "OpenWitty will be able to send the monitoring mix to the speakers and switch mobile streaming mode "
                 + "(inputs 1/2 carry the mic + instrument mix); each switch-on asks again."},
@@ -161,6 +162,11 @@ Rectangle {
                visible: integration.permissions["followOutput"] === true
                text: "Speakers on only: speakers. Headphones on only: headphones. Needs desktop volume sync (Desktop integration)."
                      + (integration.desktopSync ? "" : " Desktop volume sync is off: nothing follows right now.") }
+        ToggleSwitch { objectName: "followFocusSwitch"; width: 330; label: "Also move the touch-wheel focus"
+                       visible: integration.permissions["followOutput"] === true
+                       checked: integration.followMoveFocus
+                       tip: "The touch wheel on the CONNECT 2 then controls the same output as the volume keys"
+                       onToggled: (b) => integration.setFollowMoveFocus(b) }
         Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true
                text: "When both outputs are on, the volume keys control:" }
         Row { spacing: 6; visible: integration.permissions["followOutput"] === true

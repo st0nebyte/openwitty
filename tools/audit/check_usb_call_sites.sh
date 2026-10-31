@@ -83,7 +83,7 @@ else echo "ok   GUI writes: one site, only with a confirmed permission, policy =
 gwp=$(awk '/^WritePolicy guiWritePolicy\(const UserConfig& c\)/,/^}/' src/core/OutputControl.cpp)
 pof_all=$(awk '/^std::vector<std::size_t> permissionOffsets/,/^}/' src/core/OutputControl.cpp)
 routing_line='    if (name == "routing") return {kMixToSpeakers, kMobileStreaming, kNativeVolumeMapping};'
-follow_line='    if (name == "followOutput") return {kNativeVolumeMapping};'
+follow_line='    if (name == "followOutput") return {kNativeVolumeMapping, kSelectedChannel};'
 pof=$(printf '%s\n' "$pof_all" | grep -vxF "$routing_line" | grep -vxF "$follow_line")
 ptr=$(awk '/^std::vector<Trigger> permissionTriggers/,/^}/' src/core/OutputControl.cpp)
 if [ -n "$gwp" ] && printf '%s' "$gwp" | grep -q 'if (!(c.\*(perm.field))) continue;' \
@@ -137,11 +137,12 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 # Phase 12C: the daemon's only other write scope is "follow active output" = byte 59, added by withFollowOutput()
 wfo=$(awk '/^WritePolicy withFollowOutput\(WritePolicy base\)/,/^}/' src/core/OutputControl.cpp)
-if [ -n "$wfo" ] && [ "$(printf '%s' "$wfo" | grep -c 'push_back')" -eq 1 ] \
+if [ -n "$wfo" ] && [ "$(printf '%s' "$wfo" | grep -c 'push_back')" -eq 2 ] \
    && printf '%s' "$wfo" | grep -q 'hardwareWriteOffsets.push_back(settings_off::kNativeVolumeMapping);' \
+   && printf '%s' "$wfo" | grep -q 'hardwareWriteOffsets.push_back(settings_off::kSelectedChannel);' \
    && [ "$(grep -c 'withFollowOutput(' src/daemon/main.cpp)" -eq 1 ] \
    && grep -q 'if (follow) p = withFollowOutput(p);' src/daemon/main.cpp; then
-    echo "ok   openwitty-volumed follow active output: byte 59 only (withFollowOutput), from the user settings"
+    echo "ok   openwitty-volumed follow active output: bytes 59 + 56 only (withFollowOutput), from the user settings"
 else echo "FAIL follow-active-output write scope changed"; fail=1; fi
 if grep -nE 'interfaceNumber[[:space:]]*=' src/gui/*.cpp >/dev/null; then echo "FAIL GUI hard-codes an interface number"; fail=1; else echo "ok   GUI does not hard-code an interface number"; fi
 grep -q 'isProhibitedInterface(d)' src/transport/InterfaceSelection.cpp && grep -q 'kUsbClassApplicationSpecific = 0xFE' src/transport/InterfaceSelection.hpp && echo "ok   interface selection rejects class 0xFE (DFU)" || { echo "FAIL interface selection lost its DFU rejection"; fail=1; }

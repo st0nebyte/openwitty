@@ -168,6 +168,9 @@ public:
     std::uint8_t nativeVolumeMapping() const;
     // "Map native volume controls to": 0 None, 1 Speakers, 2 Headphones; other values are refused.
     Status setNativeVolumeMapping(std::uint8_t v);
+    // Phase 12C (owner wish): move the touch-surface focus, 1 mic, 2 instrument, 3 speakers, 4 headphones. The official
+    // CONNECT 2 app never writes it; whether the device accepts it is checked by read-back.
+    Status setSelectedChannelRaw(std::uint8_t v);
     std::uint8_t ledBrightness() const;
     std::uint8_t selectedChannelRaw() const;
     std::optional<SelectedChannel> selectedChannel() const;
