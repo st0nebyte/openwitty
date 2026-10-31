@@ -897,64 +897,39 @@ mapping enum (byte 59), third-party gain control through UAC2 (Feature Unit 5) a
 Gain Lock and with desktop input-volume sliders, Denoise/autogain measurement results, firmware version decode,
 showcase mode, factory reset (excluded), firmware update (excluded).
 
-### Feature-parity checklist
+### Feature-parity checklist (current status, 2026-10-31)
 
-Columns: **Official behaviour** (guide/product page) · **OpenWitty today** · **Depends on** (K = kernel/UAC2, PW =
-PipeWire/WirePlumber, V = vendor protocol byte/trigger) · **GUI needs** · **Evidence** · **Missing** · **Hardware
-validation** · **Safety / compatibility**. Category = A/B/C/D above.
+The detailed table written in Phase 10D (before any GUI write) was replaced by this status; the evidence for each row is
+in the session results above (Phase 11B sessions 1–7, 11C, 11A.4, Phase 12) and in PROTOCOL.md.
 
-#### Audio streams, channels and loopback (core)
-
-| Feature | Official behaviour | OpenWitty today | Depends on | GUI needs | Evidence | Missing | HW validation | Safety / compat | Cat |
-|---|---|---|---|---|---|---|---|---|---|
-| Four capture channels | In 1 mic, In 2 instrument, In 3/4 loopback L/R | not involved (kernel/PipeWire) | K, PW | show the map; warn on a muted source or a profile without the 4 channels | A-sys (4 ch present) | channel identity never verified with signal | **LB-1** | never hide or merge channels by default | A/B |
-| Channel labels | (no Linux labels defined) | none | PW, K descriptor | names "Microphone, Instrument, Loopback L, Loopback R" | A-sys: kernel `FL FR FC LFE`, PipeWire `FL FR RL RR` | an opt-in naming/split configuration | LB-1, LB-5 | a wrong map can merge or drop channels in stereo clients | B |
-| Stereo playback | Outputs L/R to speakers and headphones | not involved | K | — | A-sys | L/R identity with signal | LB-2 | level: start quiet | A |
-| Hardware loopback | computer playback returned on In 3/4 | shows loopback meters + mute state | device DSP; V (mute) | loopback strip; feedback warning | R-gui meters; A-sys channels | captured content, L/R, gain, latency | **LB-2…LB-4** | do not monitor loopback (feedback) | A |
-| Loopback mute | mute the loopback | display only | V byte 19 | write after HW step | R-dec | effect on captured In 3/4 vs on monitoring | LB-4 (+ write HW step) | unmute can start a feedback loop if monitored | C |
-| Loopback vs PipeWire monitor | — (hardware feature) | none | device vs PW `.monitor` | explain the difference | A-sys: PW also offers a sink monitor | equality never measured | **LB-6** | never claim they are interchangeable until LB-6 passes | B |
-| Simplified stereo / mono inputs | (not official) | none | PW virtual nodes | optional, labelled, coexisting | — | design + tests | LB-5 | must never replace the 4-ch source | B |
-| Simultaneous record + play | full duplex | not involved | K (implicit feedback) | rate shown (10B) | A-sys (shared clock) | long-run stability | DAW-5, DAW-8 | one rate for both directions | A |
-
-#### Monitoring and outputs
-
-| Feature | Official behaviour | OpenWitty today | Depends on | GUI needs | Evidence | Missing | HW validation | Safety / compat | Cat |
-|---|---|---|---|---|---|---|---|---|---|
-| Direct monitoring source | mic, instrument or both | display (mock writes) | V byte 34 | two buttons, one byte | R-dec | write | HW-9 | feedback; speakers | C |
-| Input/playback mix | full left 100 % direct … full right 100 % playback | raw value shown (10B) | V 35–36 | calibrated knob | R-hw (−100…0) | calibrated mapping, write | HW-9, MON-2 | level jump | C |
-| Mix applies to speakers | speaker direct monitoring off by default | display | V byte 23 (enum) | switch | R-dec | value set | HW-10 | feedback through speakers | D→C |
-| Duplicate monitoring | warning: not in DAW and device at once | — | — | hint in monitoring/DAW docs | — | — | MON-3 | doubled, delayed signal | B |
-| Dim, Mono | reduce level; mono output | display | V 32 / 33 | buttons | R-dec | write | HW-9 | low | C |
-| Speaker / headphone volume, mute | independent, hardware and software | **permission + confirmed write (10B)**; knob mirror | V 20–22 / 27–29; K | done | R-hw, W-cli | GUI write on hardware | HW-2…HW-4 | levels | C |
-| System-volume mapping | "mapping of system volume controls" (product page) | not shown | V byte 59 (`NativeVolumeControlMapping`) | selector | R-dec (type name only) | value set | after RE | changes what the desktop slider controls | D |
-| High-volume speakers / high-impedance headphones | modes (no details in the guide) | display | V 24 / 31 | confirmed switches | R-dec | write | HW-10/HW-11 | **much louder** | C |
-
-#### Inputs, gain and processing
-
-| Feature | Official behaviour | OpenWitty today | Depends on | GUI needs | Evidence | Missing | HW validation | Safety / compat | Cat |
-|---|---|---|---|---|---|---|---|---|---|
-| Mic gain 0–72 dB, instrument 0–60 dB | knob, software | display | V 0–1 / 10–11 | done | R-hw, R-gui | write | HW-6 | feedback/clipping | C |
-| Third-party gain control | DAWs may change the gain | none | K: UAC2 Feature Unit 5 `Mic Capture Volume` (needs the 7.3 quirk; channels 3/4 stall) | explain; show External Gain Lock | Phase 8C (control exists) | whether desktop input-volume sliders or apps (WebRTC AGC) change hardware gain | **GAIN-1** | an app can silently change preamp gain | D |
-| External Gain Lock | blocks unwanted gain changes by apps | display | V byte 57 | switch | R-dec | write; effect on FU5 | GAIN-1, HW-8 | — | C |
-| Low-cut, Clipguard, preamp, Comp | DSP | display | V | done | R-dec | write | HW-8 | Comp/Denoise off at 96 kHz | C |
-| Denoise | noise-floor measurement when enabled | byte only | V + triggers | measurement flow | R-dec | measurement | HW-13 | — | C/D |
-| 48 V | phantom power | display | V byte 5 | confirmed | R-dec | write | HW-12 | ribbon mics | C |
-| Autogain / Autosetup | device-guided measurement | display; triggers unauthorized | V triggers | wizard | R-dec | trigger authorization | HW-13/HW-14 | gain jumps | C/D |
-
-#### Modes, rates, buttons, maintenance
-
-| Feature | Official behaviour | OpenWitty today | Depends on | GUI needs | Evidence | Missing | HW validation | Safety / compat | Cat |
-|---|---|---|---|---|---|---|---|---|---|
-| Sample rate 44.1/48/96 kHz | selector in CONTROL CENTER | shows the open stream's rate (10B); selection simulation only | K, PW (the stream rate *is* the device rate) | rate display; guidance | A-sys (rates in descriptor) | per-rate validation | **SR-1…SR-3** | changing the rate interrupts every client | B |
-| Denoise/Comp at 96 kHz | "not available when recording in 96 kHz" | enforced in the session; unknown rate = unknown | rate + V | disabled with reason | tests (`dsp.state`) | live check | SR-3 | — | C |
-| Mobile streaming mode | mic+instrument mixed on In 1/2, loopback 3/4 | display only, disabled | V byte 67 | switch (later) | R-dec | semantics, routing evidence | **MODE-1** (research) | changes channel meaning for every app | D |
-| macOS streaming mode | loopback on 1/2, mic/inst on 3/4; **device reboots** | refused on hardware | V trigger 0x104/0x105; PID 0x0004 → 0x0002 | switch with warning | PROTOCOL.md (binary) | Linux behaviour after re-enumeration (card name, quirk is keyed to PID 0x0004, PipeWire profile) | **MODE-2** (research) | reboot; the kernel quirk would not apply to the other PID | D |
-| Custom button (8 functions) | user-chosen function | display; write prepared | V byte 53 | radio list | R-dec | write | HW-7 | low | C |
-| LEDs, brightness, colours | settings | brightness permission (10B); colours display | V 37, 38–52 | done | W-cli (brightness) | GUI write | HW-1, HW-7 | cosmetic | C |
-| Panic Mute | long-press MUTE; unmute each channel | read-only display | device | done | R-hw | — | done | — | A |
-| Showcase mode | hidden lock (button sequence) | none | device | (display if detectable) | — | detection | later | — | D |
-| Firmware update, factory reset | via CONTROL CENTER | **excluded** | V | — | — | — | — | bricking/settings loss | X |
-| Drivers | Windows needs LEWITT ASIO; macOS/iOS class-compliant | Linux: kernel UAC2 + PipeWire/JACK | K, PW | — | — | — | — | Linux JACK/PipeWire support is **not** the Windows ASIO driver and must not be described as such | A |
+| Area | Official function | OpenWitty status | Evidence |
+|---|---|---|---|
+| Inputs | gain, mute, low-cut, Clipguard, preamp Clean/Warm/Vivid, Comp | ✅ written + verified | session 1 |
+| | 48 V (rear button = same byte) | ✅ confirmed per use | session 4 |
+| | Denoise with noise measurement | ✅ measure (words 6/7), reuse stored level, right-click re-measure, noise-floor line | sessions 5–6 |
+| | Autogain | ✅ mic (live); instrument not tested (no instrument) | session 4 |
+| | Autosetup wizard (whole flow) | ⚠ built, parts tested; **full flow live test open** | — |
+| | Gain lock (external gain) | ✅ | session 4 |
+| Outputs | speaker / headphone volume + mute | ✅ | session 2 |
+| | high-volume speakers, high-impedance headphones | ✅ confirmed per use | session 4 |
+| | map native volume controls (None/Speakers/Headphones) | ✅ byte 59 | Phase 12A/B |
+| Monitoring | source mic/inst/both, mix, Dim, Mono | ✅ (Dim/Mono followers 25/26 handled) | session 1 |
+| | mix applies to speakers | ✅ byte 23 (audible effect not judged) | session 6 |
+| | duplicate-monitoring hint (device + DAW) | ✅ docs (INSTALLATION.md, DAW section) | — |
+| Routing | loopback (ch 3/4), loopback mute | ✅ | LB-1/LB-2 |
+| | mobile streaming (inputs 1/2 = mix) | ✅ | session 6 |
+| | macOS streaming mode (device restart, other PID) | ✗ intentionally not enabled | PROTOCOL.md |
+| Custom button | all official functions | ✅ | session 1 |
+| | OpenWitty extensions (+ follow volume) | ✅ | Phase 12D |
+| LEDs | brightness, colours of five rows | ✅ | HW-1, session 1 |
+| Rates | 44.1 / 48 / 96 kHz | ✅ display; optional PipeWire rates (experimental: rapid changes hung the device) | session 7 |
+| | Denoise/Comp off at 96 kHz | ✅ greyed out with reason | session 7 |
+| Linux integration | one device, volume keys = hardware level of the audible output, touch focus follows | ✅ | Phase 12 |
+| | software input mute, separate inputs for apps | ✅ | 11C, 11A.4 |
+| | DAW (Ardour ALSA, JACK via pipewire-jack) | ✅ ALSA + JACK clients; Ardour GUI with JACK open | DAW-1…4, session 7 |
+| Application | firmware version | ✅ shown as USB revision | 2026-10-31 |
+| | presets (.preset import/export) | ✗ open (P3) | — |
+| | firmware update, factory reset | ✗ intentionally disabled | policy |
 
 ### Loopback validation plan (later, each step separately approved)
 

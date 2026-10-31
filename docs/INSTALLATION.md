@@ -222,6 +222,22 @@ rate a DAW or player asks for. It applies to all sound cards. **Experimental:** 
 (-110)` in `dmesg`) until the device was unplugged and plugged in again; single changes with the device idle worked. At 96 kHz the CONNECT 2 offers no Denoise and Comp.
 Undo: switch it off (OpenWitty removes only its own file) or delete the file, then restart desktop audio.
 
+### Using a DAW
+
+The CONNECT 2 is a class-compliant USB audio device; DAWs need no OpenWitty code.
+
+* **Channels:** capture 1 = microphone, 2 = instrument, 3/4 = loopback (computer playback) L/R; playback 1/2 = the
+  stereo output that feeds speakers and headphones.
+* **Backends:** Ardour's ALSA backend opens the device directly (desktop audio on the CONNECT 2 pauses meanwhile).
+  With `pipewire-jack` instead of `jack2`, JACK applications share the device with the desktop and also see the
+  separate inputs.
+* **Latency** (round trip through the loopback, pipewire-jack, 48 kHz, measured 2026-10-30): 64 frames 8.7 ms,
+  128 frames about 12 ms, 256 frames 23 ms; a 30-minute run at 128 frames had no dropouts.
+* **Monitoring twice:** the CONNECT 2 already plays the inputs directly (Monitoring: source + Input/playback mix). If
+  the DAW's track monitoring is on as well, you hear every input twice, the second time delayed — use either the
+  device's direct monitoring (mix knob towards "Input") or the DAW's monitoring, not both.
+* **96 kHz:** possible (see "Allow 44.1 and 96 kHz"), but Denoise and Comp are not available at that rate.
+
 ### Show the volume knob in the desktop volume
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move
