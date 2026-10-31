@@ -100,7 +100,7 @@ inline constexpr std::size_t kLedColorGainReduction = 50;
 inline constexpr std::size_t kCustomButton = 53;       // enum
 inline constexpr std::size_t kSelectedChannel = 56;    // physical touch-surface focus (HW-read)
 inline constexpr std::size_t kExternalGainLock = 57;   // bool (ExternalGainControl)
-inline constexpr std::size_t kNativeVolumeMapping = 59;// enum (MasterSliderMap)
+inline constexpr std::size_t kNativeVolumeMapping = 59;// "Map native volume controls to": 0 None, 1 Speakers, 2 Headphones (Windows 5.2.2; 2026-10-31)
 inline constexpr std::size_t kMobileStreaming = 67;    // bool; official text: "Microphone and instrument mix to software input 1/2"
 }  // namespace settings_off
 

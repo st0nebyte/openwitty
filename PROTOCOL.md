@@ -112,7 +112,7 @@ immediately before constructing each group (macOS `buildConnect2Tree`).
 | 24 | u8 | Main `HighVolumeSpeaker` | bool | ordered match |
 | 31 | u8 | Main `HighImpedanceHeadphone` | bool | ordered match |
 | 57 | u8 | Main `ExternalGainControl` | bool, guide "gain lock" | ordered match + guide |
-| 59 | u8 | Main `MasterSliderMap` | `NativeVolumeControlMapping` enum | type name matches |
+| 59 | u8 | Main `MasterSliderMap` | **"Map native volume controls to:" 0 None, 1 Speakers, 2 Headphones** (Windows 5.2.2: item list `FUN_14028c460`, setter `lambda_112` stores the value unchanged); the owner's device reads 1 — the OS/kernel volume drives the speakers | binary + device read 2026-10-31 |
 | 67 | u8 | Main `MobileStreaming` | bool (routing change) | ordered match |
 
 **Hardware observations, Phase 11B (2026-10-27/28, GUI writes verified by read-back) [V-hw]:**

@@ -91,6 +91,55 @@ An independent review of the HW-1 plan found three problems; all are fixed offli
   the full-struct write guard, read-back verification and no-retry are unchanged; the background service's mirror
   path is unaffected.
 
+## Phase 12 — Linux audio integration (binding owner spec, agreed 2026-10-31)
+
+The original reason for OpenWitty. Agreed in the owner's earlier planning chat (Phase 8 there) and confirmed again on
+2026-10-31; the owner asked to be told whenever a wish does not fit the implementation.
+
+**Requirements (owner decisions):**
+1. **One Linux playback device.** The CONNECT 2 is one sink; which outputs are audible is decided only by the device's
+   speaker / headphone mutes (and the custom button). *Status: in place.*
+2. **Linux volume = hardware volume, always.** Keyboard keys, KDE slider and tray scroll change the selected output's
+   hardware volume directly; no second software level ("speaker 20 %, Linux 100 %" must never happen). The touch
+   wheel's changes show up in KDE (bidirectional, no feedback loop). *Status: speakers only.*
+3. **Mute key = hardware mute of the target output**, keeping its volume (unmute returns to the same hardware level).
+   With both outputs on and speakers as target, only the speakers mute. *Status: speakers only.*
+4. **Volume target.** Official model: "Map Native Volume Controls To: None / Speakers / Headphones" (seen on the
+   CONNECT 6; on the CONNECT 2 most likely byte 59 `MasterSliderMap` / `NativeVolumeControlMapping`). OpenWitty adds
+   **Follow active output** (Settings ▸ Audio): only speakers on → speakers; only headphones on → headphones;
+   *both on* → setting (Speakers / Headphones / Keep last; default Speakers); *both muted* → setting (Keep last /
+   Speakers / Headphones / Disable until an output is unmuted; default Keep last). Linux mute is never a selection input.
+   Before each volume command the target is decided from a fresh hardware state; if the state is unclear, nothing is
+   done.
+5. **Extended custom-button modes** (OpenWitty extensions on top of the native functions):
+   "Switch outputs + follow volume" (native: toggle output mutes) and "Switch outputs + mic + follow volume" (native:
+   toggle output mutes + mic). While one is selected, *Follow active output* is forced on and greyed out with a short
+   note why. The previous manual value comes back when another button function is chosen.
+6. **Persistence per device (not per model).** At start OpenWitty reads the native button function first. If an
+   extended mode was active for this interface before: when the native base function still matches, the follow part
+   is re-activated (switching to the extended mode); when the hardware holds another function (e.g. "Show CONTROL
+   CENTER"), the extension is **not** activated. Volumes are never restored at start.
+7. **Hardware is the source of truth.** At start and after every reconnect: read, adopt, then decide; never write saved
+   software levels; no level increase on switching or reconnect; after a USB loss no queued commands are replayed.
+   Only the selected CONNECT 2 is affected.
+8. **Service + tray.** One background process owns the device; the GUI talks to it. Tray click opens the window;
+   X hides to the tray ("Minimize to tray on close"); "Start minimized to tray"; an explicit Quit stops it cleanly; the
+   keys work with the window closed. *Status: tray and service exist; window and service still hand the device over;
+   close/start-to-tray options missing.*
+9. **Volume safety:** optional maximum volume (especially headphones; the dB value must be defined, not a percentage).
+
+**12A result (2026-10-31):** byte 59 = "Map native volume controls to:" with **0 None, 1 Speakers, 2 Headphones**
+(Windows 5.2.2: the dropdown's item list and the setter, which stores the value unchanged). The owner's device reads
+**1** (speakers) — which is why the keyboard and KDE control only the speakers today. So the device itself can route the
+native (kernel/PipeWire) volume to the headphones; "follow active output" = OpenWitty switching byte 59. Also:
+`openwitty-cli` now uses the vendor control interface by default (`--interface auto`), the AudioControl interface
+answers GETs with an IO error.
+
+**Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
+moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
+special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour
+(close/start to tray), later one device-owning service with the GUI as its client.
+
 ## Phase 11 — fully working private version (owner mandate, 2026-10-27)
 
 Goal: every officially documented CONNECT 2 function that the protocol work supports, usable from OpenWitty on Linux, each

@@ -26,8 +26,8 @@
 // --interface auto selects the control interface from the descriptors exactly like the GUI does
 // (unbound vendor-specific ff/f0, never DFU, fails closed). An explicit N pointing at a DFU
 // (class 0xFE) interface is refused by the transport.
-// --interface N overrides which interface number goes in wIndex (default: auto-discover the
-// AudioControl interface). Hardware session 2026-10-14 found the AudioControl interface (0) fails
+// --interface N overrides which interface number goes in wIndex (default since 2026-10-31: auto, as above; before
+// that the AudioControl interface). Hardware session 2026-10-14 found the AudioControl interface (0) fails
 // with an IO error while the kernel driver owns it; an unbound vendor-specific interface (3 on the
 // CONNECT 2) answers read-only GETs instead (docs/USB_ACCESS.md §3b). This never claims or detaches
 // anything explicitly regardless of interface number. usbfs can still claim implicitly for an
@@ -145,8 +145,10 @@ struct ReadArgs {
     bool mock{false};
     AccessMethod method{AccessMethod::InterfaceRecipient};
     MemRequest request{MemRequest::Uac2Mem};
-    int interfaceNumber{-1};   // -1 = legacy AudioControl discovery (default, unchanged)
-    bool autoInterface{false}; // --interface auto: descriptor-driven vendor control interface, fails closed
+    int interfaceNumber{-1};   // explicit --interface N; -1 = none given
+    // Default since 2026-10-31: descriptor-driven vendor control interface like the GUI (the AudioControl interface 0
+    // answers GETs with an IO error while snd-usb-audio owns it). --interface N still overrides.
+    bool autoInterface{true};
     bool bad{false};
 };
 
@@ -169,7 +171,7 @@ ReadArgs parseRead(int argc, char** argv, int first) {
         } else if (!std::strcmp(argv[i], "--interface") && i + 1 < argc) {
             std::string v = argv[++i];
             if (v == "auto") a.autoInterface = true;      // descriptor-driven, fails closed
-            else a.interfaceNumber = std::atoi(v.c_str());
+            else { a.interfaceNumber = std::atoi(v.c_str()); a.autoInterface = false; }
         } else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); a.bad = true; }
     }
     return a;
