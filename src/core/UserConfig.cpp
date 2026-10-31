@@ -77,7 +77,7 @@ const DevicePermission* findDevicePermission(const std::string& name) {
 bool anyDeviceWritePermission(const UserConfig& c) {
     for (const auto& p : devicePermissions())
         if (c.*(p.field)) return true;
-    return false;
+    return !c.buttonFollow.empty();   // Phase 12D: an extended custom-button mode authorizes the follow writes
 }
 
 ParsedUserConfig parseUserConfig(const std::string& text) {

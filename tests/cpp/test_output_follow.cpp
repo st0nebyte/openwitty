@@ -170,6 +170,9 @@ TEST(ButtonFollow, ConfigRoundTripAndFailClosed) {
     auto bad = parseUserConfig("button_follow = nothex:2, " + deviceKey("A") + ":3, " + deviceKey("A") + ":1\n");
     EXPECT_EQ(bad.config.buttonFollow.size(), 1u);
     EXPECT_EQ(bad.warnings.size(), 2u);
+    // an extended mode alone opens the window with write access (live test 12D: it was read-only before)
+    EXPECT_TRUE(anyDeviceWritePermission(c));
+    EXPECT_FALSE(anyDeviceWritePermission(UserConfig{}));
     // the GUI policy includes the follow writes once an extended mode is stored
     const auto p = guiWritePolicy(c);
     EXPECT_EQ(std::count(p.hardwareWriteOffsets.begin(), p.hardwareWriteOffsets.end(), settings_off::kNativeVolumeMapping), 1);
