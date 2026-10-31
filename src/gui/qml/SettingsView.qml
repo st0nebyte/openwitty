@@ -81,6 +81,10 @@ Rectangle {
         {n: "outputModes", label: "Output modes (louder)",
          confirm: "OpenWitty will be able to switch high-volume speaker mode and high-impedance headphone mode; each "
                 + "switch-on asks again. Both can make the output much louder."},
+        {n: "followOutput", label: "Follow active output (system volume)",
+         confirm: "OpenWitty will switch which CONNECT 2 output the system volume keys control (\"Map native volume "
+                + "controls to\") to the output you can hear, whenever the speaker/headphone mutes change - also from "
+                + "the background service. Volume keys then act on that output directly; nothing else is written."},
         {n: "routing", label: "Routing (mix to speakers, mobile streaming)",
          confirm: "OpenWitty will be able to send the monitoring mix to the speakers and switch mobile streaming mode "
                 + "(inputs 1/2 carry the mic + instrument mix); each switch-on asks again."},
@@ -148,15 +152,43 @@ Rectangle {
                        checked: root.v("set.mobileStreaming", false)
                        tip: "Microphone and instrument mix to software input 1/2 (official description)"
                        onToggled: (b) => confirmLoud.ask("set.mobileStreaming", b) }
+        // Phase 12C: follow active output (owner spec): OpenWitty keeps byte 59 on the audible output
+        ToggleSwitch { objectName: "followOutputSwitch"; width: 330; label: "Follow active output"
+                       checked: integration.permissions["followOutput"] === true
+                       tip: "The system volume keys control the output you can hear (speakers or headphones)"
+                       onToggled: (b) => { if (b) confirmWrite.ask("followOutput"); else integration.setPermission("followOutput", false, false); } }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               visible: integration.permissions["followOutput"] === true
+               text: "Speakers on only: speakers. Headphones on only: headphones. Needs desktop volume sync (Desktop integration)."
+                     + (integration.desktopSync ? "" : " Desktop volume sync is off: nothing follows right now.") }
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true
+               text: "When both outputs are on, the volume keys control:" }
+        Row { spacing: 6; visible: integration.permissions["followOutput"] === true
+            Repeater {
+                model: [{v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "keep", t: "Keep last"}]
+                ToggleButton { objectName: "followBothOn_" + modelData.v; width: 90; height: 22; text: modelData.t
+                               active: integration.followBothOn === modelData.v
+                               onClicked: integration.setFollowBothOn(modelData.v) } } }
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true
+               text: "When both outputs are muted:" }
+        Row { spacing: 6; visible: integration.permissions["followOutput"] === true
+            Repeater {
+                model: [{v: "keep", t: "Keep last"}, {v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "disable", t: "No output"}]
+                ToggleButton { objectName: "followBothMuted_" + modelData.v; width: 74; height: 22; text: modelData.t
+                               active: integration.followBothMuted === modelData.v
+                               tip: modelData.v === "disable" ? "The volume keys do nothing until an output is unmuted" : ""
+                               onClicked: integration.setFollowBothMuted(modelData.v) } } }
         // Phase 12: byte 59 "Map native volume controls to" (0 none, 1 speakers, 2 headphones)
         Text { width: 330; color: Theme.text; font.pixelSize: 12; text: "Map native volume controls to:" }
         Row { spacing: 6
             Repeater {
                 model: [{v: 0, t: "None"}, {v: 1, t: "Speakers"}, {v: 2, t: "Headphones"}]
                 ToggleButton { objectName: "volumeMapping" + modelData.v; width: 90; height: 22; text: modelData.t
-                               enabled: root.can("set.volumeMapping")
+                               enabled: root.can("set.volumeMapping") && integration.permissions["followOutput"] !== true
                                active: root.v("set.volumeMapping", -1) === modelData.v
-                               tip: "Which CONNECT 2 output the system volume (keyboard keys, desktop slider) controls"
+                               tip: integration.permissions["followOutput"] === true
+                                    ? "Set by \"Follow active output\"; switch that off to choose by hand"
+                                    : "Which CONNECT 2 output the system volume (keyboard keys, desktop slider) controls"
                                onClicked: { if (active) return;
                                             if (modelData.v === 2 && !device.simulated) confirmLoud.askValue("set.volumeMapping", 2);
                                             else device.setValue("set.volumeMapping", modelData.v); } } } }

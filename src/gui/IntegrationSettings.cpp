@@ -240,6 +240,39 @@ void IntegrationSettings::setVendorFallback(bool on, bool confirmed) {
     save(next);
 }
 
+namespace {
+QString prefName(lewitt::FollowPref f) {
+    using lewitt::FollowPref;
+    return f == FollowPref::Speakers ? "speakers" : f == FollowPref::Headphones ? "headphones"
+         : f == FollowPref::Keep ? "keep" : "disable";
+}
+std::optional<lewitt::FollowPref> prefFrom(const QString& v, bool allowDisable) {
+    using lewitt::FollowPref;
+    if (v == "speakers") return FollowPref::Speakers;
+    if (v == "headphones") return FollowPref::Headphones;
+    if (v == "keep") return FollowPref::Keep;
+    if (v == "disable" && allowDisable) return FollowPref::Disable;
+    return std::nullopt;
+}
+}  // namespace
+
+QString IntegrationSettings::followBothOn() const { return prefName(cfg_.followBothOn); }
+QString IntegrationSettings::followBothMuted() const { return prefName(cfg_.followBothMuted); }
+void IntegrationSettings::setFollowBothOn(const QString& v) {
+    const auto p = prefFrom(v, false);
+    if (!p || *p == cfg_.followBothOn) return;
+    UserConfig next = cfg_;
+    next.followBothOn = *p;
+    save(next);
+}
+void IntegrationSettings::setFollowBothMuted(const QString& v) {
+    const auto p = prefFrom(v, true);
+    if (!p || *p == cfg_.followBothMuted) return;
+    UserConfig next = cfg_;
+    next.followBothMuted = *p;
+    save(next);
+}
+
 QVariantMap IntegrationSettings::permissions() const {
     QVariantMap m;
     for (const auto& p : lewitt::devicePermissions()) m[QString::fromUtf8(p.name)] = cfg_.*(p.field);

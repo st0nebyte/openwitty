@@ -165,7 +165,36 @@ void DeviceWorker::serviceDesktopLink() {
     if (!link_->healthy()) link_.reset();               // restarts read-only on the next sample
 }
 
+void DeviceWorker::configureFollower(const UserConfig& c) {
+    auto map = [](FollowPref f) {
+        return f == FollowPref::Speakers ? FollowChoice::Speakers : f == FollowPref::Headphones ? FollowChoice::Headphones
+             : f == FollowPref::Keep ? FollowChoice::Keep : FollowChoice::Disable;
+    };
+    followWanted_ = c.followActiveOutput;
+    followCfg_ = FollowConfig{map(c.followBothOn), map(c.followBothMuted)};
+    follower_.reset();
+}
+
+// Called right after a successful settings refresh on a connected real device. Same gates as any GUI write: never in
+// --hw-check before the baseline, never after an unconfirmed write; the session policy limits it to byte 59.
+void DeviceWorker::serviceFollower() {
+    if (!followWanted_ || !session_ || session_->isSimulated() || writeLocked_ || (hwCheck_ && !hwBaseline_)) return;
+    if (!follower_)
+        follower_ = std::make_unique<OutputFollower>(*session_, followCfg_, guiPollPolicy(), [](const std::string& m) {
+            std::fprintf(stderr, "openwitty: %s\n", m.c_str());
+        });
+    if (follower_->step()) {
+        if (hwCheck_) {
+            const std::size_t off = settings_off::kNativeVolumeMapping;
+            if (std::find(hwExpected_.begin(), hwExpected_.end(), off) == hwExpected_.end()) hwExpected_.push_back(off);
+            hwCheckLog("write follow (byte 59): sent by follow active output");
+        }
+        publish();
+    }
+}
+
 void DeviceWorker::adoptSession(std::unique_ptr<IDeviceTransport> t, WritePolicy policy) {
+    follower_.reset();                   // like the link, it refers to the session that is about to go away
     link_.reset();                       // the link refers to the session that is about to go away
     {
         std::lock_guard lk(activeM_);
@@ -271,6 +300,7 @@ void DeviceWorker::connectUsb() {
     // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
     // independent of output control.
     desktopLinkWanted_ = userConfig.desktopVolumeSync == DesktopVolumeSync::Mirror;
+    configureFollower(userConfig);
 #ifdef LEWITT_HAVE_ALSA
     if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
 #else
@@ -385,6 +415,7 @@ void DeviceWorker::applyUserConfig() {
         return;
     }
     desktopLinkWanted_ = c.desktopVolumeSync == DesktopVolumeSync::Mirror;
+    configureFollower(c);
 #ifdef LEWITT_HAVE_ALSA
     if (desktopLinkWanted_ && !mixer_) mixer_ = std::make_unique<AlsaDesktopMixer>();
 #else
@@ -558,6 +589,7 @@ void DeviceWorker::poll() {
         auto result = refreshDeviceState(traceEnabled_ ? &timing : nullptr);
         if (result && before && session_->settings()) kinds = changedKinds(*before, *session_->settings());
         if (result && usbMode_) serviceDesktopLink();
+        if (result && usbMode_) serviceFollower();
     }
     qint64 sequence = 0;
     if (traceEnabled_) {

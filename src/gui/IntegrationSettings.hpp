@@ -23,6 +23,9 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(bool legacyOutputControlPending READ legacyOutputControlPending NOTIFY changed)
     // Phase 11A: every device-write permission by name (core/UserConfig devicePermissions()): name -> on/off.
     Q_PROPERTY(QVariantMap permissions READ permissions NOTIFY changed)
+    // Phase 12C: follow active output choices: "speakers" | "headphones" | "keep" (| "disable" for both muted).
+    Q_PROPERTY(QString followBothOn READ followBothOn NOTIFY changed)
+    Q_PROPERTY(QString followBothMuted READ followBothMuted NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
     Q_PROPERTY(QStringList configWarnings READ configWarnings NOTIFY changed)
     // not-installed | disabled | enabled | active | unknown
@@ -67,6 +70,11 @@ public:
     bool ledBrightnessControl() const { return cfg_.ledBrightnessControl; }
     bool legacyOutputControlPending() const { return cfg_.legacyOutputControlPending; }
     QVariantMap permissions() const;
+    QString followBothOn() const;
+    QString followBothMuted() const;
+    // Unknown values are ignored; "disable" only for both muted.
+    Q_INVOKABLE void setFollowBothOn(const QString& v);
+    Q_INVOKABLE void setFollowBothMuted(const QString& v);
     // Turning a permission on needs `confirmed` (the GUI's dialog); turning it off never does. Unknown names: no-op.
     Q_INVOKABLE void setPermission(const QString& name, bool on, bool confirmed);
     Q_INVOKABLE QString permissionDescription(const QString& name) const;

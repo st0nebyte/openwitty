@@ -30,6 +30,12 @@ WritePolicy outputWritePolicy(bool speaker, bool headphone) {
     return p;
 }
 
+WritePolicy withFollowOutput(WritePolicy base) {
+    base.allowHardwareWrites = true;
+    base.hardwareWriteOffsets.push_back(settings_off::kNativeVolumeMapping);
+    return base;
+}
+
 WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness) {
     UserConfig c;
     c.speakerControl = speaker;
@@ -60,6 +66,7 @@ std::vector<std::size_t> permissionOffsets(const std::string& name) {
     if (name == "phantom") return {kPhantom1};
     if (name == "outputModes") return {kHighVolumeSpeaker, kHighImpedanceHeadphone};
     if (name == "routing") return {kMixToSpeakers, kMobileStreaming, kNativeVolumeMapping};
+    if (name == "followOutput") return {kNativeVolumeMapping};
     return {};
 }
 

@@ -83,6 +83,7 @@ add_library(lewitt_core STATIC
     src/core/DeviceManager.cpp
     src/core/OutputControl.cpp
     src/core/VolumeSync.cpp
+    src/core/OutputFollow.cpp
     src/core/ControlCapabilities.cpp
     src/core/SettingsComparison.cpp)
 target_include_directories(lewitt_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
@@ -233,6 +234,7 @@ if(LEWITT_BUILD_TESTS)
     target_sources(lewitt_tests PRIVATE tests/cpp/test_read_freshness.cpp)     # Phase 7E independent read ages
     target_sources(lewitt_tests PRIVATE tests/cpp/test_output_control.cpp tests/cpp/test_volume_sync.cpp
                                         tests/cpp/test_desktop_link.cpp        # Phase 8D volume integration
+                                        tests/cpp/test_output_follow.cpp       # Phase 12C follow active output
                                         tests/cpp/test_route_volume.cpp        # Phase 9C route-volume proof of concept
                                         tests/cpp/test_trigger_policy.cpp      # Phase 10A trigger authorization
                                         tests/cpp/test_control_capabilities.cpp # Phase 10A per-control capabilities

@@ -149,6 +149,14 @@ new output with the values it already has), and stays idle with "none". Tests
 `DesktopLink.FollowsTheNativeVolumeMappingWithLevelAndMute`, `DesktopLink.NoneMappingLeavesEverythingAlone`. The
 daemon's vendor fallback stays speaker-only by policy.
 
+**12C step 2 (2026-10-31, offline):** "Follow active output" = permission `follow_active_output` (confirmed) + config
+`follow_both_on` (speakers|headphones|keep) / `follow_both_muted` (keep|speakers|headphones|disable). Rule function
+`followMapping()` and executor `OutputFollower` (core): one verified SET of byte 59 per state, never retried, never on top
+of another unconfirmed edit. Runs in the background service (policy: byte 59 via `withFollowOutput()`, poll 250 ms while
+on; audit-pinned) and in the window while it owns the device (GUI gates: no write before the hw-check baseline or after an
+unconfirmed write). Needs desktop volume sync (the service only runs with it). The manual mapping buttons are locked
+while it is on. Tests `OutputFollow.*`. Live test pending.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour

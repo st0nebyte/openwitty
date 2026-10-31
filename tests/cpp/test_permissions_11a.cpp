@@ -27,7 +27,7 @@ UserConfig only(const DevicePermission& perm) {
 
 TEST(Permissions11A, EveryPermissionDefaultsOffAndIsParsedFailClosed) {
     EXPECT_FALSE(anyDeviceWritePermission(UserConfig{}));
-    EXPECT_EQ(devicePermissions().size(), 11u);
+    EXPECT_EQ(devicePermissions().size(), 12u);
     for (const auto& p : devicePermissions()) {
         EXPECT_FALSE(UserConfig{}.*(p.field)) << p.key;
         auto on = parseUserConfig(std::string(p.key) + " = true\n");
@@ -58,6 +58,7 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
         {"outputModes", {"set.highVolume", "set.highImpedance"}},
         {"measurements", {"autogain1", "autogain2", "autogainBoth", "denoise1", "denoise2"}},
         {"routing", {"set.mixToSpeakers", "set.mobileStreaming", "set.volumeMapping"}},
+        {"followOutput", {"set.volumeMapping"}},
     };
     ASSERT_EQ(expected.size(), devicePermissions().size());
     for (const auto& p : devicePermissions())

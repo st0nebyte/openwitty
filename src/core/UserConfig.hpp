@@ -14,6 +14,8 @@ namespace lewitt {
 
 enum class DesktopVolumeSync { Off, Mirror };
 
+enum class FollowPref { Speakers, Headphones, Keep, Disable };
+
 struct UserConfig {
     // Keep the desktop (KDE/PipeWire) volume of the CONNECT 2 in step with the hardware speaker knob and
     // Mute button. Never writes the device itself (the ALSA update it makes is forwarded by the kernel
@@ -34,6 +36,10 @@ struct UserConfig {
     bool phantomControl{false};        // 48 V phantom power (each switch-on is confirmed again): byte 5
     bool outputModesControl{false};    // high-volume speakers, high-impedance headphones (confirmed per use): 24, 31
     bool measurementControl{false};    // autogain measurements: measurement-session and autogain triggers
+    // Phase 12C: OpenWitty keeps the native volume mapping (byte 59) on the audible output (writes the device).
+    bool followActiveOutput{false};
+    FollowPref followBothOn{FollowPref::Speakers};    // both outputs unmuted: speakers | headphones | keep
+    FollowPref followBothMuted{FollowPref::Keep};     // both muted: keep | speakers | headphones | disable
     bool routingControl{false};        // mix to speakers, mobile streaming, native volume mapping (confirmed): 23, 59, 67
     // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
     // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.

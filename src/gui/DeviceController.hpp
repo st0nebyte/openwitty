@@ -19,6 +19,7 @@
 #include "core/PollCadence.hpp"
 #include "core/DeviceSession.hpp"
 #include "desktop/DesktopMixer.hpp"
+#include "core/OutputFollow.hpp"
 #include "desktop/DesktopVolumeLink.hpp"
 #include "transport/SerializedTransport.hpp"
 #include "transport/MockTransport.hpp"
@@ -183,6 +184,12 @@ private:
     void dropDesktopLink();
     std::unique_ptr<lewitt::IDesktopMixer> mixer_;
     std::unique_ptr<lewitt::DesktopVolumeLink> link_;
+    // Phase 12C: follow active output while this window owns the device (the service waits meanwhile).
+    std::unique_ptr<lewitt::OutputFollower> follower_;
+    bool followWanted_{false};
+    lewitt::FollowConfig followCfg_;
+    void serviceFollower();
+    void configureFollower(const lewitt::UserConfig& c);
     bool desktopLinkWanted_{false};
     std::chrono::steady_clock::time_point nextMixerOpen_{};
     QString desktopLinkState_{"off"};   // off | waiting | active

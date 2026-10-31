@@ -48,6 +48,7 @@
 
 #include "desktop/AlsaDesktopMixer.hpp"
 #include "desktop/AudioSetupCheck.hpp"
+#include "core/OutputFollow.hpp"
 #include "desktop/DesktopVolumeLink.hpp"
 #include "transport/ControlLease.hpp"
 #include "transport/UsbTransport.hpp"
@@ -139,11 +140,22 @@ struct OnceLog {
     }
 };
 
-std::unique_ptr<DeviceSession> makeSession(bool writes) {
-    if (writes)
-        return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(outputControlHardwareOptions()),
-                                               outputWritePolicy(/*speaker=*/true, /*headphone=*/false));
+std::unique_ptr<DeviceSession> makeSession(bool writes, bool follow) {
+    if (writes || follow) {
+        // vendor fallback: speaker bytes; follow active output (Phase 12C, confirmed in the GUI): byte 59 only
+        WritePolicy p = writes ? outputWritePolicy(/*speaker=*/true, /*headphone=*/false) : WritePolicy{};
+        if (follow) p = withFollowOutput(p);
+        return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(outputControlHardwareOptions()), p);
+    }
     return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(readOnlyHardwareOptions()), WritePolicy{});
+}
+
+FollowConfig followConfig(const UserConfig& c) {
+    auto map = [](FollowPref f) {
+        return f == FollowPref::Speakers ? FollowChoice::Speakers : f == FollowPref::Headphones ? FollowChoice::Headphones
+             : f == FollowPref::Keep ? FollowChoice::Keep : FollowChoice::Disable;
+    };
+    return FollowConfig{map(c.followBothOn), map(c.followBothMuted)};
 }
 
 // What the daemon is doing right now: from an explicit flag, or from the user configuration.
@@ -261,12 +273,17 @@ int main(int argc, char** argv) {
     std::unique_ptr<DeviceSession> session;
     AlsaDesktopMixer mixer;
     std::unique_ptr<DesktopVolumeLink> link;
+    std::unique_ptr<OutputFollower> follower;
+    // Follow active output: only from the user settings (never from a mode flag), and not in a dry run.
+    auto followWanted = [&] { return !a.explicitMode && eff != Effective::DryRun && watch.config.followActiveOutput; };
+    bool follow = followWanted();
     OnceLog wait;
     std::string lastNotice;
     auto nextPoll = DesktopVolumeLink::Clock::now();
     const std::string dir = ControlLease::currentSessionDirectory();
 
     auto release = [&] {
+        follower.reset();
         link.reset();
         if (session) session->disconnect();
         session.reset();
@@ -275,12 +292,16 @@ int main(int argc, char** argv) {
     while (!gStop) {
         if (!a.explicitMode && watch.poll()) {
             const Effective e = fromConfig(watch.config);
-            if (e != eff) {
-                say(std::string("settings changed: ") + describe(e));
+            const bool f = !a.explicitMode && e != Effective::DryRun && watch.config.followActiveOutput;
+            if (e != eff || f != follow) {
+                say(std::string("settings changed: ") + describe(e) + (f ? " + follow active output" : ""));
                 release();                    // the next start is read-only again, with the new mode
                 mixer.close();
                 eff = e;
+                follow = f;
                 wait.last.clear();
+            } else if (follower) {
+                follower = std::make_unique<OutputFollower>(*session, followConfig(watch.config), PollPolicy{}, say);
             }
         }
         if (eff == Effective::Idle) {
@@ -299,7 +320,7 @@ int main(int argc, char** argv) {
         }
         if (!session || session->needsReconnect()) {
             link.reset();
-            session = makeSession(eff == Effective::Fallback);
+            session = makeSession(eff == Effective::Fallback, follow);
             if (auto s = session->connect(); !s) {
                 session.reset();
                 wait(s.error().code == Errc::ControlInUse ? "waiting: device in use by another OpenWitty client"
@@ -326,6 +347,10 @@ int main(int argc, char** argv) {
             }
             wait.last.clear();
             nextPoll = DesktopVolumeLink::Clock::now() + std::chrono::milliseconds(a.pollMs);
+            if (follow) {
+                follower = std::make_unique<OutputFollower>(*session, followConfig(watch.config), PollPolicy{}, say);
+                say("follow active output: on");
+            }
         }
         const auto untilPoll = std::chrono::duration_cast<std::chrono::milliseconds>(
             nextPoll - DesktopVolumeLink::Clock::now()).count();
@@ -339,8 +364,10 @@ int main(int argc, char** argv) {
         }
         if (r == 1) link->onDesktopEvent(now);
         if (now >= nextPoll) {
-            link->onPollTick(now);
-            nextPoll = now + std::chrono::milliseconds(a.pollMs);
+            link->onPollTick(now);            // fresh settings read
+            // Follow active output: after a custom-button press the mapping follows within one poll (<= 250 ms).
+            if (follower && link->healthy()) follower->step();
+            nextPoll = now + std::chrono::milliseconds(follower ? std::min(a.pollMs, 250) : a.pollMs);
         }
         if (link->notice() != lastNotice) {
             say(link->notice().empty() ? "notice cleared: desktop and device agree again" : "notice: " + link->notice());

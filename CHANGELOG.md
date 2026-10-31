@@ -11,6 +11,7 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Settings ▸ Audio: "Follow active output" - the system volume keys control the output you can hear; choices for "both on" and "both muted" (Phase 12C, also in the background service).
 - Settings ▸ Audio: "Map native volume controls to: None / Speakers / Headphones" (byte 59, *Routing* permission; Headphones asks first).
 - Settings ▸ Desktop integration: "Allow 44.1 and 96 kHz for apps" (PipeWire allowed rates; shows the live value).
 - Input meters: a blue line marks the noise floor from the last Denoise measurement (bytes 8/17, hover for the value).
