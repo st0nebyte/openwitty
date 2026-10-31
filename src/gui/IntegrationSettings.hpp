@@ -27,6 +27,8 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(QString followBothOn READ followBothOn NOTIFY changed)
     Q_PROPERTY(QString followBothMuted READ followBothMuted NOTIFY changed)
     Q_PROPERTY(bool followMoveFocus READ followMoveFocus NOTIFY changed)
+    // Phase 12D: device key -> native base function (1|2) of the extended custom-button modes.
+    Q_PROPERTY(QVariantMap buttonFollow READ buttonFollow NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
     Q_PROPERTY(QStringList configWarnings READ configWarnings NOTIFY changed)
     // not-installed | disabled | enabled | active | unknown
@@ -78,6 +80,9 @@ public:
     Q_INVOKABLE void setFollowBothMuted(const QString& v);
     bool followMoveFocus() const { return cfg_.followMoveFocus; }
     Q_INVOKABLE void setFollowMoveFocus(bool on);
+    QVariantMap buttonFollow() const;
+    // base 1|2 sets this device's extended mode (needs the GUI's confirmation); any other value removes it.
+    Q_INVOKABLE void setButtonFollow(const QString& deviceKey, int base, bool confirmed);
     // Turning a permission on needs `confirmed` (the GUI's dialog); turning it off never does. Unknown names: no-op.
     Q_INVOKABLE void setPermission(const QString& name, bool on, bool confirmed);
     Q_INVOKABLE QString permissionDescription(const QString& name) const;

@@ -14,6 +14,7 @@
 #include "GuiActivation.hpp"
 #include "ServiceState.hpp"
 #include "TrayAutostart.hpp"
+#include "core/OutputFollow.hpp"
 #include "desktop/SampleRates.hpp"
 #include "desktop/SplitSources.hpp"
 
@@ -270,6 +271,24 @@ void IntegrationSettings::setFollowBothMuted(const QString& v) {
     if (!p || *p == cfg_.followBothMuted) return;
     UserConfig next = cfg_;
     next.followBothMuted = *p;
+    save(next);
+}
+
+QVariantMap IntegrationSettings::buttonFollow() const {
+    QVariantMap m;
+    for (const auto& e : cfg_.buttonFollow)
+        if (e.size() == 18) m[QString::fromStdString(e.substr(0, 16))] = e[17] - '0';
+    return m;
+}
+
+void IntegrationSettings::setButtonFollow(const QString& deviceKey, int base, bool confirmed) {
+    const std::string key = deviceKey.toStdString();
+    if (key.size() != 16 || key.find_first_not_of("0123456789abcdef") != std::string::npos) return;
+    const bool set = base == 1 || base == 2;
+    if (set && !confirmed) return;                       // choosing it authorizes device writes: needs the dialog
+    UserConfig next = lewitt::withButtonFollow(cfg_, key, set ? std::optional<std::uint8_t>(std::uint8_t(base))
+                                                              : std::nullopt);
+    if (next.buttonFollow == cfg_.buttonFollow) return;
     save(next);
 }
 

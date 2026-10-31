@@ -168,6 +168,14 @@ device accepts a host write is unknown → one hardware test before implementing
 device keeps a host write of byte 56 — custom button → mapping and focus to headphones (each verified, ~21 ms apart),
 the touch surface showed the headphones selected; back to speakers the same. Option `follow_move_focus` (default on).
 
+**12D (2026-10-31, offline):** extended custom-button modes "toggle mute: headphone / speakers + follow volume" (base
+1) and "… + mic …" (base 2). Stored per device as `button_follow = <key>:<base>`; key = FNV-1a 64 of the USB serial
+(never the serial). Follow is active when the manual switch is on, or when this device has an extended mode **and**
+still holds that base function (another function, e.g. "Show CONTROL CENTER", leaves it inactive). Choosing it asks
+once (it authorizes the follow writes 59/56 for the service and the window); choosing any other function removes it
+for this device; the manual switch keeps its own value. In the GUI the follow switch is then on, greyed out, with a
+note. Tests `ButtonFollow.*`. Live test pending.
+
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour

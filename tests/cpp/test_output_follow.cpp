@@ -1,6 +1,8 @@
 // Phase 12C "Follow active output": the rule table from the owner spec and the one-SET-no-retry executor.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "FakeHardware.hpp"
 #include "core/OutputControl.hpp"
 #include "core/OutputFollow.hpp"
@@ -132,4 +134,44 @@ TEST(OutputFollow, AFocusTheDeviceDoesNotKeepIsNotTriedAgain) {
     for (const auto& l : r.log) focusLines += l.find("focus") != std::string::npos;
     EXPECT_EQ(focusLines, 1) << "reported once";
     EXPECT_GE(r.hw->writeCalls, w);
+}
+
+// Phase 12D: extended custom-button modes, per device, with the owner's base-matching rule.
+TEST(ButtonFollow, KeyIsAnonymousAndStable) {
+    const std::string k = deviceKey("ABC123");
+    EXPECT_EQ(k.size(), 16u);
+    EXPECT_EQ(k, deviceKey("ABC123"));
+    EXPECT_NE(k, deviceKey("ABC124"));
+    EXPECT_EQ(k.find("ABC"), std::string::npos);
+}
+
+TEST(ButtonFollow, ActiveOnlyWhileTheDeviceHoldsTheBase) {
+    UserConfig c;
+    const std::string a = deviceKey("A"), b = deviceKey("B");
+    c = withButtonFollow(c, a, std::uint8_t(2));
+    EXPECT_TRUE(followActive(c, a, 2));                    // base still on the device
+    EXPECT_FALSE(followActive(c, a, 0)) << "device now shows CONTROL CENTER: extension not activated";
+    EXPECT_FALSE(followActive(c, b, 2)) << "another CONNECT 2";
+    EXPECT_TRUE(followWritesWanted(c));
+    c.followActiveOutput = true;                           // the manual switch works everywhere
+    EXPECT_TRUE(followActive(c, b, 0));
+    c.followActiveOutput = false;
+    c = withButtonFollow(c, a, std::nullopt);              // another button function chosen: the extension is gone
+    EXPECT_FALSE(followActive(c, a, 2));
+    EXPECT_FALSE(followWritesWanted(c));
+}
+
+TEST(ButtonFollow, ConfigRoundTripAndFailClosed) {
+    UserConfig c = withButtonFollow(UserConfig{}, deviceKey("A"), std::uint8_t(1));
+    c = withButtonFollow(c, deviceKey("B"), std::uint8_t(2));
+    auto back = parseUserConfig(serializeUserConfig(c));
+    EXPECT_TRUE(back.warnings.empty());
+    EXPECT_EQ(back.config.buttonFollow, c.buttonFollow);
+    auto bad = parseUserConfig("button_follow = nothex:2, " + deviceKey("A") + ":3, " + deviceKey("A") + ":1\n");
+    EXPECT_EQ(bad.config.buttonFollow.size(), 1u);
+    EXPECT_EQ(bad.warnings.size(), 2u);
+    // the GUI policy includes the follow writes once an extended mode is stored
+    const auto p = guiWritePolicy(c);
+    EXPECT_EQ(std::count(p.hardwareWriteOffsets.begin(), p.hardwareWriteOffsets.end(), settings_off::kNativeVolumeMapping), 1);
+    EXPECT_EQ(std::count(p.hardwareWriteOffsets.begin(), p.hardwareWriteOffsets.end(), settings_off::kSelectedChannel), 1);
 }

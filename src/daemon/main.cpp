@@ -275,7 +275,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<DesktopVolumeLink> link;
     std::unique_ptr<OutputFollower> follower;
     // Follow active output: only from the user settings (never from a mode flag), and not in a dry run.
-    auto followWanted = [&] { return !a.explicitMode && eff != Effective::DryRun && watch.config.followActiveOutput; };
+    auto followWanted = [&] { return !a.explicitMode && eff != Effective::DryRun && followWritesWanted(watch.config); };
     bool follow = followWanted();
     OnceLog wait;
     std::string lastNotice;
@@ -292,7 +292,7 @@ int main(int argc, char** argv) {
     while (!gStop) {
         if (!a.explicitMode && watch.poll()) {
             const Effective e = fromConfig(watch.config);
-            const bool f = !a.explicitMode && e != Effective::DryRun && watch.config.followActiveOutput;
+            const bool f = !a.explicitMode && e != Effective::DryRun && followWritesWanted(watch.config);
             if (e != eff || f != follow) {
                 say(std::string("settings changed: ") + describe(e) + (f ? " + follow active output" : ""));
                 release();                    // the next start is read-only again, with the new mode
@@ -366,7 +366,10 @@ int main(int argc, char** argv) {
         if (now >= nextPoll) {
             // Follow active output first (own fresh read), so the link never mirrors the old output's state after a
             // custom-button press; it then re-targets on its own read. Within one poll (<= 250 ms).
-            if (follower && session->refreshSettings()) follower->step();
+            // Active: the manual switch, or this device's extended custom-button mode whose base it still holds (12D).
+            if (follower && session->refreshSettings() && session->settings() &&
+                followActive(watch.config, deviceKey(session->info().serial), session->settings()->customButton()))
+                follower->step();
             link->onPollTick(now);            // fresh settings read
             nextPoll = now + std::chrono::milliseconds(follower ? std::min(a.pollMs, 250) : a.pollMs);
         }

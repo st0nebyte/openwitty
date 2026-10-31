@@ -17,6 +17,10 @@ Rectangle {
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
     function can(k) { return root.interactive && device.values["can." + k] === true; }
     property string open: "audio"
+    // Phase 12D: this device's extended custom-button mode is in effect (stored for this device and its base is on it)
+    readonly property string followKey: { var k = root.v("device.followKey", ""); return k === "simulated" ? "" : k; }
+    readonly property bool buttonExtended: followKey !== "" && integration.buttonFollow[followKey] !== undefined
+                                           && integration.buttonFollow[followKey] === root.v("set.customButton", -1)
     // Phase 10B.1: outcome of the last deliberate LED brightness change on the real device
     // ("" | pending | verified | unchanged | not-sent | unconfirmed | refused).
     property string ledWrite: ""
@@ -155,29 +159,34 @@ Rectangle {
                        onToggled: (b) => confirmLoud.ask("set.mobileStreaming", b) }
         // Phase 12C: follow active output (owner spec): OpenWitty keeps byte 59 on the audible output
         ToggleSwitch { objectName: "followOutputSwitch"; width: 330; label: "Follow active output"
-                       checked: integration.permissions["followOutput"] === true
+                       enabled: !root.buttonExtended
+                       checked: integration.permissions["followOutput"] === true || root.buttonExtended
                        tip: "The system volume keys control the output you can hear (speakers or headphones)"
                        onToggled: (b) => { if (b) confirmWrite.ask("followOutput"); else integration.setPermission("followOutput", false, false); } }
+        Text { objectName: "followRequiredNote"; width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+               visible: root.buttonExtended
+               text: "On because the custom button is set to \"switch outputs + follow volume\". Choose another custom "
+                     + "button function to change this." }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               visible: integration.permissions["followOutput"] === true
+               visible: integration.permissions["followOutput"] === true || root.buttonExtended
                text: "Speakers on only: speakers. Headphones on only: headphones. Needs desktop volume sync (Desktop integration)."
                      + (integration.desktopSync ? "" : " Desktop volume sync is off: nothing follows right now.") }
         ToggleSwitch { objectName: "followFocusSwitch"; width: 330; label: "Also move the touch-wheel focus"
-                       visible: integration.permissions["followOutput"] === true
+                       visible: integration.permissions["followOutput"] === true || root.buttonExtended
                        checked: integration.followMoveFocus
                        tip: "The touch wheel on the CONNECT 2 then controls the same output as the volume keys"
                        onToggled: (b) => integration.setFollowMoveFocus(b) }
-        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true || root.buttonExtended
                text: "When both outputs are on, the volume keys control:" }
-        Row { spacing: 6; visible: integration.permissions["followOutput"] === true
+        Row { spacing: 6; visible: integration.permissions["followOutput"] === true || root.buttonExtended
             Repeater {
                 model: [{v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "keep", t: "Keep last"}]
                 ToggleButton { objectName: "followBothOn_" + modelData.v; width: 90; height: 22; text: modelData.t
                                active: integration.followBothOn === modelData.v
                                onClicked: integration.setFollowBothOn(modelData.v) } } }
-        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true || root.buttonExtended
                text: "When both outputs are muted:" }
-        Row { spacing: 6; visible: integration.permissions["followOutput"] === true
+        Row { spacing: 6; visible: integration.permissions["followOutput"] === true || root.buttonExtended
             Repeater {
                 model: [{v: "keep", t: "Keep last"}, {v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "disable", t: "No output"}]
                 ToggleButton { objectName: "followBothMuted_" + modelData.v; width: 74; height: 22; text: modelData.t
@@ -190,7 +199,7 @@ Rectangle {
             Repeater {
                 model: [{v: 0, t: "None"}, {v: 1, t: "Speakers"}, {v: 2, t: "Headphones"}]
                 ToggleButton { objectName: "volumeMapping" + modelData.v; width: 90; height: 22; text: modelData.t
-                               enabled: root.can("set.volumeMapping") && integration.permissions["followOutput"] !== true
+                               enabled: root.can("set.volumeMapping") && integration.permissions["followOutput"] !== true && !root.buttonExtended
                                active: root.v("set.volumeMapping", -1) === modelData.v
                                tip: integration.permissions["followOutput"] === true
                                     ? "Set by \"Follow active output\"; switch that off to choose by hand"
@@ -293,25 +302,37 @@ Rectangle {
         id: buttonCol
         width: 330; spacing: 8
         Repeater {
+            // x: OpenWitty extension (Phase 12D): the native base function plus "follow active output" for this device
             model: [{v: 0, t: "Show CONTROL CENTER"}, {v: 12, t: "Toggle mic preamp styles"},
                     {v: 13, t: "Toggle instrument preamp styles"},
                     {v: 1, t: "Toggle mute: headphone / speakers"},
+                    {v: 1, x: true, t: "Toggle mute: headphone / speakers + follow volume"},
                     {v: 2, t: "Toggle mute: headphone + mic / speakers"},
+                    {v: 2, x: true, t: "Toggle mute: hp + mic / speakers + follow volume"},
                     {v: 8, t: "Dim outputs"}, {v: 9, t: "Mono/stereo outputs"},
                     {v: 14, t: "Toggle brightness settings"}]
             Rectangle {
                 id: opt
                 property var o: modelData
                 width: 330; height: 22; color: "transparent"
-                opacity: root.can("set.customButton") ? 1 : 0.55
+                opacity: (root.can("set.customButton") || root.v("set.customButton", -1) === opt.o.v) ? 1 : 0.55
                 Rectangle { id: dot; width: 14; height: 14; radius: 7; color: "transparent"
                             border.color: Theme.textDim; anchors.verticalCenter: parent.verticalCenter
                             Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent
-                                        visible: root.v("set.customButton", -1) === opt.o.v } }
-                Text { x: 24; anchors.verticalCenter: parent.verticalCenter; color: Theme.text
-                       font.pixelSize: 11; text: opt.o.t }
-                MouseArea { anchors.fill: parent; enabled: root.can("set.customButton")
-                            onClicked: device.setValue("set.customButton", opt.o.v) }
+                                        visible: root.v("set.customButton", -1) === opt.o.v
+                                                 && (opt.o.x === true) === root.buttonExtended } }
+                Text { x: 24; width: 306; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter
+                       color: opt.o.x ? Theme.accent : Theme.text; font.pixelSize: 11; text: opt.o.t }
+                ToolTip_ { visible: optHover.containsMouse && opt.o.x === true && Hint.enabled; x: 24; text: "OpenWitty extension: "
+                           + "the native function plus \"follow active output\" for this CONNECT 2" }
+                MouseArea { id: optHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                // the base already on the device: only OpenWitty's setting changes, no device write (no permission needed)
+                MouseArea { anchors.fill: parent; enabled: root.can("set.customButton") || root.v("set.customButton", -1) === opt.o.v
+                            onClicked: {
+                                if (opt.o.x) { confirmButtonFollow.ask(opt.o.v); return; }
+                                if (root.followKey !== "") integration.setButtonFollow(root.followKey, -1, false);
+                                if (root.v("set.customButton", -1) !== opt.o.v) device.setValue("set.customButton", opt.o.v);
+                            } }
             }
         }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
@@ -602,6 +623,30 @@ Rectangle {
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmFallback.visible = false }
                 ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
                                onClicked: { confirmFallback.visible = false; integration.setVendorFallback(true, true); } } }
+        }
+    }
+
+    Rectangle {
+        id: confirmButtonFollow
+        objectName: "confirmButtonFollowDialog"
+        visible: false; z: 20; anchors.centerIn: parent; width: 330; height: 150; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        property int base: 1
+        function ask(b) { base = b; visible = true; }
+        Column { anchors.centerIn: parent; spacing: 10
+            Text { width: 300; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
+                   text: "The custom button will switch the outputs" + (confirmButtonFollow.base === 2 ? " and the mic" : "")
+                         + " as usual, and OpenWitty will move the system volume keys (and the touch-wheel focus) to the "
+                         + "output you can hear - also from the background service. Remembered for this CONNECT 2." }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: confirmButtonFollow.visible = false }
+                ToggleButton { objectName: "confirmButtonFollowButton"; width: 70; text: "Enable"; active: true; activeColor: Theme.warn
+                               onClicked: {
+                                   confirmButtonFollow.visible = false;
+                                   if (root.followKey !== "") integration.setButtonFollow(root.followKey, confirmButtonFollow.base, true);
+                                   if (root.v("set.customButton", -1) !== confirmButtonFollow.base)
+                                       device.setValue("set.customButton", confirmButtonFollow.base);
+                               } } }
         }
     }
 

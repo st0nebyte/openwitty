@@ -91,6 +91,8 @@ WritePolicy guiWritePolicy(const UserConfig& c) {
     }
     // Mobile streaming changes what capture channels 1/2 carry (the device's routing gate in DeviceSession).
     p.allowRoutingChanges = c.routingControl;
+    // Phase 12D: an extended custom-button mode chosen in the GUI authorizes the follow writes (59, 56) as well.
+    if (!c.buttonFollow.empty() && !c.followActiveOutput) p = withFollowOutput(p);
     return p;
 }
 

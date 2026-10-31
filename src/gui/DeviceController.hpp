@@ -188,6 +188,7 @@ private:
     std::unique_ptr<lewitt::OutputFollower> follower_;
     bool followWanted_{false};
     lewitt::FollowConfig followCfg_;
+    lewitt::UserConfig followUserCfg_;
     void serviceFollower();
     void configureFollower(const lewitt::UserConfig& c);
     bool desktopLinkWanted_{false};

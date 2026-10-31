@@ -15,6 +15,36 @@ std::uint8_t choose(FollowChoice c, std::uint8_t current, std::uint8_t lastActiv
 const char* name(std::uint8_t v) { return v == 1 ? "speakers" : v == 2 ? "headphones" : "none"; }
 }  // namespace
 
+std::string deviceKey(const std::string& serial) {
+    std::uint64_t h = 1469598103934665603ULL;
+    for (unsigned char ch : serial) { h ^= ch; h *= 1099511628211ULL; }
+    static const char* hex = "0123456789abcdef";
+    std::string out(16, '0');
+    for (int i = 15; i >= 0; --i) { out[static_cast<std::size_t>(i)] = hex[h & 0xF]; h >>= 4; }
+    return out;
+}
+
+std::optional<std::uint8_t> buttonFollowBase(const UserConfig& c, const std::string& key) {
+    for (const auto& e : c.buttonFollow)
+        if (e.size() == 18 && e.compare(0, 16, key) == 0) return static_cast<std::uint8_t>(e[17] - '0');
+    return std::nullopt;
+}
+
+bool followActive(const UserConfig& c, const std::string& key, std::uint8_t nativeButton) {
+    if (c.followActiveOutput) return true;
+    const auto b = buttonFollowBase(c, key);
+    return b && *b == nativeButton;
+}
+
+UserConfig withButtonFollow(UserConfig c, const std::string& key, std::optional<std::uint8_t> base) {
+    std::vector<std::string> kept;
+    for (const auto& e : c.buttonFollow)
+        if (!(e.size() == 18 && e.compare(0, 16, key) == 0)) kept.push_back(e);
+    if (base && (*base == 1 || *base == 2)) kept.push_back(key + ":" + std::to_string(*base));
+    c.buttonFollow = kept;
+    return c;
+}
+
 std::uint8_t followMapping(bool speakerMuted, bool headphoneMuted, std::uint8_t current, std::uint8_t lastActive,
                            const FollowConfig& c) {
     if (!speakerMuted && headphoneMuted) return 1;

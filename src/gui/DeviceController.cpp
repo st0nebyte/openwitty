@@ -170,7 +170,8 @@ void DeviceWorker::configureFollower(const UserConfig& c) {
         return f == FollowPref::Speakers ? FollowChoice::Speakers : f == FollowPref::Headphones ? FollowChoice::Headphones
              : f == FollowPref::Keep ? FollowChoice::Keep : FollowChoice::Disable;
     };
-    followWanted_ = c.followActiveOutput;
+    followWanted_ = followWritesWanted(c);
+    followUserCfg_ = c;
     followCfg_ = FollowConfig{map(c.followBothOn), map(c.followBothMuted), c.followMoveFocus};
     follower_.reset();
 }
@@ -179,6 +180,9 @@ void DeviceWorker::configureFollower(const UserConfig& c) {
 // --hw-check before the baseline, never after an unconfirmed write; the session policy limits it to byte 59.
 void DeviceWorker::serviceFollower() {
     if (!followWanted_ || !session_ || session_->isSimulated() || writeLocked_ || (hwCheck_ && !hwBaseline_)) return;
+    if (!session_->settings() ||
+        !followActive(followUserCfg_, deviceKey(session_->info().serial), session_->settings()->customButton()))
+        return;
     if (!follower_)
         follower_ = std::make_unique<OutputFollower>(*session_, followCfg_, guiPollPolicy(), [](const std::string& m) {
             std::fprintf(stderr, "openwitty: %s\n", m.c_str());
@@ -871,6 +875,9 @@ void DeviceWorker::publish() {
         v["set.led.metering"] = hex(s.ledColor(LedElement::Metering));
         v["set.led.gainReduction"] = hex(s.ledColor(LedElement::GainReduction));
         v["set.customButton"] = int(s.customButton());
+        // Phase 12D: anonymous per-device key for the extended custom-button modes (real device only)
+        v["device.followKey"] = session_->isSimulated() ? QString("simulated")
+                                                        : QString::fromStdString(deviceKey(session_->info().serial));
         v["set.customButtonKnown"] = s.customButtonFunction().has_value();
     }
     if (session_ && session_->status()) {

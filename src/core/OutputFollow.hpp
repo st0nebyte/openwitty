@@ -8,6 +8,7 @@
 #include <string>
 
 #include "core/DeviceSession.hpp"
+#include "core/UserConfig.hpp"
 
 namespace lewitt {
 
@@ -23,6 +24,17 @@ struct FollowConfig {
 // seen, used by Keep when the current value is none.
 std::uint8_t followMapping(bool speakerMuted, bool headphoneMuted, std::uint8_t current, std::uint8_t lastActive,
                            const FollowConfig& c);
+
+// Phase 12D: anonymous per-device key (FNV-1a 64 of the USB serial, 16 hex digits; never the serial itself).
+std::string deviceKey(const std::string& serial);
+// The native base function (1 or 2) of a stored extended button mode for this device, if any.
+std::optional<std::uint8_t> buttonFollowBase(const UserConfig& c, const std::string& key);
+// Follow is active: the manual switch, or this device's extended button mode whose base the device still holds.
+bool followActive(const UserConfig& c, const std::string& key, std::uint8_t nativeButton);
+// Set (base 1/2) or remove (nullopt) this device's extended mode.
+UserConfig withButtonFollow(UserConfig c, const std::string& key, std::optional<std::uint8_t> base);
+// Follow writes may be needed at all (session policy): manual follow or any stored extended mode.
+inline bool followWritesWanted(const UserConfig& c) { return c.followActiveOutput || !c.buttonFollow.empty(); }
 
 // Applies followMapping() to a session after each fresh settings read: at most one verified SET of byte 59 per state,
 // never retried (a failed change is only tried again after the device state changed).
