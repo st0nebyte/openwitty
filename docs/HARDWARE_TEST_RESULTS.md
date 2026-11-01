@@ -1719,3 +1719,8 @@ restored exactly, monitors stopped, usbmon unloaded; the service took the device
   (−23.50 dB); the CONNECT 2 worked in the user's session. The starting level equalled the login screen's default,
   so the log line is the decisive evidence. Details: `docs/RELEASE_READINESS.md` ("Speaker level at the login
   screen").
+* **Product mode live check (2026-11-01, owner present, speakers off, headphones unplugged):** in the window without any
+  permission switch: instrument gain 14 → ~20 → 14, Dim on → off, LED Icons colour changed and restored. Afterwards
+  the settings message was byte-identical to the snapshot taken before (no unexpected byte). Observation (owner): the
+  Icons colour is seen on the **selected** channel's icon; when that channel is muted, the Mute colour wins. Tooltip
+  updated accordingly.

@@ -201,7 +201,7 @@ Rectangle {
                     : root.ledWrite === "pending" ? Theme.text : Theme.warn }
         Repeater {
             // what each colour lights on the device (observed on hardware, Phase 11B session 1)
-            model: [{k: "icons", t: "Icons", d: "Channel icons of channels that are not muted"},
+            model: [{k: "icons", t: "Icons", d: "Channel icons, seen on the selected channel; a muted channel shows the Mute colour instead"},
                     {k: "mute", t: "Mute", d: "Channel icons of muted channels"},
                     {k: "parameter", t: "Parameter", d: "Gain / volume display of the selected channel"},
                     {k: "metering", t: "Metering", d: "Level meter"},
