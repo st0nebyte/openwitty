@@ -143,4 +143,13 @@ int clearPortNames(const CommandRunner& run) {
     return cleared;
 }
 
+std::optional<unsigned> parseClockRate(const std::string& text) {
+    static const std::regex line(R"(key:'clock\.rate' value:'(\d{4,6})')");
+    std::smatch m;
+    if (!std::regex_search(text, m, line)) return std::nullopt;
+    const unsigned hz = static_cast<unsigned>(std::stoul(m[1].str()));
+    if (hz < 8000 || hz > 384000) return std::nullopt;
+    return hz;
+}
+
 }  // namespace lewitt

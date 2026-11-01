@@ -9,6 +9,7 @@
 #include <string_view>
 #include <cstdlib>
 
+#include "desktop/PortNames.hpp"
 #include "core/Policy.hpp"
 #include <algorithm>
 
@@ -532,6 +533,14 @@ void DeviceWorker::refreshDeviceRate(bool force) {
     const auto r = readConnect2SampleRate(rateProcRoot_);
     deviceRate_ = r.hz;
     deviceRateIdle_ = !r.hz && r.reason.rfind("no stream open", 0) == 0;
+    // Idle card: show the rate the desktop audio runs at (PipeWire's clock.rate, read at most every 10 s). It is not
+    // used as the device's rate (no 96 kHz restriction is inferred from it).
+    if (deviceRateIdle_ && rateProcRoot_ == "/proc/asound" &&   // not in tests (fixture directories)
+        (!idleRate_ || std::chrono::steady_clock::now() - idleRateAt_ > std::chrono::seconds(10))) {
+        idleRateAt_ = std::chrono::steady_clock::now();
+        std::string out;
+        if (runProgram({"pw-metadata", "-n", "settings", "0", "clock.rate"}, &out) == 0) idleRate_ = parseClockRate(out);
+    }
     session_->setSampleRateHint(deviceRate_.value_or(0));
 }
 
@@ -738,6 +747,7 @@ void DeviceWorker::publish() {
     const bool sim = session_ && session_->isSimulated();
     if (sim && cs == ConnectionState::Connected) v["sampleRate"] = sampleRate_;
     else if (!sim && cs == ConnectionState::Connected && deviceRate_) v["sampleRate"] = *deviceRate_;
+    else if (!sim && cs == ConnectionState::Connected && deviceRateIdle_ && idleRate_) v["sampleRate"] = *idleRate_;
     else v["sampleRate"] = QVariant();                  // unknown: the UI shows "Unknown"
     v["sampleRate.source"] = sim ? QString("simulated") : deviceRate_ ? QString("device")
                            : deviceRateIdle_ ? QString("idle") : QString("unknown");

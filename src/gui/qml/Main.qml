@@ -91,7 +91,7 @@ Window {
                 detail: win.uiState === "connecting" ? win.backendLabel
                       : win.uiState === "simulated" ? "simulated"
                       : win.uiState === "real-readonly" ? "read-only"
-                      : win.uiState === "real-writable" ? "real device"
+                      : win.uiState === "real-writable" ? ""
                       : win.uiState === "connection-lost" ? "connection lost"
                       : win.backendLabel }
             Text { objectName: "sampleRateLabel"; x: 461; anchors.verticalCenter: parent.verticalCenter; color: Theme.textDim; font.pixelSize: 11
@@ -103,13 +103,13 @@ Window {
                 opacity: device.simulated ? 1 : 0.55
                 Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: "#f0f0f0"; font.pixelSize: 11
                        text: device.values["sampleRate"] !== undefined ? (device.values["sampleRate"] / 1000).toString() + " kHz"
-                             : device.values["sampleRate.source"] === "idle" ? "Idle" : "Unknown" }
+                             : "Unknown" }
                 Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter
                        color: "#777"; font.pixelSize: 9; text: "▴\n▾"; lineHeight: 0.75 }
                 MouseArea { anchors.fill: parent; enabled: device.simulated; onClicked: rateMenu.visible = !rateMenu.visible }
                 ToolTip_ { visible: rateMa.containsMouse; text: device.simulated ? "Simulated sample rate"
                                                               : device.values["sampleRate.source"] === "idle"
-                                                                ? "No audio is playing or recording on the CONNECT 2; the rate is set when audio starts"
+                                                                ? "The desktop audio rate; no app is playing or recording on the CONNECT 2 right now"
                                                                 : "Set by the audio system (not controlled here)" }
                 MouseArea { id: rateMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
             }
@@ -205,7 +205,7 @@ Window {
                      ? "Changes stopped: " + (device.values["write.lockReason"] || "a change was not confirmed by the device")
                        + ". Check the device, then click Reconnect."
                      : win.uiState === "real-writable"
-                     ? (device.values["ui.device"] || "CONNECT 2") + " connected (" + win.backendLabel + ")."
+                     ? "CONNECT 2 connected."
                      : win.uiState === "connecting"
                      ? (device.values["ui.detail"] === "Taking over from the OpenWitty background service"
                         ? "Connecting — taking over the CONNECT 2 from the OpenWitty background service…"

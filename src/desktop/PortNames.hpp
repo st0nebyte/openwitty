@@ -9,6 +9,7 @@
 #pragma once
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,5 +44,8 @@ int runProgram(const std::vector<std::string>& argv, std::string* out);
 int applyPortNames(const CommandRunner& run = runProgram);
 // Removes the names OpenWitty set (only where the port still carries exactly OpenWitty's name). Returns how many.
 int clearPortNames(const CommandRunner& run = runProgram);
+
+// PipeWire's clock rate from `pw-metadata -n settings 0 clock.rate` output; nullopt if absent or implausible.
+std::optional<unsigned> parseClockRate(const std::string& text);
 
 }  // namespace lewitt

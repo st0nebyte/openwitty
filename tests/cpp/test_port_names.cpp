@@ -98,3 +98,11 @@ TEST(PortNames, SettingDefaultsOnAndRoundTrips) {
     EXPECT_FALSE(parsed.config.nameChannels);
     EXPECT_TRUE(parsed.warnings.empty());
 }
+
+TEST(PortNames, ClockRateIsReadFromPipeWireSettings) {
+    EXPECT_EQ(parseClockRate("Found \"settings\" metadata 34\nupdate: id:0 key:'clock.rate' value:'48000' type:''\n"), 48000u);
+    EXPECT_EQ(parseClockRate("update: id:0 key:'clock.rate' value:'96000' type:''"), 96000u);
+    EXPECT_FALSE(parseClockRate("Found \"settings\" metadata 34\n").has_value());
+    EXPECT_FALSE(parseClockRate("update: id:0 key:'clock.rate' value:'12' type:''").has_value());
+    EXPECT_FALSE(parseClockRate("update: id:0 key:'clock.force-rate' value:'0' type:''").has_value());
+}

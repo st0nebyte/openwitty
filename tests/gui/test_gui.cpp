@@ -1296,7 +1296,7 @@ TEST(GuiPermissions, SpeakerHeadphoneControlEnablesOnlyTheFourOutputControls) {
     ASSERT_TRUE(root);
     auto* banner = root->findChild<QObject*>("connectionBannerText");
     ASSERT_TRUE(banner);
-    EXPECT_TRUE(banner->property("text").toString().contains(" connected (")) << banner->property("text").toString().toStdString();
+    EXPECT_EQ(banner->property("text").toString(), "CONNECT 2 connected.");
     EXPECT_TRUE(enabledOf(root.get(), "fader_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "mute_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "fader_hp"));
@@ -2295,7 +2295,7 @@ TEST(SampleRate10B, UnknownOnAnIdleOrMissingDeviceAndNeverTheSimulatedDefault) {
 }
 
 // 2026-11-01 (owner): with the card present but no stream open the label says "Idle", not "Unknown".
-TEST(SampleRate10B, ACardWithoutAnOpenStreamIsShownAsIdle) {
+TEST(SampleRate10B, ACardWithoutAnOpenStreamShowsTheDesktopRateOrUnknown) {
     app();
     RealLike r{lewitt::WritePolicy{}};
     const QString card = r.proc.path() + "/card3";
@@ -2309,10 +2309,14 @@ TEST(SampleRate10B, ACardWithoutAnOpenStreamIsShownAsIdle) {
     QQmlEngine engine;
     auto root = loadMain(*r.c, engine);
     ASSERT_TRUE(root);
-    bool idleShown = false;
-    for (QObject* o : root->findChildren<QObject*>())
+    // without PipeWire's rate (tests never run pw-metadata) the label says Unknown, never a made-up rate or "Idle"
+    bool unknownShown = false, idleShown = false;
+    for (QObject* o : root->findChildren<QObject*>()) {
+        if (o->property("text").toString() == "Unknown") unknownShown = true;
         if (o->property("text").toString() == "Idle") idleShown = true;
-    EXPECT_TRUE(idleShown);
+    }
+    EXPECT_TRUE(unknownShown);
+    EXPECT_FALSE(idleShown);
 }
 
 TEST(SampleRate10B, AConfirmed96kHzMakesDenoiseAndCompUnavailable) {

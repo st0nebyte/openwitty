@@ -22,6 +22,7 @@ QtObject {
     readonly property color accent: "#8fc21d"      // active outline / text, "CONNECT 2"
     readonly property color accentFill: "#98bb0c"  // primary buttons (Next, Check for updates)
     readonly property color accentDim: "#5b6e15"
+    readonly property color selected: "#75b9ff"     // icon of the channel the device's touch wheel controls
     readonly property color meterGreen: "#83b12a"
     readonly property color meterAmber: "#f8aa37"
     readonly property color danger: "#f01a1a"      // active MUTE

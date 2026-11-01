@@ -23,8 +23,6 @@ Item {
     readonly property string dspTip: dspUnknown ? " (availability depends on the sample rate, which is unknown)" : ""
     readonly property bool pending: device.values["pending." + p + "gain"] === true
     width: 152; height: 267
-    Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 3; color: "transparent"
-                border.width: root.physicalSelected ? 2 : 0; border.color: "#75b9ff" }
 
     z: inputMeter.noiseTipShown ? 10 : 0
     LevelMeter { id: inputMeter; x: -9; y: 40; height: 187; scale: true; barWidth: 8
@@ -37,7 +35,10 @@ Item {
                  // shown only while Denoise is on (owner wish 2026-10-31)
                  noiseFloorDb: (root.hasNoiseLevel && root.v("denoise", false)) ? device.values[root.p + "noiseFloor"] : NaN }
 
-    GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"; color: "#ececec" }
+    GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"
+                objectName: root.mic ? "channelIconMic" : "channelIconInstrument"
+                // the channel the device's touch wheel controls: icon in the selection colour (owner wish)
+                color: root.physicalSelected ? Theme.selected : "#ececec" }
 
     Row {   // LC / 48V / Clipguard (instrument has no 48V)
         x: root.mic ? 45 : 60; y: 45; spacing: 4

@@ -86,6 +86,8 @@ private:
     void refreshDeviceRate(bool force);
     std::optional<unsigned> deviceRate_;
     bool deviceRateIdle_{false};   // the CONNECT 2 sound card exists but no stream is open
+    std::optional<unsigned> idleRate_;   // PipeWire's clock rate, shown while the card is idle (cached)
+    std::chrono::steady_clock::time_point idleRateAt_{};
     int ratePolls_{0};
 public:
     std::string rateProcRoot_{"/proc/asound"};   // tests point this at a fixture directory
