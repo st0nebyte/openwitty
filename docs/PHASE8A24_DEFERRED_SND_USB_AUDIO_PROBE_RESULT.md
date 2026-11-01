@@ -5,7 +5,7 @@ reproduced the known failure. One experimental boot, one guarded load, no retry.
 (`~/.local/state/openwitty/trace-8a24/run-20261024-130022/`, mode 0600).
 
 ## Preconditions (verified before the boot)
-Branch `phase7-hardware-integration` at `dcb081f` (hardened tooling), clean worktree, `main` = `ef614336`; no Limine
+Branch `phase7-hardware-integration` at `affc054` (hardened tooling), clean worktree, `main` = `ef614336`; no Limine
 entry, no `/var/lib/openwitty-8a24`, no run directory; normal entry and `default_entry: 2` untouched; kernel
 7.2.10-1-cachyos; CONNECT 2 on port `3-2`, xHCI `0000:0d:00.4`. UEFI S5 setting unchanged (user-reported; not
 software-verifiable). Installed entry: exactly one marked block, only `modprobe.blacklist=snd_usb_audio` added (no

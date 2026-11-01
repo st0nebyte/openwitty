@@ -93,8 +93,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 
 ## KDE Plasma acceptance (Phase 9B, 2026-10-25)
 
-System: CachyOS, Linux 7.3.0, KDE Plasma 6.8 on Wayland; user-local install of `a0e899e` (window, tray) with the
-background service process started earlier from `39c66cf` (left running; its code is functionally unchanged
+System: CachyOS, Linux 7.3.0, KDE Plasma 6.8 on Wayland; user-local install of `830c8b7` (window, tray) with the
+background service process started earlier from `b07e584` (left running; its code is functionally unchanged
 since, CMake replaces installed files without disturbing a running process). Vendor fallback and
 speaker/headphone control off throughout.
 
@@ -118,7 +118,7 @@ end-to-end single-instance script, ASan/UBSan 265/265, USB audit, packaging stag
 **Defects found and fixed during the acceptance test:** opening the window while the service held the device
 showed a red "already in use by another OpenWitty process" for 1–2 s (the normal hand-over) — now presented as
 "Connecting — taking over the CONNECT 2 from the OpenWitty background service…" with 300 ms lease retries
-(`6b2f4cd`); the header indicator still said "Error" (`ca7fa0d`); "usb" shown as "USB" (`a0e899e`).
+(`ae42d5a`); the header indicator still said "Error" (`053e4d0`); "usb" shown as "USB" (`830c8b7`).
 
 **Login (owner logged out and in, 18:29):** the tray icon came back by itself (`openwitty-tray` started by the
 session's XDG autostart, parent the systemd user manager); `openwitty-volumed` was stopped with the old session
@@ -295,7 +295,7 @@ address (`git config user.email`).
 * **Verified before pushing:** commit count identical on all 8 refs; only the no-reply identity (and GitHub's own
   committer for 7 web merges) remains; 0 personal strings in identities, messages and every blob of every ref; branch
   tips differ from the originals only in the replaced lines (1–2 doc lines).
-* **Pushed** with exact leases: `phase7-hardware-integration` 9615d05→`d39c727`, `hardware-validation-2026-10-14`
+* **Pushed** with exact leases: `phase7-hardware-integration` 9615d05→`0611236`, `hardware-validation-2026-10-14`
   868331c→`171990e`, `phase6e-work-preparation` 7d8a4c0→`94b89a3`, `phase7a-interface-discovery` be0d3f3→`820412d`.
   Local branches reset to them; hash references in the docs translated with filter-repo's commit map (34 in 15 files).
 * **`main`** (owner-approved, second step): remote re-checked immediately before, pushed with an exact lease
@@ -307,12 +307,12 @@ address (`git config user.email`).
 * **Final check from a fresh mirror of GitHub** (each field on its own line — an earlier check joined the fields,
   which can hide a name at a word boundary): all branches 0 personal strings in identities, messages and file
   revisions; identity names only `st0nebyte` and `GitHub`.
-* **Not rewritten — unresolved privacy blocker:** GitHub's `refs/pull/1..3/head` (`66bc210`, `d1d5e4e`, `6cef96f`;
+* **Not rewritten — privacy blocker, resolved 2026-11-01 by a new repository (below):** GitHub's `refs/pull/1..3/head` (`66bc210`, `d1d5e4e`, `6cef96f`;
   read-only, GitHub-managed) still point at the old commits: the **first name** is in the author/committer name of
   18 commits (the e-mail address is not; their file revisions are clean). GitHub may also keep old commits reachable
   by hash until its garbage collection. Options: see "Pull-request refs" below.
 
-### Pull-request refs (open)
+### Pull-request refs (resolved 2026-11-01: new repository)
 
 | Option | Effect | Needs |
 |---|---|---|
@@ -326,6 +326,18 @@ and remove cached views — and only after all other references are clean and no
 remove non-sensitive data" (whether a personal address qualifies is Support's decision). The repository has **no
 forks**; the three PRs are the merged branding/asset PRs #1–#3. Nothing has been changed or requested (no
 visibility change, no support contact).
+
+**Resolution (2026-11-01, owner decision: option 2).** Backups first (`~/Backups/openwitty-pre-repo-move-20261101-2007.bundle`,
+all local refs, and `…-github.git`, a mirror of GitHub incl. `refs/pull/*`). The old repository was renamed to
+`openwitty-old` (still private; the owner deletes it after checking the new one). A new private `openwitty` was
+created and pushed only from the five branches — no `refs/pull/*`, no issues, releases or secrets existed to move.
+The full-history scan before the push found one more leftover: a fragment of the tested system's root-filesystem
+UUID in two revisions of `docs/PHASE8A12_USB_CORE_DELAY_INIT_QUIRK_ASSESSMENT.md` (removed again in a later commit).
+It was replaced with `00000000` by `git filter-repo --replace-text` in a disposable clone; only the development
+branch changed (155 commits from 2026-10-23 on get new IDs; `main` and the three other branches are unchanged).
+Verified before the push: 241 commits as before, identical authors, committers and dates, identical tip tree,
+messages differ only in filter-repo's updated commit IDs (5 lines), 0 personal strings in every revision and
+message. The 31 commit IDs mentioned in the docs were translated with the commit map.
 
 ### Arch
 
@@ -391,7 +403,7 @@ CachyOS host; nothing installed, the running user-local installation, service, t
 Release build: CTest 292/292, GUI 57/57, tray 17/17, race 7/7 (5 repeats in 9B; race and tray also under
 ASan/UBSan); `build-asan`: 272/272; USB audit PASS; `packaging_staging` and `install_staging_user_unit` PASS;
 real rootless `makepkg`: `check()` 291/291 — its first run exposed the single-instance socket-path defect fixed in
-`67f866f`; privacy grep and `git diff --check` clean.
+`9ae08a5`; privacy grep and `git diff --check` clean.
 
 ## Validation run (Phase 9A)
 

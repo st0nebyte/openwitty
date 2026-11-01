@@ -1,6 +1,6 @@
 # Phase 8A.23 – Off-state USB power cycle test
 
-Status: **EXECUTED once – result NEGATIVE.** The plan sections below are the pre-shutdown checkpoint (commit `3ff7fb1`); results follow at the end.
+Status: **EXECUTED once – result NEGATIVE.** The plan sections below are the pre-shutdown checkpoint (commit `c2c71ab`); results follow at the end.
 
 ## Baseline (Phases 8A.19–8A.22)
 Cold boots with CONNECT 2 continuously powered: slow first `SET_INTERFACE(1,1)` (≈41 ms), 5.45 s `SET_INTERFACE(1,0)`
@@ -17,7 +17,7 @@ Changed: device power cycle while host off; unplug/replug history of the port. U
 normal (uninstrumented) boot entry, same USB port, cable, BIOS settings, userspace, no quirk flags, no trace.
 
 ## Pre-shutdown state (recorded)
-- Branch `phase7-hardware-integration`, clean worktree, start HEAD `8ba0fd9`, `main` = `ef614336`.
+- Branch `phase7-hardware-integration`, clean worktree, start HEAD `872b86f`, `main` = `ef614336`.
 - Running kernel `7.2.10-1-cachyos`. Device: 29c2:0004, bcdDevice 1.21, bus 3 port 2 (`3-2`) on the xHCI at PCI
   `0000:0d:00.4`; device number 3 (from the 8A.21 replug).
 - This *running* boot still carries the 8A.20 trace parameters on `/proc/cmdline`

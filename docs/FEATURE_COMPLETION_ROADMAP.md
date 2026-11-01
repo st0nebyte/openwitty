@@ -176,7 +176,7 @@ once (it authorizes the follow writes 59/56 for the service and the window); cho
 for this device; the manual switch keeps its own value. In the GUI the follow switch is then on, greyed out, with a
 note. Tests `ButtonFollow.*`. **Live test PASS (2026-10-31)** with the manual switch off: the service followed the
 custom button (mapping + focus verified); the window first opened read-only (an extended mode alone did not count as a
-write authorization; fixed in 630f725), afterwards the window followed too (focus moved to the headphones).
+write authorization; fixed in de005c0), afterwards the window followed too (focus moved to the headphones).
 
 **Owner decisions (2026-10-31):** 12E stays as built — X closes the window while the tray icon and the background
 service keep running (keys, follow and focus keep working; the tray reopens the window); "start minimized" = the tray
@@ -226,11 +226,11 @@ source, gain decreases); session 2 outputs (HW-2…HW-4); session 3 audio (LB-1/
 
 **Done and hardware-verified:** 11A.1–11A.3; 11B session 1 (all low-risk settings), session 2 (HW-2…HW-4 outputs),
 session 3 part 1/2 (LB-2 loopback, LB-1 input channel identity); 11C (desktop input mute that works, installed on the
-owner's system). Fixes found on hardware: overlay click-through (`dbc51c3`), device-maintained bytes 25/26 (`1b3d5e5`,
-`d8ef700`), knob/fader flash and LED row descriptions (`1a192ef`), fader dB readout (`c4a7ecf`), desktop-mute warning and
-detection (`ce3608e`, `4977413`). Results in the sections below and in `PROTOCOL.md` ("Hardware observations, Phase 11B").
+owner's system). Fixes found on hardware: overlay click-through (`86d446d`), device-maintained bytes 25/26 (`615a7b6`,
+`5011802`), knob/fader flash and LED row descriptions (`9b94cf8`), fader dB readout (`58a8768`), desktop-mute warning and
+detection (`745a5cc`, `a21cd4f`). Results in the sections below and in `PROTOCOL.md` ("Hardware observations, Phase 11B").
 
-**Owner system state after 2026-10-28:** OpenWitty installed user-local from `4977413`; all device permissions off; 11C
+**Owner system state after 2026-10-28:** OpenWitty installed user-local from `a21cd4f`; all device permissions off; 11C
 files installed in `~/.config/alsa-card-profile/mixer/{profile-sets,paths}/` and
 `~/.config/wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf` (undo: delete, restart WirePlumber); the
 input route is now `openwitty-connect2-input` (software mute/volume, unmuted, 1.0). Device settings equal the session
@@ -276,8 +276,7 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
 7. **Obsolete / closed:** GAIN-1 steps 3–5 (FU 5 volume requests) — with 11C nothing writes FU 5 any more; kept as
    history in `docs/PHASE10E_GAIN_CONTROL_PATH.md`.
 8. **Still open, owner decisions:** login-screen WirePlumber rule live test — *done 2026-11-01, PASS on Plasma
-   Login*; GitHub `refs/pull/1..3` privacy
-   blocker (first name in 18 commits); no merge to `main`, no tag, no release, repo stays private. The background
+   Login*; GitHub `refs/pull/1..3` privacy blocker — *resolved 2026-11-01 with a new clean repository*; no merge to `main`, no tag, no release, repo stays private. The background
    service picks up the new binary at the next login.
 
 ### Phase 11B session 4 — high-risk controls (procedure, prepared 2026-10-29)
@@ -434,10 +433,10 @@ class W-gui for every row: one GUI action → one SET → device read-back verif
 
 Findings and fixes:
 - **Overlay click-through** (part 1): a wheel turn on the Settings page lowered the instrument gain underneath
-  (11: 14→11, restored). Fixed in `dbc51c3`.
+  (11: 14→11, restored). Fixed in `86d446d`.
 - **Device-maintained bytes 25/26**: Dim and Mono each make the device set a second byte (25 = speaker dim state,
   26 = speaker mono state) to the same value. OpenWitty correctly stopped as "not confirmed" (twice, each restored to
-  changed: none); since `1b3d5e5`/`d8ef700` these are device followers of Dim/Mono (accepted only for that write).
+  changed: none); since `615a7b6`/`5011802` these are device followers of Dim/Mono (accepted only for that write).
 - **Gain lock was on at the start** (byte 57 = 1). Hypothesis: it is why the device re-muted FU 5 by itself in GAIN-1
   step 2R and why FU 5 never matched the preamp gain. Toggling it off is moved to GAIN-1 (the desktop route still
   requests +72 dB), not done in session 1. Caveat: the vendor field is `ExternalGainControl`; the polarity is unverified.
@@ -456,7 +455,7 @@ Findings and fixes:
 | HW-4 headphone mute (first-ever headphone SET) | 29: 1→0→1 | PASS |
 | HW-4 headphone volume | 27–28: −32.4 → −30 → −36 → −32.5 dB | PASS; the start value −32.398 dB (set with the device knob) is off the fader's 0.5 dB grid, restored to −32.5 dB with the owner's agreement — final compare: only byte 27 (154→128) |
 
-Finding fixed in `c4a7ecf`: the output faders had no visible value; they now show dB (lime while previewed/awaiting).
+Finding fixed in `58a8768`: the output faders had no visible value; they now show dB (lime while previewed/awaiting).
 
 **Session 3 part 1 — LB-2 hardware loopback (2026-10-28, owner present, speakers muted, headphones off): PASS.**
 Method: 48 kHz stereo file (1 s silence, 4 s 1 kHz L-only, 1 s, 4 s 2 kHz R-only, −30 dBFS peak) played with `pw-play`

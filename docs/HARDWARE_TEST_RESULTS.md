@@ -1628,7 +1628,7 @@ audio-routing change was performed.
 ## 19. HW-1 — first GUI hardware write (LED brightness), 2026-10-26
 
 Owner-approved, owner present; procedure `docs/FEATURE_COMPLETION_ROADMAP.md` (HW-1, Phase 10B.2 version).
-Build `06106bc` (code as of `1d4cd94`) installed user-local; installed `openwitty` checksum identical to the build
+Build `85eec34` (code as of `35d0d68`) installed user-local; installed `openwitty` checksum identical to the build
 output. Kernel 7.3.0, KDE Plasma 6 (Wayland), PipeWire 1.6, WirePlumber 0.5. Safety conditions confirmed by the owner
 before the window was started: no audio playing, monitors off/down, headphones off the head, device untouched.
 Speaker control, headphone control and vendor fallback off throughout; desktop sync `mirror` unchanged.
@@ -1706,7 +1706,7 @@ restored exactly, monitors stopped, usbmon unloaded; the service took the device
 ## 2026-11-01 — Autosetup, presets and Ardour with JACK (owner present, speakers off, headphones unplugged)
 
 * **Autosetup (mic, full flow, `--hw-check`):** first run exposed a bug (a measurement counted as finished on the
-  previous measurement's progress 100 - fixed in f69cd77). Second run: 10 s voice measurement, gain set by the device
+  previous measurement's progress 100 - fixed in 13e8a42). Second run: 10 s voice measurement, gain set by the device
   44 → 39 dB; during the measurement the settings read a neutral mic state, restored afterwards; Denoise measurement
   stored −47 dBFS; Apply wrote the preamp (verified). Owner kept the result.
 * **Presets:** saved "Live test", mic preamp Clean → Warm, loaded: one listed change, one verified SET, baseline
