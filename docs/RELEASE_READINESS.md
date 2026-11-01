@@ -54,7 +54,7 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 |---|---|---|
 | 16 | Desktop integration: window, service, hand-over, Mute button, boot/login, suspend/resume | PASS (`docs/VOLUME_INTEGRATION.md`) |
 | 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
-| 18 | Speaker level unchanged across logout/login | **FAIL (limitation)** — the login screen's own audio service sets its default level; see "Speaker level at the login screen (Phase 9C)" |
+| 18 | Speaker level unchanged across logout/login | **Limitation without the rule** — the login screen's own audio service sets its default level; **PASS with the optional login-screen rule** on Plasma Login (2026-11-01); see "Speaker level at the login screen (Phase 9C)" |
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
 | 20 | GUI device control on hardware (speaker, headphone, LED brightness; since Phase 11A also inputs, processing, monitoring, LED colours/button, 48 V, output modes, autogain) | **MOSTLY DONE** — LED brightness PASS (HW-1, 2026-10-26); Phase 11B (2026-10-27/28) PASS: inputs (mute, gain decrease/increase), processing (low-cut, Clipguard, Comp, preamp), monitoring (source, mix, Dim, Mono, loopback mute), LED colours, custom button, speaker and headphone volume/mute. Open: 48 V, output modes, autogain, gain lock toggle, Denoise (session 4 / research) — `docs/FEATURE_COMPLETION_ROADMAP.md` |
 | 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
@@ -82,8 +82,8 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 * The kernel compatibility quirk is specific to the CONNECT 2 and was needed on Linux 7.3.0; other kernels have
   not been checked. It is never installed by OpenWitty or its packages.
 * With the kernel quirk, a graphical login screen's own audio service sets the CONNECT 2 speaker to its default
-  level (≈ −23.5 dB) each time it appears; optional login-screen-only WirePlumber rule (example, not yet
-  live-tested). See "Speaker level at the login screen (Phase 9C)".
+  level (≈ −23.5 dB) each time it appears; optional login-screen-only WirePlumber rule (example, live-tested on
+  Plasma Login 2026-11-01; SDDM/GDM untested). See "Speaker level at the login screen (Phase 9C)".
 * The device stalls for a few seconds after power-up (kernel `usb_set_interface failed (-110)` on every boot);
   the service recovers with one bounded reconnect.
 * A resume after which the device is re-enumerated (power lost during sleep), longer sleeps and `s2idle` as the
@@ -185,7 +185,7 @@ agrees, the WirePlumber default reproduced; `wireplumber_login_screen_rule_parse
 a live PipeWire with the device): WirePlumber actually persisting a route request, the rule's effect on a real
 login screen, node disappearance and a different default sink under approach A.
 
-**Optional live check of the login-screen rule (procedure; needs the owner's explicit approval; not run).**
+**Optional live check of the login-screen rule (procedure; run once on 2026-11-01, result below).**
 Two logout/login cycles at most: one with the rule, and one without it only if the first result is ambiguous.
 
 *Acoustic safety first.* The test deliberately lets the login screen change the speaker level, possibly
@@ -224,7 +224,15 @@ device; repeated service restarts. Then roll back and report; no further cycles.
 `/var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf`
 (`plasmalogin:plasmalogin`, 0644; the two `wireplumber` directories created as `plasmalogin`; identical to the
 repository copy; `spa-json-dump` parses it). The user's own WirePlumber configuration was not touched (no
-`~/.config/wireplumber`, no `/etc/wireplumber`). Takes effect at the next login screen; **not yet live-validated**.
+`~/.config/wireplumber`, no `/etc/wireplumber`). Takes effect at the next login screen.
+
+**Live result (2026-11-01, owner present, speakers off): PASS.** One logout/login cycle with the rule. The login
+screen's PipeWire/WirePlumber ran for about 21 s (20:03:01–20:03:22) and logged `s-monitors: ALSA card/device
+alsa_card.usb-Lewitt_GmbH_CONNECT_2_… disabled`, so it never created the CONNECT 2. Afterwards the service started
+at the same level as before (−23.50 dB, unmuted; headphones −60 dB, muted), the CONNECT 2 was present in the user's
+session (sink, 4-channel source, split inputs) and no stop condition occurred. Caveat: the starting level happened
+to equal the login screen's default (−23.5 dB), so the unchanged level alone does not discriminate; the WirePlumber
+log line is the decisive evidence. No control cycle without the rule was run (not needed).
 
 *Rollback:* `sudo rm /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d/51-openwitty-connect2-login-screen.conf`
 (optionally also `sudo -u plasmalogin rmdir /var/lib/plasmalogin/.config/wireplumber/wireplumber.conf.d

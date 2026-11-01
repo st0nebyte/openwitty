@@ -129,7 +129,8 @@ volume: available" without it; other kernels may not need it. Remove: `sudo rm
 
 #### Optional: keep the login screen away from the CONNECT 2
 
-An administrator step, never done by OpenWitty or its packages, **not yet validated on a real login screen**. A
+An administrator step, never done by OpenWitty or its packages; **verified on Plasma Login** (CachyOS, 2026-11-01:
+the login screen's WirePlumber logs the CONNECT 2 as disabled), SDDM and GDM untested. A
 WirePlumber rule in the *login screen user's* configuration makes that WirePlumber ignore the CONNECT 2
 (`device.disabled`): it can then no longer set its level, and the login screen plays no sound through it. No other
 device is affected and your own session never reads that file.

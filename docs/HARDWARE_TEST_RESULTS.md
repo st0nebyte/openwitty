@@ -1714,4 +1714,8 @@ restored exactly, monitors stopped, usbmon unloaded; the service took the device
 * **Ardour 9 GUI, JACK backend (pipewire-jack):** connected to the running PipeWire (48 kHz, buffer 1024 = 21.3 ms),
   mono track from `capture_FL` (mic), 9 s of speech recorded, peak −11.5 dBFS, DSP 0 %, played back. Switched to
   128 samples in Ardour's setup: 2.7 ms buffer, reported I/O latency 8.667 ms, DSP 2 %.
-
+* **Login-screen rule (Plasma Login), one logout/login cycle, speakers off: PASS.** The login screen's WirePlumber
+  logged the CONNECT 2 card as disabled and never created it; the service started afterwards at the unchanged level
+  (−23.50 dB); the CONNECT 2 worked in the user's session. The starting level equalled the login screen's default,
+  so the log line is the decisive evidence. Details: `docs/RELEASE_READINESS.md` ("Speaker level at the login
+  screen").
