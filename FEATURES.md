@@ -4,22 +4,18 @@ Sources: official online guide (documented behaviour, screenshots), macOS and Wi
 (protocol), and hardware sessions with **one CONNECT 2 on one Linux system** (`docs/HARDWARE_TEST_RESULTS.md`,
 `docs/VOLUME_INTEGRATION.md`). The **HW** column gives the evidence per row.
 
-Summary of the hardware evidence:
-* Transport (unbound vendor interface 3, API handshake 0x0A) and the read-only messages: confirmed.
-* Many individual settings bytes confirmed by physical controls (gain, mutes, speaker/headphone volume,
-  channel selection, mix, Panic Mute); the live GUI follows them.
-* Vendor **writes** verified by read-back: LED brightness (CLI) and speaker volume/mute (CLI and the former
-  Python bridge, Phase 8C). Instrument-mute write prepared, never executed. The GUI's confirmed
-  *Speaker/headphone control* uses the same verified path but has not been exercised on hardware.
-* Desktop volume integration (row 46): validated (see below). Vendor fallback: not validated.
-* Everything else is implemented against the simulated device only.
+Summary of the hardware evidence (2026-11-01; the current per-feature status is the parity table in
+`docs/FEATURE_COMPLETION_ROADMAP.md`, which supersedes older rows here):
+* Transport, the read-only messages and the settings bytes of all physical controls: confirmed.
+* GUI writes on the real device, each behind its own permission and read back - among them output volume/mute,
+  LED brightness, input processing, routing (bytes 23, 59, 67), follow-output, the custom button, autogain and
+  Denoise measurements and the full Autosetup flow (mic). Which control is verified: the roadmap's parity table.
+* Not exercised on hardware: presets as a whole (they use the same verified writes), the instrument Autosetup.
 
 "RE" = what reverse engineering still has to establish.
 Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML control (on real hardware:
-display only, except the confirmed speaker/headphone control). Since Phase 10A every GUI control is enabled by its
-own capability (`can.<key>`, `core/ControlCapabilities`), and no trigger is authorized on real hardware.
-**No GUI control has written to the real device yet**; per-control status and the validation plan:
-`docs/FEATURE_COMPLETION_ROADMAP.md`.
+what its permission allows). Since Phase 10A every GUI control is enabled by its own capability (`can.<key>`,
+`core/ControlCapabilities`); measurement triggers need the *measurements* permission.
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|
@@ -32,7 +28,7 @@ own capability (`can.<key>`, `core/ControlCapabilities`), and no trigger is auth
 | 7 | Comp (n/a at 96 kHz) | button | @9/@18 | core+GUI+restriction | compressor parameters (presets show more) | no |
 | 8 | Input mute | MUTE | @2/@12 | core+GUI | — | **yes, both** (mic and instrument mute toggled and verified reversed on real hardware, 2026-10-14, exact 0x01/0x00 matches; MUTE button confirmed to act on whichever channel is currently selected) |
 | 9 | Autogain (10 s, progress, success/fail) | Autogain button | triggers 1/2/3; status @0x24 progress, @0x23 bit5/6 result | core+GUI+mock workflow+tests | timing/limits only | no |
-| 10 | Autosetup wizard | top-left button | settings writes + autogain trigger | GUI wizard (reconstruction) | exact step→field mapping, noise/clipping error codes | no |
+| 10 | Autosetup wizard | top-left button | settings writes + autogain trigger | GUI wizard (reconstruction); full mic flow verified 2026-11-01 | exact step→field mapping, noise/clipping error codes | yes (mic) |
 | 11 | Loudspeaker volume/mute | Outputs | @20 / @22 | core+GUI | — | **yes, both** (volume: exact −11.66 dB match then restored to exact 0.00 dB ceiling; mute: exact toggle; both physically confirmed 2026-10-14 — speaker deliberately left muted afterward as a monitoring-safety precaution, not restored to its original unmuted state) |
 | 12 | Headphone volume/mute (independent) | Outputs | @27 / @29 | core+GUI | — | **yes, both** (volume: exact dB match on two separate wheel edits; mute: exact toggle and verified reversal; both physically confirmed 2026-10-14) |
 | 13 | Loopback mute + meters | Outputs | @19, status 0x12/0x14 | core+GUI | — | no |
@@ -53,7 +49,7 @@ own capability (`can.<key>`, `core/ControlCapabilities`), and no trigger is auth
 | 28 | Panic Mute (MUTE hold) | hardware only (front-panel MUTE, long-press) | **confirmed**: exactly bytes 2/12/22/29 (mic/instrument/speaker/headphone mute), all set simultaneously regardless of selected channel; byte 19 (loopback) and byte 56 (channel-select) confirmed untouched; no separate flag | read-only state handling only (`mute.allFour` derived display value, `MockTransport::simulatePanicMute()` for tests) — **no software trigger implemented**, per instruction | manufacturer-documented (online guide, verified 2026-10-16 — see `docs/OFFICIAL_GUIDE.md`): mutes all input+output simultaneously, recovery requires unmuting each channel individually (not re-tested; no code assumes a second hold undoes it) | **yes** — hardware-confirmed 2026-10-16, 3 read-only trials; see `docs/HARDWARE_TEST_RESULTS.md` §16 |
 | 29 | API handshake / versions | Settings | message 0x0A (major,minor); `iface_version_t` opaque | handshake in core+tests; firmware string placeholder | `iface_version_t` layout | no |
 | 30 | Firmware update / factory reset | Settings | DFU / trigger 0x106 | **disabled by policy** (FactoryReset refused in code) | out of scope | no |
-| 31 | Presets (`.preset` JSON) | main window (Connect 6 shared code) | host-side | not implemented | CONNECT 2 use unclear | n/a |
+| 31 | Presets | Settings ▸ Presets | host-side; ordinary verified writes | OpenWitty `.owpreset` save/load (2026-11-01) | official `.preset` format (may be CONNECT 6 only) | no |
 | 32 | Tooltips, onboarding, update checks | app | host-side | tooltips partial | — | n/a |
 
 Product-behaviour sources for each row are in `docs/OFFICIAL_GUIDE.md`.

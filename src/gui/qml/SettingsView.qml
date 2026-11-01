@@ -104,7 +104,7 @@ Rectangle {
 
     // Accordion: headers up to the open one at the top, its section directly below it, the remaining headers at the
     // bottom of the column.
-    readonly property var sections: ["audio", "leds", "button", "device", "desktop"]
+    readonly property var sections: ["audio", "leds", "button", "presets", "device", "desktop"]
     readonly property int openIndex: Math.max(0, sections.indexOf(open))
     readonly property int headerStep: 32
     function headerY(i) {
@@ -116,7 +116,7 @@ Rectangle {
         x: 16; y: 0; width: 330; height: root.height
         Repeater {
             model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"},
-                    {k: "device", t: "Device control"}, {k: "desktop", t: "Desktop integration"}]
+                    {k: "presets", t: "Presets"}, {k: "device", t: "Device control"}, {k: "desktop", t: "Desktop integration"}]
             Rectangle {
                 objectName: "sectionHeader_" + modelData.k
                 y: root.headerY(index)
@@ -570,9 +570,103 @@ Rectangle {
         }
     }
 
+    // Presets (P3): OpenWitty's own preset files; loading shows every change and asks first.
+    Flickable {
+        id: presetsPage
+        objectName: "presetsPage"
+        visible: root.open === "presets"
+        x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
+        contentHeight: presetCol.height
+        readonly property bool available: typeof presets !== "undefined"
+        property string status: ""
+        property string replaceName: ""
+        property string deleteFile: ""
+        readonly property string applyMessage: device.values["preset.message"] || ""
+        onApplyMessageChanged: if (applyMessage !== "") status = applyMessage.charAt(0).toUpperCase() + applyMessage.slice(1) + "."
+        function save(overwrite) {
+            var err = presets.save(presetName.text, presetOutputs.checked, overwrite);
+            replaceName = "";
+            status = err === "" ? "Saved \"" + presetName.text.trim() + "\"." : err;
+        }
+        Column {
+            id: presetCol
+            width: 330; spacing: 8
+            Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: "Save the current input, processing, monitoring, LED and button settings and load them later. "
+                       + "Loading shows every change first; each one is sent and read back on its own." }
+            Row { spacing: 6
+                Rectangle { width: 200; height: 24; radius: 2; color: Theme.well; border.color: Theme.line
+                    TextInput { id: presetName; objectName: "presetNameInput"; anchors.fill: parent; anchors.margins: 5
+                                color: Theme.text; font.pixelSize: 12; clip: true; maximumLength: 64
+                                selectByMouse: true; enabled: presetsPage.available
+                                Text { visible: parent.text === ""; color: Theme.textDim; font.pixelSize: 12; text: "Preset name" } } }
+                ToggleButton { objectName: "presetSaveButton"; width: 124; height: 24; text: "Save current"; primary: true
+                               enabled: presetsPage.available && presetName.text.trim() !== "" && device.values["in1.gain"] !== undefined
+                               onClicked: { if (presets.exists(presetName.text)) presetsPage.replaceName = presetName.text.trim();
+                                            else presetsPage.save(false); } } }
+            Row { spacing: 6; visible: presetsPage.replaceName !== ""
+                Text { width: 180; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
+                       text: "\"" + presetsPage.replaceName + "\" exists. Replace it?" }
+                ToggleButton { objectName: "presetReplaceButton"; width: 70; height: 20; text: "Replace"; primary: true
+                               onClicked: presetsPage.save(true) }
+                ToggleButton { width: 60; height: 20; text: "Cancel"; onClicked: presetsPage.replaceName = "" } }
+            ToggleSwitch { id: presetOutputs; objectName: "presetOutputsSwitch"; width: 330
+                           label: "Include speaker and headphone levels"; checked: false
+                           tip: "Off: loading the preset never changes your output volumes" }
+            Text { objectName: "presetStatus"; width: 330; wrapMode: Text.WordWrap; font.pixelSize: 10
+                   visible: presetsPage.status !== ""
+                   color: device.values["preset.state"] === "stopped" ? Theme.warn : Theme.textDim
+                   text: device.values["preset.state"] === "applying"
+                         ? "Applying… " + device.values["preset.done"] + " / " + device.values["preset.total"]
+                         : presetsPage.status }
+        }
+    }
+
+    // Presets: the saved presets, in the right column
+    Flickable {
+        objectName: "presetListPage"
+        visible: root.open === "presets"
+        x: 390; y: 60; width: Math.min(360, root.width - 406); height: root.height - 76; clip: true
+        contentHeight: presetListCol.height
+        Column {
+            id: presetListCol
+            width: parent.width - 6; spacing: 6
+            Text { color: Theme.text; font.pixelSize: 12; text: "Saved presets" }
+            Text { width: 330; color: Theme.textDim; font.pixelSize: 11
+                   visible: !presetsPage.available || presets.list.length === 0; text: "No presets saved yet." }
+            Repeater {
+                model: presetsPage.available ? presets.list : []
+                Rectangle {
+                    width: presetListCol.width; height: 30; radius: 2; color: Theme.panel
+                    objectName: "presetRow_" + modelData.file
+                    Column { x: 8; anchors.verticalCenter: parent.verticalCenter
+                        Text { width: presetListCol.width - 150; elide: Text.ElideRight; color: Theme.text; font.pixelSize: 12; text: modelData.name }
+                        Text { color: Theme.textDim; font.pixelSize: 9; text: modelData.modified } }
+                    Row { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; spacing: 4
+                        visible: presetsPage.deleteFile !== modelData.file
+                        ToggleButton { objectName: "presetLoad_" + modelData.file; width: 60; height: 22; text: "Load…"; primary: true
+                                       enabled: device.values["preset.state"] !== "applying"
+                                       onClicked: presetConfirm.ask(modelData.file) }
+                        ToggleButton { width: 60; height: 22; text: "Delete"; onClicked: presetsPage.deleteFile = modelData.file } }
+                    Row { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; spacing: 4
+                        visible: presetsPage.deleteFile === modelData.file
+                        Text { anchors.verticalCenter: parent.verticalCenter; color: Theme.warn; font.pixelSize: 10; text: "Delete?" }
+                        ToggleButton { width: 50; height: 22; text: "Yes"; active: true; activeColor: Theme.warn
+                                       onClicked: { presets.remove(modelData.file); presetsPage.deleteFile = ""; } }
+                        ToggleButton { width: 40; height: 22; text: "No"; onClicked: presetsPage.deleteFile = "" } }
+                }
+            }
+            Row { spacing: 6
+                ToggleButton { width: 140; height: 22; text: "Open presets folder"; enabled: presetsPage.available
+                               tip: "Copy .owpreset files here to import them, or out of here to share them"
+                               onClicked: presets.openFolder() }
+                ToggleButton { width: 70; height: 22; text: "Refresh"; enabled: presetsPage.available; onClicked: presets.refresh() } }
+        }
+    }
+
     // right column
     Column {
-        visible: root.open !== "desktop" && root.open !== "device"
+        visible: root.open !== "desktop" && root.open !== "device" && root.open !== "presets"
         x: 390; y: 60; width: 310; spacing: 10
         Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 12; text: "OpenWitty " + Qt.application.version + " — unofficial, experimental; not affiliated with LEWITT" }
         Text { color: Theme.textDim; font.pixelSize: 12
@@ -592,7 +686,7 @@ Rectangle {
                        onToggled: (b) => { if (b) root.onboardingRequested(); } }
     }
     ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom
-                   visible: root.open !== "desktop" && root.open !== "device"
+                   visible: root.open !== "desktop" && root.open !== "device" && root.open !== "presets"
                    anchors.bottomMargin: 14; width: 100; text: "Factory reset"; enabled: false
                    tip: "Disabled by policy" }
 
@@ -747,5 +841,50 @@ Rectangle {
                 ToggleButton { width: 70; text: "Enable"; active: true; activeColor: Theme.warn
                                onClicked: { confirmLoud.visible = false; device.setValue(confirmLoud.key, confirmLoud.enableValue); } } }
         }
+    }
+    Rectangle {
+        id: presetConfirm
+        objectName: "presetConfirmDialog"
+        visible: false; z: 20; anchors.centerIn: parent; width: 400; radius: 6
+        color: Theme.panelHi; border.color: Theme.warn
+        height: Math.min(root.height - 40, presetConfirmCol.height + 30)
+        property string file: ""
+        property var info: ({})
+        readonly property var changes: info.changes || []
+        readonly property var notAllowed: info.notAllowed || []
+        readonly property bool anyWarn: { for (var i = 0; i < changes.length; ++i) if (changes[i].warn) return true; return false; }
+        function ask(f) { file = f; info = presets.preview(f); visible = true; }
+        Flickable { anchors.fill: parent; anchors.margins: 15; clip: true; contentHeight: presetConfirmCol.height
+        Column { id: presetConfirmCol; width: 370; spacing: 6
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 12; font.bold: true
+                   text: presetConfirm.info.ok ? "Load preset \"" + presetConfirm.info.name + "\"?" : "Cannot load this preset" }
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 11
+                   visible: !presetConfirm.info.ok; text: presetConfirm.info.error || "" }
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 11
+                   visible: presetConfirm.info.ok === true && presetConfirm.changes.length === 0
+                   text: "The device already has these settings" + (presetConfirm.notAllowed.length ? " (apart from the ones below)." : ".") }
+            Repeater {
+                model: presetConfirm.changes
+                Text { width: 370; wrapMode: Text.WordWrap; font.pixelSize: 11
+                       color: modelData.warn ? Theme.warn : Theme.text
+                       text: (modelData.warn ? "⚠ " : "• ") + modelData.label + ": " + modelData.from + " → " + modelData.to }
+            }
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10; visible: presetConfirm.anyWarn
+                   text: "⚠ can get louder, feed back or switch 48 V: turn your monitors down and take headphones off first. "
+                       + "Changes are sent in a safe order (mutes first, unmutes last); level increases go in small, verified steps." }
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   visible: presetConfirm.notAllowed.length > 0
+                   text: "Skipped (no permission in Device control): " + presetConfirm.notAllowed.join("; ") }
+            Text { width: 370; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   visible: (presetConfirm.info.ignored || []).length > 0
+                   text: "Not understood, ignored: " + (presetConfirm.info.ignored || []).join(", ") }
+            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
+                ToggleButton { width: 70; text: "Cancel"; onClicked: presetConfirm.visible = false }
+                ToggleButton { objectName: "presetApplyButton"; width: 70; text: "Apply"; active: true
+                               activeColor: presetConfirm.anyWarn ? Theme.warn : Theme.accent
+                               enabled: presetConfirm.info.ok === true && presetConfirm.changes.length > 0
+                               onClicked: { presetConfirm.visible = false; presetsPage.status = "";
+                                            presets.apply(presetConfirm.file); } } }
+        } }
     }
 }

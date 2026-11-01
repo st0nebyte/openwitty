@@ -50,6 +50,9 @@ public slots:
     void simulatePanicMute();                                     // simulation only
     void applyUserConfig();                                       // Settings > Desktop integration changed
     void applyQueuedValue(const QString& key);                    // takes the latest value queued for `key`
+    // Presets: steps [{key, value}] in order, each through setValue (one verified SET; a level increase in bounded
+    // steps). Stops at the first change that is refused or not confirmed.
+    void applyPreset(const QString& name, const QVariantList& steps);
     // Phase 10B.1, opt-in (openwitty --hw-check): read-only snapshots through this window's own session, for
     // owner-approved hardware tests. Each does one ordinary settings GET on the session already open (same
     // serialized transport, same control lease); nothing here can stage or send a write.
@@ -153,6 +156,10 @@ private:
     // 2026-11-01: the device keeps progress 100 from the previous measurement until the new one starts; a measurement
     // only counts as finished after its progress was seen below 100 (else it "finished" the instant it was started).
     bool autoSawProgress_{false};
+    // Presets: idle | applying | done | stopped; what happened, and how far it got.
+    QString presetState_{"idle"};
+    QString presetMessage_;
+    int presetDone_{0}, presetTotal_{0};
 public:
     static constexpr int kMeasurementTimeoutMs = 45000;
     // Tests only: pretend the running measurement started `ms` earlier.
@@ -236,6 +243,7 @@ public:
     Q_INVOKABLE void disconnectDevice();
     Q_INVOKABLE void setValue(const QString& key, const QVariant& v);
     Q_INVOKABLE void trigger(const QString& name);
+    Q_INVOKABLE void applyPreset(const QString& name, const QVariantList& steps);
     Q_INVOKABLE void setSampleRate(int hz);
     Q_INVOKABLE void simulateUnplug();
     Q_INVOKABLE void simulateReplug();

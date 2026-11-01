@@ -643,7 +643,7 @@ device)** · **Mock** · **HW read** · **HW write** · **GUI end to end** · **
 | Sample rate | real device: rate of the open kernel stream, else "Unknown" (10B); selector simulation only | selection belongs to the desktop | done (display) |
 | Firmware version | "not decoded yet" | decode `iface_version_t` | P2 |
 | Firmware update, factory reset | disabled by policy (factory reset refused in code) | — | X |
-| Presets (`.preset`) | not implemented | import/export format (shared with CONNECT 6) | P3 |
+| Presets | ✅ OpenWitty `.owpreset` (2026-11-01); official `.preset` not decoded (may be CONNECT 6 only) | importer if the official format applies | P3 |
 | Onboarding tour | shown once at first start, then on demand (10B) | — | done |
 | Tooltips / footer hints | implemented; "Show tooltips" persisted (10B) | — | done |
 | Write verification, retry/discard | implemented (`commitAndVerify`), mock-tested | never exercised on hardware from the GUI | P1 (with the first GUI write) |
@@ -928,7 +928,7 @@ in the session results above (Phase 11B sessions 1–7, 11C, 11A.4, Phase 12) an
 | | software input mute, separate inputs for apps | ✅ | 11C, 11A.4 |
 | | DAW (Ardour ALSA, JACK via pipewire-jack) | ✅ ALSA + JACK clients; Ardour GUI with JACK open | DAW-1…4, session 7 |
 | Application | firmware version | ✅ shown as USB revision | 2026-10-31 |
-| | presets (.preset import/export) | ✗ open (P3) | — |
+| | presets (save / load, OpenWitty `.owpreset`) | ✅ simulated + permission tests; official `.preset` import open | 2026-11-01 |
 | | firmware update, factory reset | ✗ intentionally disabled | policy |
 
 ### Loopback validation plan (later, each step separately approved)

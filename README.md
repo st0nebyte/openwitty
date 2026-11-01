@@ -100,7 +100,8 @@ Not implemented or not validated:
 - Input gain, mute, low-cut, Clipguard, 48 V, Clean/Warm/Vivid, Denoise, Compressor
 - Loopback / speaker / headphone volume and mute, input–playback mix, dim, mono
 - LED brightness and colours, custom-button function, settings preservation of unknown device bytes
-- Autosetup / autogain workflow (simulated)
+- Autosetup (gain and Denoise measurement; verified on one device)
+- Presets: save and load settings (OpenWitty's own format)
 - Pending-edit tracking and merge with external device changes
 - Desktop volume integration (Settings → Desktop integration, `openwitty-volumed`)
 

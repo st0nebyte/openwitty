@@ -11,6 +11,10 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Settings ▸ Presets: save the current settings under a name and load them again (OpenWitty's own `.owpreset` JSON
+  in `~/.local/share/openwitty/presets`; output levels only when chosen). Loading lists every change first, marks
+  louder ones, skips settings without permission, and sends them one by one (mutes first, unmutes last, level
+  increases in verified steps).
 - Settings: the CONNECT 2 firmware version is shown as its USB revision (e.g. 1.21), read from sysfs.
 - Denoise: switching on reuses the stored noise measurement (dialog only when none exists); right-click measures again; the meter line shows only while Denoise is on.
 - Custom button: "toggle mute (+ mic) / speakers + follow volume" extended modes, remembered per device (anonymous key); "Follow active output" is then on and greyed out with a note.
@@ -74,6 +78,8 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   you to reconfirm the controls you want.
 
 ### Fixed
+- Autosetup: a measurement no longer counts as finished on the previous measurement's progress (the voice step ended
+  at once and the noise step stuck at 100 %); verified on the hardware.
 - Autosetup: advances after a successful measurement on the real device; switches 48 V before the gain measurement; new ambient-noise step when Denoise is chosen.
 - Greyed-out buttons (Denoise/Comp at 96 kHz) show why on hover; the noise-floor tooltip is no longer covered by the next strip.
 - Separate inputs: no false "set up for another CONNECT 2" warning right after restarting desktop audio.

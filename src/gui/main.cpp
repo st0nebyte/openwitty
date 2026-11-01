@@ -11,6 +11,7 @@
 #include "DeviceController.hpp"
 #include "GuiActivation.hpp"
 #include "GuiPreferences.hpp"
+#include "Presets.hpp"
 #include "InstanceChannel.hpp"
 #include "IntegrationSettings.hpp"
 #include "lewitt/version.hpp"
@@ -34,7 +35,7 @@ int main(int argc, char** argv) {
     p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
     p.addOption(sizeOpt);
-    QCommandLineOption show("show", "Open a page at start: settings | settings-device | settings-desktop | wizard | onboarding.", "page");
+    QCommandLineOption show("show", "Open a page at start: settings | settings-<section> (audio, leds, button, presets, device, desktop) | wizard | onboarding.", "page");
     p.addOption(show);
     QCommandLineOption quitAfterSeconds("quit-after-seconds",
         "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
@@ -100,6 +101,8 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("integration", &integration);
     GuiPreferences prefs;                       // gui.conf: onboarding done, show tooltips (no device settings)
     engine.rootContext()->setContextProperty("prefs", &prefs);
+    PresetStore presetStore(&controller);       // ~/.local/share/openwitty/presets
+    engine.rootContext()->setContextProperty("presets", &presetStore);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Lewitt/Main.qml")));
@@ -113,13 +116,9 @@ int main(int argc, char** argv) {
         if (engine.rootObjects().isEmpty() || page.isEmpty()) return;
         QObject* root = engine.rootObjects().first();
         if (page == "settings") root->setProperty("showSettings", true);
-        if (page == "settings-desktop") {
+        if (page.startsWith("settings-")) {   // settings-<section>: audio, leds, button, presets, device, desktop
             root->setProperty("showSettings", true);
-            if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "desktop");
-        }
-        if (page == "settings-device") {
-            root->setProperty("showSettings", true);
-            if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", "device");
+            if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", page.mid(9));
         }
         if (page == "wizard") root->setProperty("showWizard", true);
         if (page == "onboarding") root->setProperty("showOnboarding", true);

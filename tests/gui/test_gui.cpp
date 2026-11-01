@@ -14,6 +14,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QFile>
+#include <QJsonDocument>
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <cmath>
@@ -21,6 +22,7 @@
 #include <optional>
 
 #include "DeviceController.hpp"
+#include "Presets.hpp"
 #include "IntegrationSettings.hpp"
 #include "core/UserConfig.hpp"
 #include "transport/ControlLease.hpp"
@@ -3104,4 +3106,196 @@ TEST(Autosetup, FlowSwitches48VFirstAndRunsTheNoiseTest) {
     QMetaObject::invokeMethod(wiz, "startNoiseTest");
     ASSERT_TRUE(waitFor([&] { pump(); return wiz->property("step").toInt() == 6; }, 5000)) << "then the summary";
     EXPECT_TRUE(c.values().value("in1.denoise").toBool()) << "the device switched Denoise on after measuring";
+}
+
+// ---- Presets (P3) ----
+namespace {
+QVariantMap presetCurrent() {
+    QVariantMap v;
+    for (const auto& f : presets::fields()) {
+        switch (f.kind) {
+            case presets::Field::Bool: v[f.key] = false; break;
+            case presets::Field::Gain: v[f.key] = 20.0; break;
+            case presets::Field::Volume: v[f.key] = -40.0; break;
+            case presets::Field::Mix: v[f.key] = -50.0; break;
+            case presets::Field::Color: v[f.key] = "#ffffff"; break;
+            case presets::Field::Brightness: v[f.key] = 80; break;
+            default: v[f.key] = 1; break;
+        }
+    }
+    v["mon.mic"] = true;
+    return v;
+}
+QByteArray presetBytes(const QVariantMap& v, bool outputs = false) {
+    return QJsonDocument(presets::toJson("Test", v, outputs)).toJson();
+}
+}  // namespace
+
+TEST(Presets, RoundTripKeepsEverySettingAndOutputsOnlyWhenAsked) {
+    const QVariantMap cur = presetCurrent();
+    QString err;
+    auto p = presets::fromJson(presetBytes(cur), &err);
+    ASSERT_TRUE(p) << err.toStdString();
+    EXPECT_EQ(p->name, "Test");
+    EXPECT_TRUE(p->ignored.isEmpty());
+    for (const auto& f : presets::fields()) {
+        if (f.output) { EXPECT_FALSE(p->values.contains(f.key)) << f.key.toStdString(); continue; }
+        ASSERT_TRUE(p->values.contains(f.key)) << f.key.toStdString();
+        EXPECT_EQ(p->values[f.key].toString(), cur[f.key].toString()) << f.key.toStdString();
+    }
+    auto withOut = presets::fromJson(presetBytes(cur, true), &err);
+    ASSERT_TRUE(withOut);
+    EXPECT_DOUBLE_EQ(withOut->values["spk.volume"].toDouble(), -40.0);
+    EXPECT_TRUE(withOut->values.contains("hp.mute"));
+}
+
+TEST(Presets, InvalidFilesAreRefusedAndUnknownMembersIgnored) {
+    QString err;
+    EXPECT_FALSE(presets::fromJson("not json", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"other","version":1,"microphone":{"mute":true}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":2,"microphone":{"mute":true}})", &err));
+    EXPECT_TRUE(err.contains("newer"));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"microphone":{"gain":80}})", &err))
+        << "above the 72 dB mic limit";
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"instrument":{"gain":61}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"microphone":{"mute":1}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"device":{"customButton":5}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"device":{"ledColors":{"icons":"red"}}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1,"outputs":{"speakers":{"volume":6}}})", &err));
+    EXPECT_FALSE(presets::fromJson(R"({"format":"openwitty-preset","version":1})", &err)) << "no settings";
+    auto p = presets::fromJson(R"({"format":"openwitty-preset","version":1,"extra":1,
+                                   "microphone":{"preamp":"Warm","sparkle":true}})", &err);
+    ASSERT_TRUE(p) << err.toStdString();
+    EXPECT_EQ(p->values["in1.preamp"].toInt(), 1);
+    EXPECT_TRUE(p->ignored.contains("extra"));
+    EXPECT_TRUE(p->ignored.contains("microphone.sparkle"));
+}
+
+TEST(Presets, PlanAppliesQuieterChangesFirstAndUnmutesLast) {
+    QVariantMap cur = presetCurrent();
+    cur["in1.mute"] = true;
+    QVariantMap target;
+    target["in1.mute"] = false;          // unmute: last group
+    target["in1.gain"] = 40.0;           // louder
+    target["in2.gain"] = 10.0;           // quieter
+    target["in1.phantom"] = true;
+    target["in1.preamp"] = 2;
+    target["spk.mute"] = true;           // mute: first
+    target["set.gainLock"] = true;       // after the gains
+    target["in2.highPass"] = false;      // already so: not a step
+    auto pl = presets::plan(target, cur, [](const QString&) { return true; });
+    QStringList order;
+    for (const auto& st : pl.steps) order << st.key;
+    EXPECT_EQ(order, (QStringList{"in2.gain", "spk.mute", "in1.preamp", "in1.phantom", "in1.gain", "in1.mute", "set.gainLock"}));
+    auto warn = [&](const QString& k) { for (const auto& st : pl.steps) if (st.key == k) return st.warn; return false; };
+    EXPECT_TRUE(warn("in1.gain"));
+    EXPECT_TRUE(warn("in1.mute"));
+    EXPECT_TRUE(warn("in1.phantom"));
+    EXPECT_FALSE(warn("in2.gain"));
+    EXPECT_FALSE(warn("spk.mute"));
+}
+
+TEST(Presets, PlanSkipsSettingsWithoutPermissionAndSwitchesAMonitorSourceOnFirst) {
+    QVariantMap cur = presetCurrent();   // monitoring: microphone only
+    QVariantMap target{{"mon.mic", false}, {"mon.inst", true}, {"in1.gain", 30.0}};
+    auto pl = presets::plan(target, cur, [](const QString& k) { return k != "in1.gain"; });
+    ASSERT_EQ(pl.steps.size(), 2);
+    EXPECT_EQ(pl.steps[0].key, "mon.inst");
+    EXPECT_EQ(pl.steps[1].key, "mon.mic");
+    ASSERT_EQ(pl.notAllowed.size(), 1);
+    EXPECT_TRUE(pl.notAllowed[0].contains("Microphone gain"));
+}
+
+TEST(Presets, FileNamesAreSafe) {
+    EXPECT_EQ(presets::fileNameFor("  My / ../Podcast!  "), "My Podcast.owpreset");
+    EXPECT_EQ(presets::fileNameFor("../"), "");
+}
+
+TEST(Presets, SaveAndApplyOnTheSimulatedDevice) {
+    app();
+    QTemporaryDir dir;
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values().contains("in1.gain") && c.values().value("can.in1.gain").toBool(); }));
+    PresetStore store(&c, dir.path());
+    c.setValue("in1.preamp", 1);
+    c.setValue("in1.gain", 33.0);
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values()["in1.gain"].toDouble() == 33.0 && c.values()["in1.preamp"].toInt() == 1; }));
+    EXPECT_EQ(store.save("Voice", false, false), "");
+    EXPECT_NE(store.save("Voice", false, false), "") << "no silent overwrite";
+    ASSERT_EQ(store.list().size(), 1);
+    const QString file = store.list()[0].toMap()["file"].toString();
+    c.setValue("in1.preamp", 2);
+    c.setValue("in1.gain", 12.0);
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values()["in1.gain"].toDouble() == 12.0 && c.values()["in1.preamp"].toInt() == 2; }));
+    const auto pv = store.preview(file);
+    ASSERT_TRUE(pv["ok"].toBool()) << pv["error"].toString().toStdString();
+    EXPECT_EQ(pv["changes"].toList().size(), 2);
+    ASSERT_TRUE(store.apply(file));
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values()["preset.state"] == "done"; }));
+    EXPECT_DOUBLE_EQ(c.values()["in1.gain"].toDouble(), 33.0);
+    EXPECT_EQ(c.values()["in1.preamp"].toInt(), 1);
+    EXPECT_EQ(store.preview(file)["changes"].toList().size(), 0);
+    EXPECT_TRUE(store.remove(file));
+    EXPECT_TRUE(store.list().isEmpty());
+}
+
+TEST(Presets, RealDeviceRaisesGainInVerifiedStepsAndSkipsWhatIsNotAllowed) {
+    app();
+    QTemporaryDir dir;
+    lewitt::UserConfig cfg;
+    cfg.inputControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    ASSERT_TRUE(r.can("in1.gain"));
+    ASSERT_FALSE(r.can("in1.preamp"));
+    const double start = r.c->values()["in1.gain"].toDouble();
+    QFile f(dir.path() + "/Loud.owpreset");
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(QString(R"({"format":"openwitty-preset","version":1,"microphone":{"gain":%1,"preamp":"warm"}})")
+                .arg(start + 20.0).toUtf8());
+    f.close();
+    PresetStore store(r.c.get(), dir.path());
+    const auto pv = store.preview("Loud.owpreset");
+    ASSERT_TRUE(pv["ok"].toBool());
+    ASSERT_EQ(pv["changes"].toList().size(), 1);
+    EXPECT_TRUE(pv["changes"].toList()[0].toMap()["warn"].toBool());
+    EXPECT_EQ(pv["notAllowed"].toStringList().size(), 1);
+    auto settingsWrites = [&] { auto l = r.mock.writeLog();
+                                return std::count(l.begin(), l.end(), lewitt::MessageId::Settings); };
+    const auto before = settingsWrites();
+    ASSERT_TRUE(store.apply("Loud.owpreset"));
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values()["preset.state"] == "done"; }, 8000));
+    EXPECT_DOUBLE_EQ(r.c->values()["in1.gain"].toDouble(), start + 20.0);
+    EXPECT_EQ(settingsWrites() - before, 4) << "+6, +6, +6, +2 dB: each a separate verified SET";
+    EXPECT_NE(r.c->values()["in1.preamp"].toInt(), 1) << "not allowed: not written";
+}
+
+TEST(Qml, PresetsPageSavesAndAsksBeforeLoading) {
+    app();
+    QTemporaryDir dir;
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values().contains("in1.gain"); }));
+    PresetStore store(&c, dir.path());
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("presets", &store);
+    auto root = loadMain(c, engine);
+    ASSERT_TRUE(root);
+    auto* page = root->findChild<QObject*>("presetsPage");
+    ASSERT_TRUE(page);
+    EXPECT_TRUE(page->property("available").toBool());
+    EXPECT_EQ(store.save("Pod", false, false), "");
+    QCoreApplication::processEvents();
+    root->setProperty("showSettings", true);
+    root->findChild<QObject*>("settingsView")->setProperty("open", "presets");
+    QCoreApplication::processEvents();
+    auto* win = qobject_cast<QQuickWindow*>(root.get());
+    ASSERT_TRUE(win);
+    QObject* load = findItem(win->contentItem(), "presetLoad_Pod.owpreset");
+    ASSERT_TRUE(load);
+    QMetaObject::invokeMethod(load, "clicked");
+    auto* dlg = root->findChild<QObject*>("presetConfirmDialog");
+    ASSERT_TRUE(dlg);
+    EXPECT_TRUE(dlg->property("visible").toBool());
+    EXPECT_EQ(dlg->property("changes").toList().size(), 0) << "saved just now: nothing to change";
 }

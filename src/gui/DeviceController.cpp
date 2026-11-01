@@ -926,6 +926,10 @@ void DeviceWorker::publish() {
         v["auto.progress"] = prog;
         v["auto.resultCode"] = int(st.autosetupResultRaw());  // meaning of 1 vs 2 unverified
     }
+    v["preset.state"] = presetState_;
+    v["preset.message"] = presetMessage_;
+    v["preset.done"] = presetDone_;
+    v["preset.total"] = presetTotal_;
     for (const auto& k : pendingKeys_) v["pending." + k] = true;
     // Emit only what changed (keeps QML bindings and redraws to the minimum).
     QVariantMap changed;
@@ -989,6 +993,41 @@ void DeviceWorker::trigger(const QString& name) {
         hwCheckLog(QString("trigger %1: %2").arg(name, s ? "begin + measurement sent; the device may now change its result bytes"
                                                       : "measurement word failed; end-session sent"));
     }
+    publish();
+}
+
+void DeviceWorker::applyPreset(const QString& name, const QVariantList& steps) {
+    presetState_ = "applying";
+    presetMessage_.clear();
+    presetDone_ = 0;
+    presetTotal_ = int(steps.size());
+    publish();
+    auto ok = [this] { return writeOutcome_ == "verified" || writeOutcome_ == "unchanged"; };
+    for (const auto& item : steps) {
+        const auto m = item.toMap();
+        const QString key = m.value("key").toString();
+        const QVariant value = m.value("value");
+        const bool level = key.endsWith(".gain") || key.endsWith(".volume");
+        // A level increase is limited per SET (gain 6 dB, volume 10 dB): the confirmed preset change is reached in
+        // bounded, individually verified steps. Ends when reached, on any failure, or when a step changes nothing.
+        for (int i = 0; i < (level ? 16 : 1); ++i) {
+            const double before = last_.value(key).toDouble();
+            setValue(key, value);
+            if (!ok()) {
+                presetState_ = "stopped";
+                presetMessage_ = QString("stopped at %1: %2%3").arg(key, writeOutcome_,
+                                     writeMessage_.isEmpty() ? QString() : " (" + writeMessage_ + ")");
+                publish();
+                return;
+            }
+            const double now = last_.value(key).toDouble();
+            if (!level || std::abs(now - value.toDouble()) < 0.26 || std::abs(now - before) < 0.01) break;
+        }
+        ++presetDone_;
+        publish();
+    }
+    presetState_ = "done";
+    presetMessage_ = QString("\"%1\" applied (%2 changes)").arg(name).arg(presetDone_);
     publish();
 }
 
@@ -1399,6 +1438,9 @@ void DeviceController::simulateExternalChange(const QString& k, const QVariant& 
     QMetaObject::invokeMethod(worker_, "simulateExternalChange", Q_ARG(QString, k), Q_ARG(QVariant, v));
 }
 void DeviceController::simulatePanicMute() { QMetaObject::invokeMethod(worker_, "simulatePanicMute"); }
+void DeviceController::applyPreset(const QString& name, const QVariantList& steps) {
+    QMetaObject::invokeMethod(worker_, "applyPreset", Q_ARG(QString, name), Q_ARG(QVariantList, steps));
+}
 void DeviceController::trigger(const QString& n) {
     QMetaObject::invokeMethod(worker_, "trigger", Q_ARG(QString, n));
 }
