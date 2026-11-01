@@ -100,8 +100,8 @@ TEST(TrayModel, ServiceDisabledAndKnobDisplayOff) {
     TrayModel m(sc.runner());
     m.refresh();
     EXPECT_FALSE(m.knobSync());
-    EXPECT_EQ(m.knobLine(), "Volume knob in desktop volume: off");
-    EXPECT_EQ(m.serviceLine(), "Background service: off");
+    EXPECT_EQ(m.knobLine(), "Desktop volume does not follow the CONNECT 2 knob");
+    EXPECT_EQ(m.serviceLine(), "Works only while the window is open");
     EXPECT_TRUE(m.toolTip().startsWith("OpenWitty\n"));
     EXPECT_FALSE(sc.changedService());
 }
@@ -114,8 +114,8 @@ TEST(TrayModel, ServiceRunningWithKnobDisplayOn) {
     sc.active = "active";
     TrayModel m(sc.runner());
     m.refresh();
-    EXPECT_EQ(m.knobLine(), "Volume knob in desktop volume: on");
-    EXPECT_EQ(m.serviceLine(), "Background service: running");
+    EXPECT_EQ(m.knobLine(), "Desktop volume follows the CONNECT 2 knob");
+    EXPECT_EQ(m.serviceLine(), "Keeps working when the window is closed");
 }
 
 TEST(TrayModel, KnobDisplayOffWhileTheServiceStaysEnabledShowsIdle) {
@@ -126,7 +126,7 @@ TEST(TrayModel, KnobDisplayOffWhileTheServiceStaysEnabledShowsIdle) {
     sc.active = "active";
     TrayModel m(sc.runner());
     m.refresh();
-    EXPECT_EQ(m.serviceLine(), "Background service: running, idle (knob display is off)");
+    EXPECT_EQ(m.serviceLine(), "Runs in the background, but has nothing to do");
 }
 
 TEST(TrayModel, OtherServiceStatesAndChangeNotification) {
@@ -138,15 +138,15 @@ TEST(TrayModel, OtherServiceStatesAndChangeNotification) {
     int changes = 0;
     QObject::connect(&m, &TrayModel::changed, [&] { ++changes; });
     m.refresh();
-    EXPECT_EQ(m.serviceLine(), "Background service: on, not running");
+    EXPECT_EQ(m.serviceLine(), "Background service switched on, but not running");
     m.refresh();
     EXPECT_EQ(changes, 1);                                   // unchanged state: no notification
     sc.load = "not-found";
     m.refresh();
-    EXPECT_EQ(m.serviceLine(), "Background service: not installed");
+    EXPECT_EQ(m.serviceLine(), "Background service not installed");
     sc.rc = 1;
     m.refresh();
-    EXPECT_EQ(m.serviceLine(), "Background service: state unknown");
+    EXPECT_EQ(m.serviceLine(), "Background service state unknown");
     EXPECT_EQ(changes, 3);
     for (const auto& c : sc.calls) EXPECT_EQ(c.mid(0, 3), (QStringList{"systemctl", "--user", "show"})) << c.join(' ').toStdString();
 }
@@ -169,8 +169,8 @@ TEST(TrayController, MenuOffersExactlyOpenSettingsAndQuit) {
     EXPECT_EQ(enabledActions, (QStringList{"Open OpenWitty", "Desktop integration settings…", "Quit tray icon"}));
     EXPECT_FALSE(t.knobStatus()->isEnabled());
     EXPECT_FALSE(t.serviceStatus()->isEnabled());
-    EXPECT_EQ(t.knobStatus()->text(), "Volume knob in desktop volume: on");
-    EXPECT_EQ(t.serviceStatus()->text(), "Background service: running");
+    EXPECT_EQ(t.knobStatus()->text(), "Desktop volume follows the CONNECT 2 knob");
+    EXPECT_EQ(t.serviceStatus()->text(), "Keeps working when the window is closed");
     EXPECT_EQ(t.icon()->toolTip(), m.toolTip());
     EXPECT_TRUE(t.quitAction()->toolTip().contains("background service keeps running"));
 
@@ -208,8 +208,8 @@ TEST(TrayController, StatusFollowsTheSettingsWhenRefreshed) {
     TrayController t(m, [](const QString&) {});
     writeSync(false);                                       // the user turned the knob display off in the window
     emit t.menu()->aboutToShow();                           // opening the menu re-reads
-    EXPECT_EQ(t.knobStatus()->text(), "Volume knob in desktop volume: off");
-    EXPECT_TRUE(t.serviceStatus()->text().contains("idle"));
+    EXPECT_EQ(t.knobStatus()->text(), "Desktop volume does not follow the CONNECT 2 knob");
+    EXPECT_TRUE(t.serviceStatus()->text().contains("nothing to do"));
 }
 
 // ---- single instance and GUI activation --------------------------------------------------------------
@@ -367,4 +367,21 @@ TEST(InstanceChannel, OwnerWithoutASocketStillOwnsAndOthersDoNotDuplicate) {
         EXPECT_FALSE(second.owner());
     }
     qputenv("XDG_RUNTIME_DIR", prev);
+}
+
+TEST(TrayModel, ShowsWhetherTheConnect2IsPluggedIn) {
+    app();
+    FakeSystemctl sc;
+    TrayModel m(sc.runner());
+    bool plugged = true;
+    m.setPresenceProbe([&] { return plugged; });
+    m.refresh();
+    EXPECT_EQ(m.deviceLine(), "CONNECT 2 connected");
+    EXPECT_TRUE(m.toolTip().startsWith("OpenWitty\nCONNECT 2 connected\n"));
+    int changes = 0;
+    QObject::connect(&m, &TrayModel::changed, [&] { ++changes; });
+    plugged = false;
+    m.refresh();
+    EXPECT_EQ(changes, 1);
+    EXPECT_EQ(m.deviceLine(), "CONNECT 2 not connected");
 }

@@ -2571,7 +2571,7 @@ TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     QQuickItem* w = findItem(v.w->contentItem(), "desktopMicMuteWarning");
     ASSERT_TRUE(w);
     EXPECT_TRUE(w->isVisible());
-    EXPECT_TRUE(w->property("text").toString().contains("does not mute the CONNECT 2"));
+    EXPECT_TRUE(w->property("text").toString().contains("does not silence it"));
     for (const char* f : {"wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf",
                           "alsa-card-profile/mixer/profile-sets/openwitty-connect2.conf",
                           "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf",
@@ -2581,7 +2581,7 @@ TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     }
     fakeIntegration()->refresh();
     for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
-    EXPECT_TRUE(w->property("text").toString().contains("software mute installed"));
+    EXPECT_TRUE(w->property("text").toString().contains("silences it for all apps"));
     if (oldXdg.isNull()) qunsetenv("XDG_CONFIG_HOME"); else qputenv("XDG_CONFIG_HOME", oldXdg);
     fakeIntegration()->refresh();
     fs::remove_all(h);

@@ -312,14 +312,14 @@ Rectangle {
             width: 330; spacing: 6
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                    text: !integration.setupAvailable ? "Desktop audio check: not available in this build."
-                       : !integration.cardFound ? "The CONNECT 2 is not present as a sound card."
+                       : !integration.cardFound ? "The CONNECT 2 is not connected as a sound card."
                        : (integration.mixerLoads && integration.volumeControl)
-                         ? "Desktop hardware volume: available"
-                         : "Desktop hardware volume: not available" }
+                         ? "The desktop volume controls the CONNECT 2 directly."
+                         : "The desktop volume cannot control the CONNECT 2 (see below)." }
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "Kernel compatibility quirk: " + (integration.quirkActive ? "active"
-                         : integration.quirkConfigured ? "configured, not active yet (replug the CONNECT 2 or reboot)"
-                         : "not configured") }
+                   text: "Kernel fix for the CONNECT 2: " + (integration.quirkActive ? "active"
+                         : integration.quirkConfigured ? "installed, active after replugging the CONNECT 2 or a reboot"
+                         : "not installed") }
             Repeater { model: integration.findings
                        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10; text: "• " + modelData } }
             // Verified on hardware (Phase 11B LB-1): audio flows whenever the device's own input mute is off, while the
@@ -327,13 +327,13 @@ Rectangle {
             Text { objectName: "desktopMicMuteWarning"; width: 330; wrapMode: Text.WordWrap; font.pixelSize: 10
                    color: integration.softwareInputMute ? Theme.textDim : Theme.warn
                    text: integration.softwareInputMute
-                         ? "Desktop input mute: software mute installed - muting the CONNECT 2 input in the desktop silences "
-                           + "all apps (the device's own MUTE stays separate)."
-                         : "Microphone privacy: the desktop's input mute does not mute the CONNECT 2. Apps hear the "
-                           + "microphone and instrument whenever they are unmuted on the device. Use MUTE on the device or in "
-                           + "OpenWitty, or install the software input mute (docs/INSTALLATION.md)." }
+                         ? "Muting a CONNECT 2 input in the desktop silences it for all apps. MUTE on the device and in "
+                           + "OpenWitty works as well."
+                         : "Privacy: muting the CONNECT 2 input in the desktop does not silence it - apps still hear it. "
+                           + "Use MUTE on the device or in OpenWitty (or install the software input mute, see "
+                           + "docs/INSTALLATION.md)." }
             Row { spacing: 8
-                ToggleButton { width: 150; height: 22; text: quirkHelp.visible ? "Hide quirk instructions" : "About the kernel quirk"
+                ToggleButton { width: 150; height: 22; text: quirkHelp.visible ? "Hide kernel fix" : "About the kernel fix"
                                onClicked: quirkHelp.visible = !quirkHelp.visible }
                 ToggleButton { width: 70; height: 22; text: "Refresh"; onClicked: integration.refresh() } }
             Column { id: quirkHelp; visible: false; width: 330; spacing: 4
@@ -342,14 +342,14 @@ Rectangle {
                 ToggleButton { width: 120; height: 22; text: "Copy option line"; onClicked: integration.copyQuirkInstructions() } }
 
             Rectangle { width: 330; height: 1; color: "#333" }
-            ToggleSwitch { width: 330; label: "Show the volume knob in the desktop volume"
+            ToggleSwitch { objectName: "desktopSyncSwitch"; width: 330; label: "Desktop volume follows the volume knob"
                            checked: integration.desktopSync
                            tip: "The desktop volume follows the CONNECT 2's speaker knob"
                            onToggled: (b) => integration.setDesktopSync(b) }
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "Linux cannot see when you turn the speaker volume knob, so OpenWitty passes it on to the "
-                       + "desktop volume. The desktop slider and the Mute button already work without this. OpenWitty "
-                       + "only sets the desktop volume to the level the device already has, and never unmutes." }
+                   text: "When you turn the speaker knob on the CONNECT 2, the desktop volume slider moves along. "
+                       + "Without this, Linux does not notice the knob. The desktop slider and volume keys control the "
+                       + "CONNECT 2 either way." }
         }
     }
 
@@ -361,30 +361,32 @@ Rectangle {
         Column {
             id: desktopRightCol
             width: 310; spacing: 6
-            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background" }
-            ToggleSwitch { width: 310; label: "Keep it running when OpenWitty is closed"
+            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background service" }
+            ToggleSwitch { objectName: "backgroundServiceSwitch"; width: 310; label: "Keep working when the window is closed"
                            // switching an enabled service OFF is always possible; switching it ON needs desktop sync
                            enabled: integration.serviceState !== "not-installed" && integration.serviceState !== "unknown"
                                     && (integration.desktopSync || checked)
                            checked: integration.serviceState === "enabled" || integration.serviceState === "active"
-                           tip: "Starts OpenWitty's background service with your desktop session"
+                           tip: "Starts with your desktop session"
                            onToggled: (b) => integration.setBackgroundService(b) }
             Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "Background service: " + ({"not-installed": "not installed", "disabled": "off",
-                         "enabled": "on (not running right now)", "active": "on and running",
-                         "unknown": "state unknown"})[integration.serviceState]
-                         + ". While this window is open it takes over." }
+                   text: ({"not-installed": "The background service is not installed.",
+                           "disabled": "Off: the desktop volume follows the knob only while this window is open.",
+                           "enabled": "Switched on, but not running right now.",
+                           "active": "Running: the desktop volume follows the knob and the volume keys follow the output "
+                                     + "you hear, also when this window is closed.",
+                           "unknown": "State unknown."})[integration.serviceState] }
             Text { visible: integration.serviceIdleOn; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
-                   text: "Desktop sync is off, so the background service only idles. You can turn it off here." }
+                   text: "\"Desktop volume follows the volume knob\" is off, so the background service has little to do. "
+                       + "You can switch it off." }
             ToggleSwitch { objectName: "trayAutostartSwitch"; width: 310; label: "Show OpenWitty in the system tray"
                            visible: integration.trayInstalled
                            checked: integration.trayAutostart
                            tip: "Shows an OpenWitty icon in the system tray, also after login"
                            onToggled: (b) => integration.setTrayAutostart(b) }
             Text { visible: integration.trayInstalled; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "The icon shows whether the knob display and the background service are on, and opens this "
-                       + "window. It never uses the device. Closing this window keeps the background service running; "
-                       + "\"Quit tray icon\" in its menu removes only the icon." }
+                   text: "The panel icon shows whether the CONNECT 2 is connected and the desktop volume follows the "
+                       + "knob; a click opens this window. \"Quit tray icon\" in its menu removes only the icon." }
             Rectangle { width: 310; height: 1; color: "#333" }
             // Phase 11A.4: separate desktop inputs from the four capture channels (order verified on hardware)
             ToggleSwitch { objectName: "splitSourcesSwitch"; width: 310; label: "Separate inputs for apps"
@@ -693,7 +695,7 @@ Rectangle {
         Column { anchors.centerIn: parent; spacing: 10
             Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
                    text: "Turn off desktop volume sync, follow active output, the vendor fallback, the background "
-                       + "service and the system tray icon? The kernel quirk, if you installed it, is not touched." }
+                       + "service and the system tray icon? The kernel fix, if you installed it, is not touched." }
             Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmReset.visible = false }
                 ToggleButton { width: 70; text: "Reset"; primary: true

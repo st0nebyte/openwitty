@@ -9,6 +9,8 @@
 
 TrayController::TrayController(TrayModel& model, OpenGui open, QObject* parent)
     : QObject(parent), model_(model), openGui_(std::move(open)), menu_(std::make_unique<QMenu>()) {
+    device_ = menu_->addAction(QString());
+    device_->setEnabled(false);
     knob_ = menu_->addAction(QString());
     knob_->setEnabled(false);
     service_ = menu_->addAction(QString());
@@ -40,6 +42,7 @@ TrayController::~TrayController() = default;
 void TrayController::show() { icon_->show(); }
 
 void TrayController::update() {
+    device_->setText(model_.deviceLine());
     knob_->setText(model_.knobLine());
     service_->setText(model_.serviceLine());
     icon_->setToolTip(model_.toolTip());

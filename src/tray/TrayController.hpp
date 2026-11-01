@@ -23,6 +23,7 @@ public:
     void show();                                   // makes the icon visible
     QMenu* menu() const { return menu_.get(); }
     QSystemTrayIcon* icon() const { return icon_; }
+    QAction* deviceStatus() const { return device_; }
     QAction* knobStatus() const { return knob_; }
     QAction* serviceStatus() const { return service_; }
     QAction* openAction() const { return open_; }
@@ -38,6 +39,7 @@ private:
     OpenGui openGui_;
     std::unique_ptr<QMenu> menu_;
     QSystemTrayIcon* icon_{nullptr};
+    QAction* device_{nullptr};
     QAction* knob_{nullptr};
     QAction* service_{nullptr};
     QAction* open_{nullptr};

@@ -72,23 +72,22 @@ bool quirkFlagsParamActive(const std::string& value) {
 std::vector<std::string> audioSetupFindings(const AudioSetupStatus& s) {
     std::vector<std::string> f;
     if (!s.card) {
-        f.push_back("The CONNECT 2 is not present as a sound card (unplugged, or snd-usb-audio not bound).");
+        f.push_back("The CONNECT 2 is not connected as a sound card (unplugged, or its Linux driver is not active).");
         return f;
     }
     if (s.mixerLoadError) {
         f.push_back(s.quirkActive
-            ? "The ALSA mixer of the CONNECT 2 still fails to load although the compatibility quirk is active."
-            : "The ALSA mixer of the CONNECT 2 fails to load, so the desktop gets no hardware volume. On Linux 7.3 "
-              "this is caused by a broken microphone control on the device; the per-device compatibility quirk "
-              "(ignore_ctl_error) works around it. See the README section 'Kernel compatibility quirk'.");
+            ? "The CONNECT 2's volume controls still fail to load although the kernel fix is active."
+            : "The CONNECT 2's volume controls fail to load, so the desktop volume cannot control it. On Linux 7.3 "
+              "a faulty microphone control on the device causes this; the kernel fix below (ignore_ctl_error) "
+              "works around it.");
         if (s.quirkConfigured && !s.quirkActive)
-            f.push_back("The quirk is configured but not active yet: it takes effect when the CONNECT 2 is plugged in "
-                        "again or after the next boot.");
+            f.push_back("The kernel fix is installed but not active yet: replug the CONNECT 2 or reboot.");
     }
     if (!s.mixerLoadError && !s.volumeControl)
-        f.push_back("The CONNECT 2 has no usable 'PCM Playback Volume' control: desktop volume cannot be hardware volume.");
+        f.push_back("The CONNECT 2 has no usable volume control, so the desktop volume cannot control it.");
     if (s.quirkActive && !s.quirkConfigured)
-        f.push_back("The quirk is active now but not configured permanently; it will be gone after the next boot.");
+        f.push_back("The kernel fix is active now but not installed permanently; it is gone after the next reboot.");
     return f;
 }
 

@@ -39,20 +39,20 @@ TEST(AudioSetupCheck, FindingsExplainWhatIsMissing) {
     broken.volumeControl = false;
     auto f = audioSetupFindings(broken);
     ASSERT_FALSE(f.empty());
-    EXPECT_NE(f[0].find("compatibility quirk"), std::string::npos);
+    EXPECT_NE(f[0].find("kernel fix"), std::string::npos);
 
     AudioSetupStatus pending = broken;
     pending.quirkConfigured = true;                            // configured, not yet applied
     f = audioSetupFindings(pending);
     ASSERT_GE(f.size(), 2u);
-    EXPECT_NE(f[1].find("plugged in again"), std::string::npos);
+    EXPECT_NE(f[1].find("replug the CONNECT 2"), std::string::npos);
 
     AudioSetupStatus absent;
-    EXPECT_NE(audioSetupFindings(absent)[0].find("not present"), std::string::npos);
+    EXPECT_NE(audioSetupFindings(absent)[0].find("not connected"), std::string::npos);
 
     AudioSetupStatus transient = ok;
     transient.quirkConfigured = false;                          // set at runtime only
-    EXPECT_NE(audioSetupFindings(transient)[0].find("next boot"), std::string::npos);
+    EXPECT_NE(audioSetupFindings(transient)[0].find("next reboot"), std::string::npos);
 }
 
 TEST(AudioSetupCheck, SoftwareInputMuteNeedsAllFourFiles) {
