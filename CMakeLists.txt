@@ -143,6 +143,7 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
     install(FILES packaging/alsa-card-profile/profile-sets/openwitty-connect2.conf
             DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples/alsa-card-profile/profile-sets)
     install(FILES packaging/alsa-card-profile/paths/openwitty-connect2-input.conf
+                  packaging/alsa-card-profile/paths/openwitty-connect2-output.conf
             DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples/alsa-card-profile/paths)
     # Login-screen WirePlumber rule (example only): valid SPA-JSON, matches the CONNECT 2's card name pattern.
     find_program(LEWITT_SPA_JSON_DUMP spa-json-dump)

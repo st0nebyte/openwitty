@@ -11,7 +11,8 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
-- Desktop names (2026-11-01, owner wish): the output is "CONNECT 2 Output" (was "Analog Output"), the 4-channel
+- Desktop names (2026-11-01, owner wish): the output is "CONNECT 2 Output" (was "Analog Output"; device name and
+  KDE's port name, via the profile's own playback path `openwitty-connect2-output.conf`), the 4-channel
   input "CONNECT 2 All channels (for DAWs)". The separate Microphone input is preferred as the default input, so
   an app that records "the default" gets only the microphone, never mic + instrument + computer audio mixed.
 - **Product mode:** no more permission switches. Every setting verified on the real CONNECT 2 works from the window

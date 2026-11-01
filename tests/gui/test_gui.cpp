@@ -2574,7 +2574,8 @@ TEST(Controls11B, DesktopPageWarnsThatTheDesktopMicMuteIsNotEffective) {
     EXPECT_TRUE(w->property("text").toString().contains("does not mute the CONNECT 2"));
     for (const char* f : {"wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf",
                           "alsa-card-profile/mixer/profile-sets/openwitty-connect2.conf",
-                          "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf"}) {
+                          "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf",
+                          "alsa-card-profile/mixer/paths/openwitty-connect2-output.conf"}) {
         fs::create_directories((h / f).parent_path());
         std::ofstream(h / f) << "x";
     }

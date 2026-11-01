@@ -55,18 +55,19 @@ TEST(AudioSetupCheck, FindingsExplainWhatIsMissing) {
     EXPECT_NE(audioSetupFindings(transient)[0].find("next boot"), std::string::npos);
 }
 
-TEST(AudioSetupCheck, SoftwareInputMuteNeedsAllThreeFiles) {
+TEST(AudioSetupCheck, SoftwareInputMuteNeedsAllFourFiles) {
     namespace fs = std::filesystem;
     const fs::path h = fs::temp_directory_path() / ("ow-11c-" + std::to_string(::getpid()));
     fs::remove_all(h);
     const fs::path files[] = {h / "wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf",
                               h / "alsa-card-profile/mixer/profile-sets/openwitty-connect2.conf",
-                              h / "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf"};
+                              h / "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf",
+                              h / "alsa-card-profile/mixer/paths/openwitty-connect2-output.conf"};
     EXPECT_FALSE(lewitt::softwareInputMuteConfigured(h.string()));
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (std::size_t i = 0; i < 4; ++i) {
         fs::create_directories(files[i].parent_path());
         std::ofstream(files[i]) << "x";
-        EXPECT_EQ(lewitt::softwareInputMuteConfigured(h.string()), i == 2) << "after file " << i;
+        EXPECT_EQ(lewitt::softwareInputMuteConfigured(h.string()), i == 3) << "after file " << i;
     }
     EXPECT_FALSE(lewitt::softwareInputMuteConfigured(""));
     fs::remove_all(h);

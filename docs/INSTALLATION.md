@@ -191,6 +191,7 @@ mkdir -p ~/.config/alsa-card-profile/mixer/profile-sets ~/.config/alsa-card-prof
          ~/.config/wireplumber/wireplumber.conf.d
 cp $ex/alsa-card-profile/profile-sets/openwitty-connect2.conf ~/.config/alsa-card-profile/mixer/profile-sets/
 cp $ex/alsa-card-profile/paths/openwitty-connect2-input.conf  ~/.config/alsa-card-profile/mixer/paths/
+cp $ex/alsa-card-profile/paths/openwitty-connect2-output.conf ~/.config/alsa-card-profile/mixer/paths/
 cp $ex/52-openwitty-connect2-input.conf ~/.config/wireplumber/wireplumber.conf.d/
 systemctl --user restart wireplumber
 ```
@@ -198,7 +199,7 @@ systemctl --user restart wireplumber
 Afterwards the desktop shows the input as a normal, unmuted microphone at 100 %; desktop mute and the input slider
 act on what apps receive (all four channels, loopback included). The device's own MUTE stays separate and still
 silences the input at the source. OpenWitty's Settings ▸ Desktop integration shows whether it is installed.
-Undo: delete the three files and restart WirePlumber.
+Undo: delete the four files and restart WirePlumber.
 
 ### Separate inputs for apps (optional)
 

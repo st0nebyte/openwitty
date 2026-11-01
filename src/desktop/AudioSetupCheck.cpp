@@ -22,7 +22,8 @@ bool softwareInputMuteConfigured(const std::string& configHome) {
     std::error_code ec;
     return fs::is_regular_file(h / "wireplumber/wireplumber.conf.d/52-openwitty-connect2-input.conf", ec) &&
            fs::is_regular_file(h / "alsa-card-profile/mixer/profile-sets/openwitty-connect2.conf", ec) &&
-           fs::is_regular_file(h / "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf", ec);
+           fs::is_regular_file(h / "alsa-card-profile/mixer/paths/openwitty-connect2-input.conf", ec) &&
+           fs::is_regular_file(h / "alsa-card-profile/mixer/paths/openwitty-connect2-output.conf", ec);
 }
 
 std::string userConfigHome() {
