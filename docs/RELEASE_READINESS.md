@@ -329,7 +329,8 @@ visibility change, no support contact).
 
 **Resolution (2026-11-01, owner decision: option 2).** Backups first (`~/Backups/openwitty-pre-repo-move-20261101-2007.bundle`,
 all local refs, and `…-github.git`, a mirror of GitHub incl. `refs/pull/*`). The old repository was renamed to
-`openwitty-old` (still private; the owner deletes it after checking the new one). A new private `openwitty` was
+`openwitty-old` (private), checked by the owner and **deleted by the owner on 2026-11-01**, with it the
+old `refs/pull/*`. A new private `openwitty` was
 created and pushed only from the five branches — no `refs/pull/*`, no issues, releases or secrets existed to move.
 The full-history scan before the push found one more leftover: a fragment of the tested system's root-filesystem
 UUID in two revisions of `docs/PHASE8A12_USB_CORE_DELAY_INIT_QUIRK_ASSESSMENT.md` (removed again in a later commit).
