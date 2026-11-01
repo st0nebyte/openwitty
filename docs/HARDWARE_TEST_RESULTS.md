@@ -1712,5 +1712,6 @@ restored exactly, monitors stopped, usbmon unloaded; the service took the device
 * **Presets:** saved "Live test", mic preamp Clean → Warm, loaded: one listed change, one verified SET, baseline
   comparison clean.
 * **Ardour 9 GUI, JACK backend (pipewire-jack):** connected to the running PipeWire (48 kHz, buffer 1024 = 21.3 ms),
-  mono track from `capture_FL` (mic), 9 s of speech recorded, peak −11.5 dBFS, DSP 0 %, played back.
+  mono track from `capture_FL` (mic), 9 s of speech recorded, peak −11.5 dBFS, DSP 0 %, played back. Switched to
+  128 samples in Ardour's setup: 2.7 ms buffer, reported I/O latency 8.667 ms, DSP 2 %.
 
