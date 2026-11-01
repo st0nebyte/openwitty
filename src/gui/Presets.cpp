@@ -143,7 +143,7 @@ bool same(const Field& f, const QVariant& a, const QVariant& b) {
 }  // namespace
 
 QJsonObject toJson(const QString& name, const QVariantMap& values, bool includeOutputs) {
-    QJsonObject root{{"format", kFormat}, {"version", kVersion}, {"device", "LEWITT CONNECT 2"}, {"name", name},
+    QJsonObject root{{"format", kFormat}, {"version", kVersion}, {"model", "LEWITT CONNECT 2"}, {"name", name},
                      {"created", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}};
     QJsonObject sections;
     for (const auto& f : fields()) {
@@ -183,7 +183,7 @@ std::optional<Parsed> fromJson(const QByteArray& data, QString* error) {
     p.name = root.value("name").toString().left(64);
     // Flatten: outputs.{speakers,headphones} and device.ledColors become their own sections.
     QMap<QString, QJsonObject> sections;
-    static const QStringList known{"format", "version", "device", "name", "created", "microphone", "instrument",
+    static const QStringList known{"format", "version", "model", "device", "name", "created", "microphone", "instrument",
                                    "monitoring", "outputs"};
     for (auto it = root.begin(); it != root.end(); ++it)
         if (!known.contains(it.key())) p.ignored << it.key();

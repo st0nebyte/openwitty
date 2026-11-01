@@ -3137,6 +3137,9 @@ TEST(Presets, RoundTripKeepsEverySettingAndOutputsOnlyWhenAsked) {
     auto p = presets::fromJson(presetBytes(cur), &err);
     ASSERT_TRUE(p) << err.toStdString();
     EXPECT_EQ(p->name, "Test");
+    const auto root = QJsonDocument::fromJson(presetBytes(cur)).object();
+    EXPECT_EQ(root.value("model").toString(), "LEWITT CONNECT 2");
+    EXPECT_TRUE(root.value("device").isObject()) << "the device settings section is not overwritten";
     EXPECT_TRUE(p->ignored.isEmpty());
     for (const auto& f : presets::fields()) {
         if (f.output) { EXPECT_FALSE(p->values.contains(f.key)) << f.key.toStdString(); continue; }
