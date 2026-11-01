@@ -13,7 +13,7 @@ namespace {
 constexpr const char* kMarker = "# openwitty-split-target: ";
 
 std::string source(const std::string& target, const char* id, const char* description, const char* capturePos,
-                   const char* playbackPos) {
+                   const char* playbackPos, const char* extraPlaybackProps = "") {
     return std::string("  { name = libpipewire-module-loopback\n"
                        "    args = {\n"
                        "      node.description = \"") + description + "\"\n"
@@ -27,7 +27,7 @@ std::string source(const std::string& target, const char* id, const char* descri
            "      playback.props = {\n"
            "        node.name = \"openwitty_connect2_" + id + "\"\n"
            "        media.class = \"Audio/Source\"\n"
-           "        audio.position = [ " + playbackPos + " ]\n"
+           "        audio.position = [ " + playbackPos + " ]\n" + extraPlaybackProps +
            "      }\n"
            "    }\n"
            "  }\n";
@@ -41,9 +41,12 @@ std::optional<std::string> renderSplitSourcesConfig(const std::string& captureNo
     s += "# (Settings > Desktop integration); remove it there or delete this file, then restart PipeWire.\n";
     s += "# Channel order verified on hardware: 1 microphone, 2 instrument, 3/4 loopback L/R.\n";
     s += "# Each source is active only while an application records from it (node.passive).\n";
+    s += "# The microphone is preferred as the default input (priority.session).\n";
     s += std::string(kMarker) + captureNodeName + "\n";
     s += "context.modules = [\n";
-    s += source(captureNodeName, "microphone", "CONNECT 2 Microphone", "FL", "MONO");
+    // The microphone is the preferred default input (higher than the 4-channel device's 2109): an app that records
+    // "the default" gets the mic only, never mic + instrument + computer audio mixed together.
+    s += source(captureNodeName, "microphone", "CONNECT 2 Microphone", "FL", "MONO", "        priority.session = 2200\n");
     s += source(captureNodeName, "instrument", "CONNECT 2 Instrument", "FR", "MONO");
     s += source(captureNodeName, "loopback", "CONNECT 2 Loopback (computer audio)", "RL RR", "FL FR");
     s += "]\n";

@@ -162,7 +162,8 @@ if(LEWITT_ENABLE_ALSA AND LEWITT_ENABLE_USB)
                                 printf '%s' \"\$out\" | grep -q '\"device.vendor.id\": \"0x29c2\"' || exit 2; \
                                 printf '%s' \"\$out\" | grep -q '\"device.product.id\": \"0x0004\"' || exit 3; \
                                 printf '%s' \"\$out\" | grep -q '\"device.profile-set\": \"openwitty-connect2.conf\"' || exit 4; \
-                                printf '%s' \"\$out\" | grep -q '\"node.description\": \"CONNECT 2 (1 Mic' || exit 5; echo RULE OK"
+                                printf '%s' \"\$out\" | grep -q '\"node.description\": \"CONNECT 2 All channels (for DAWs)\"' || exit 5; \
+                                printf '%s' \"\$out\" | grep -q '\"node.description\": \"CONNECT 2 Output\"' || exit 6; echo RULE OK"
                  sh ${LEWITT_SPA_JSON_DUMP} ${CMAKE_SOURCE_DIR}/packaging/wireplumber/52-openwitty-connect2-input.conf)
         set_tests_properties(wireplumber_input_rule_parses PROPERTIES PASS_REGULAR_EXPRESSION "RULE OK")
     endif()

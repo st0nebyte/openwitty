@@ -1,6 +1,8 @@
 // Phase 11A.4: generated PipeWire config for separate CONNECT 2 inputs.
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -58,4 +60,17 @@ TEST(SplitSources, ConfigParsesAsSpaJson) {
     EXPECT_NE(out.find("\"media.class\": \"Audio/Source\""), std::string::npos);
     std::filesystem::remove(p);
     std::filesystem::remove(p.string() + ".out");
+}
+
+TEST(SplitSources, TheMicrophoneIsThePreferredDefaultInputAndOnlyIt) {
+    const auto c = renderSplitSourcesConfig(kNode);
+    ASSERT_TRUE(c.has_value());
+    std::size_t n = 0, pos = 0;
+    while ((pos = c->find("priority.session =", pos)) != std::string::npos) { ++n; ++pos; }
+    EXPECT_EQ(n, 1u);
+    const auto mic = c->find("node.name = \"openwitty_connect2_microphone\"");
+    const auto prio = c->find("priority.session = 2200");
+    const auto inst = c->find("CONNECT 2 Instrument");
+    ASSERT_NE(mic, std::string::npos);
+    EXPECT_TRUE(prio > mic && prio < inst) << "in the microphone's playback props";
 }

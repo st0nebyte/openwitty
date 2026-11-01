@@ -252,7 +252,8 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
    Done: `src/desktop/SplitSources` (config for three loopback-module sources: Microphone ← FL/ch 1, Instrument ←
    FR/ch 2, Loopback ← RL RR/ch 3–4; `node.passive`; node name validated), Settings ▸ Desktop integration switch +
    confirmed "Restart desktop audio", state off/on/stale/unavailable; the 11C WirePlumber rule names the 4-channel input
-   "CONNECT 2 (1 Mic, 2 Instrument, 3+4 Loopback)" (positions unchanged). Tests `SplitSources.*`,
+   "CONNECT 2 (1 Mic, 2 Instrument, 3+4 Loopback)" (positions unchanged; renamed 2026-11-01 to "CONNECT 2 All
+   channels (for DAWs)", output "CONNECT 2 Output", Microphone preferred as default input). Tests `SplitSources.*`,
    `SplitSources11A4.*`. **Live test 11A.4-1** (owner present, usual safety): copy the updated 52 rule, switch on,
    restart audio once; check the three nodes and the description; record each virtual source with `pw-record` while
    the owner unmutes mic, then instrument (device mute), and a loopback tone plays (loopback unmuted): Microphone carries

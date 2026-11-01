@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Desktop names (2026-11-01, owner wish): the output is "CONNECT 2 Output" (was "Analog Output"), the 4-channel
+  input "CONNECT 2 All channels (for DAWs)". The separate Microphone input is preferred as the default input, so
+  an app that records "the default" gets only the microphone, never mic + instrument + computer audio mixed.
 - **Product mode:** no more permission switches. Every setting verified on the real CONNECT 2 works from the window
   right away; Settings ▸ Device control is gone (its keys in `openwitty.conf` are ignored). Safety stays built in:
   only known settings bytes are written, every write is read back, large increases go in verified steps, and 48 V,
