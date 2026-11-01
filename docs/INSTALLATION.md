@@ -233,6 +233,10 @@ The CONNECT 2 is a class-compliant USB audio device; DAWs need no OpenWitty code
   separate inputs.
 * **Latency** (round trip through the loopback, pipewire-jack, 48 kHz, measured 2026-10-30): 64 frames 8.7 ms,
   128 frames about 12 ms, 256 frames 23 ms; a 30-minute run at 128 frames had no dropouts.
+* **Ardour with JACK/PipeWire:** "JACK/Pipewire is already running, Ardour will connect to it" is normal; the
+  sample rate and buffer come from PipeWire (often 1024 samples, 21 ms). For lower latency set the buffer before
+  starting Ardour, e.g. `pw-metadata -n settings 0 clock.force-quantum 128` (back with `... 0`), or start it as
+  `PIPEWIRE_QUANTUM=128/48000 ardour9`.
 * **Monitoring twice:** the CONNECT 2 already plays the inputs directly (Monitoring: source + Input/playback mix). If
   the DAW's track monitoring is on as well, you hear every input twice, the second time delayed — use either the
   device's direct monitoring (mix knob towards "Input") or the DAW's monitoring, not both.

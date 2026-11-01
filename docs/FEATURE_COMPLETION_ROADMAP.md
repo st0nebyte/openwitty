@@ -926,7 +926,7 @@ in the session results above (Phase 11B sessions 1–7, 11C, 11A.4, Phase 12) an
 | | Denoise/Comp off at 96 kHz | ✅ greyed out with reason | session 7 |
 | Linux integration | one device, volume keys = hardware level of the audible output, touch focus follows | ✅ | Phase 12 |
 | | software input mute, separate inputs for apps | ✅ | 11C, 11A.4 |
-| | DAW (Ardour ALSA, JACK via pipewire-jack) | ✅ ALSA + JACK clients; Ardour GUI with JACK open | DAW-1…4, session 7 |
+| | DAW (Ardour ALSA, JACK via pipewire-jack) | ✅ ALSA + JACK clients; Ardour GUI recorded the mic through JACK | DAW-1…4, session 7, 2026-11-01 |
 | Application | firmware version | ✅ shown as USB revision | 2026-10-31 |
 | | presets (save / load, OpenWitty `.owpreset`) | ✅ simulated + permission tests; official `.preset` import open | 2026-11-01 |
 | | firmware update, factory reset | ✗ intentionally disabled | policy |

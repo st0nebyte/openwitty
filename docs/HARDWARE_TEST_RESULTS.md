@@ -1702,3 +1702,15 @@ kernel's re-reads (GET_CUR) answered muted; PipeWire followed. No volume request
 Device settings unchanged before/after (mic 27 dB, instrument 14 dB, both muted). No restoration command needed. Logging
 restored exactly, monitors stopped, usbmon unloaded; the service took the device back at 08:04:01. Raw traces kept locally
 (not committed). Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2R result).
+
+## 2026-11-01 — Autosetup, presets and Ardour with JACK (owner present, speakers off, headphones unplugged)
+
+* **Autosetup (mic, full flow, `--hw-check`):** first run exposed a bug (a measurement counted as finished on the
+  previous measurement's progress 100 - fixed in f69cd77). Second run: 10 s voice measurement, gain set by the device
+  44 → 39 dB; during the measurement the settings read a neutral mic state, restored afterwards; Denoise measurement
+  stored −47 dBFS; Apply wrote the preamp (verified). Owner kept the result.
+* **Presets:** saved "Live test", mic preamp Clean → Warm, loaded: one listed change, one verified SET, baseline
+  comparison clean.
+* **Ardour 9 GUI, JACK backend (pipewire-jack):** connected to the running PipeWire (48 kHz, buffer 1024 = 21.3 ms),
+  mono track from `capture_FL` (mic), 9 s of speech recorded, peak −11.5 dBFS, DSP 0 %, played back.
+
