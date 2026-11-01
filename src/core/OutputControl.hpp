@@ -36,6 +36,9 @@ WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness);
 // groups' bytes; triggers only with the measurement permission (measurement session + autogain words). Never routing,
 // never persistent changes, never mix-to-speakers (byte 23, value set unknown) or the streaming-mode bytes.
 WritePolicy guiWritePolicy(const struct UserConfig& c);
+// Single device owner: what the background service lets its clients (window, CLI) write - exactly the window's policy,
+// plus the speaker volume/mute bytes when the user confirmed the vendor fallback.
+WritePolicy serviceClientPolicy(const struct UserConfig& c);
 // The bytes and triggers of one permission (empty for an unknown name).
 std::vector<std::size_t> permissionOffsets(const std::string& name);
 std::vector<Trigger> permissionTriggers(const std::string& name);

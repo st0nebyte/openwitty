@@ -35,6 +35,7 @@
 #include <cstring>
 #include <ctime>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <sys/stat.h>
@@ -52,6 +53,8 @@
 #include "desktop/DesktopVolumeLink.hpp"
 #include "desktop/PortNames.hpp"
 #include "transport/ControlLease.hpp"
+#include "transport/DeviceService.hpp"
+#include "transport/SerializedTransport.hpp"
 #include "transport/UsbTransport.hpp"
 
 using namespace lewitt;
@@ -141,14 +144,17 @@ struct OnceLog {
     }
 };
 
-std::unique_ptr<DeviceSession> makeSession(bool writes, bool follow) {
-    if (writes || follow) {
-        // vendor fallback: speaker bytes; follow active output (Phase 12C, confirmed in the GUI): byte 59 only
-        WritePolicy p = writes ? outputWritePolicy(/*speaker=*/true, /*headphone=*/false) : WritePolicy{};
-        if (follow) p = withFollowOutput(p);
-        return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(outputControlHardwareOptions()), p);
-    }
-    return std::make_unique<DeviceSession>(std::make_unique<UsbTransport>(readOnlyHardwareOptions()), WritePolicy{});
+// The device transport is shared between the service's own session and its socket server (single device owner).
+// `writable`: the transport allows writes at all (some permission, the fallback or follow is on); what may be written
+// is decided by the session's policy (the service's own writes) and the server's policy (clients).
+std::unique_ptr<DeviceSession> makeSession(bool writes, bool follow, bool writable,
+                                          std::shared_ptr<IDeviceTransport>& shared) {
+    // vendor fallback: speaker bytes; follow active output (Phase 12C, confirmed in the GUI): byte 59 (+56) only
+    WritePolicy p = writes ? outputWritePolicy(/*speaker=*/true, /*headphone=*/false) : WritePolicy{};
+    if (follow) p = withFollowOutput(p);
+    shared = std::make_shared<SerializedTransport>(
+        std::make_unique<UsbTransport>(writable ? outputControlHardwareOptions() : readOnlyHardwareOptions()));
+    return std::make_unique<DeviceSession>(std::make_unique<SharedTransportHandle>(shared), p);
 }
 
 FollowConfig followConfig(const UserConfig& c) {
@@ -272,6 +278,20 @@ int main(int argc, char** argv) {
     };
 
     std::unique_ptr<DeviceSession> session;
+    std::shared_ptr<IDeviceTransport> shared;
+    // Single device owner: the window and the CLI use the device through this socket (config-driven service only).
+    std::mutex policyM;
+    WritePolicy policyNow = serviceClientPolicy(watch.config);
+    std::unique_ptr<DeviceServer> server;
+    if (!a.explicitMode) {
+        server = std::make_unique<DeviceServer>([&] { std::lock_guard lk(policyM); return policyNow; }, say);
+        if (auto s = server->start(deviceServiceSocketPath()); !s) {
+            say("device sharing for the window and CLI: off (" + s.error().message + ")");
+            server.reset();
+        } else {
+            say("device sharing for the window and CLI: " + deviceServiceSocketPath());
+        }
+    }
     AlsaDesktopMixer mixer;
     std::unique_ptr<DesktopVolumeLink> link;
     std::unique_ptr<OutputFollower> follower;
@@ -287,15 +307,25 @@ int main(int argc, char** argv) {
     auto release = [&] {
         follower.reset();
         link.reset();
+        if (server) server->setTransport(nullptr);
         if (session) session->disconnect();
         session.reset();
+        shared.reset();
     };
+    bool paused = false;
+    bool openWritable = false;
+    auto nextAlive = DesktopVolumeLink::Clock::now();
 
     while (!gStop) {
         if (!a.explicitMode && watch.poll()) {
+            {
+                std::lock_guard lk(policyM);
+                policyNow = serviceClientPolicy(watch.config);
+            }
             const Effective e = fromConfig(watch.config);
             const bool f = !a.explicitMode && e != Effective::DryRun && followWritesWanted(watch.config);
-            if (e != eff || f != follow) {
+            const bool wantWritable = e == Effective::Fallback || f || anyDeviceWritePermission(watch.config);
+            if (e != eff || f != follow || (session && wantWritable != openWritable)) {
                 say(std::string("settings changed: ") + describe(e) + (f ? " + follow active output" : ""));
                 release();                    // the next start is read-only again, with the new mode
                 mixer.close();
@@ -313,11 +343,12 @@ int main(int argc, char** argv) {
             nextNames = DesktopVolumeLink::Clock::now() + std::chrono::seconds(10);
             if (const int n = applyPortNames(); n > 0) say("channel names set in audio apps: " + std::to_string(n));
         }
-        if (eff == Effective::Idle) {
+        const bool clientsWant = server && server->clientsWaiting();
+        if (eff == Effective::Idle && !clientsWant) {
             release();
             if (mixer.isOpen()) mixer.close();
             wait("idle: desktop volume sync is off in the settings");
-            sleepMs(1000);
+            sleepMs(server ? 250 : 1000);
             continue;
         }
         if (ControlLease::yieldRequestedInDirectory(dir, std::chrono::seconds(30))) {
@@ -329,7 +360,9 @@ int main(int argc, char** argv) {
         }
         if (!session || session->needsReconnect()) {
             link.reset();
-            session = makeSession(eff == Effective::Fallback, follow);
+            const bool writable = eff == Effective::Fallback || follow || anyDeviceWritePermission(watch.config);
+            session = makeSession(eff == Effective::Fallback, follow, writable, shared);
+            openWritable = writable;
             if (auto s = session->connect(); !s) {
                 session.reset();
                 wait(s.error().code == Errc::ControlInUse ? "waiting: device in use by another OpenWitty client"
@@ -338,6 +371,36 @@ int main(int argc, char** argv) {
                 continue;
             }
             say("device connected");
+            if (server) server->setTransport(shared);
+        }
+        // A client drives the device (or the service only holds it for clients): no own link or follower, the
+        // device stays open. A device the clients lost is reopened here.
+        if (server && (server->controllerConnected() || eff == Effective::Idle)) {
+            if (!paused) {
+                follower.reset();
+                link.reset();
+                paused = true;
+                say(eff == Effective::Idle ? "holding the device for OpenWitty clients"
+                                           : "paused: a window or command controls the device");
+            }
+            // A cheap status read every 2 s notices an unplugged device even when no client is reading.
+            const auto now = DesktopVolumeLink::Clock::now();
+            bool lost = server->takeDeviceLost();
+            if (!lost && now >= nextAlive) {
+                nextAlive = now + std::chrono::seconds(2);
+                lost = !session->refreshStatus();
+            }
+            if (lost) {
+                say("device lost: reconnecting");
+                release();
+            }
+            sleepMs(100);
+            continue;
+        }
+        if (paused) {
+            paused = false;
+            wait.last.clear();
+            say("resuming: the service runs the desktop link again (read-only start)");
         }
         if (!mixer.isOpen()) {
             link.reset();
@@ -392,6 +455,7 @@ int main(int argc, char** argv) {
         }
     }
     release();
+    if (server) server->stop();
     say("openwitty-volumed: stopped");
     return 0;
 }

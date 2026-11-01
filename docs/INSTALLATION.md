@@ -255,7 +255,14 @@ never unmuting) and never writes the device. The desktop slider and the device's
 **"Keep it running when OpenWitty is closed"** enables the `openwitty-volumed` user service
 (`systemctl --user enable --now openwitty-volumed.service`). It starts with your desktop session, mirrors the
 knob while the window is closed and hands the device to the window when you open it. Turning the switch off
-disables and stops it. Command line:
+disables and stops it.
+
+While it runs, the service is the **only program that talks to the CONNECT 2**: the window and `openwitty-cli` reach
+the device through its private socket (`$XDG_RUNTIME_DIR/openwitty/device.sock`, this user only). The window takes
+control there (the service pauses its own work until the window closes); `openwitty-cli read …` works at the same
+time. The service checks every write again against your permissions (Settings ▸ Device control); CLI writes through
+the service therefore need the matching permission too. Without the service everything opens the device directly, as
+before. Command line:
 
 ```sh
 systemctl --user status openwitty-volumed.service

@@ -45,6 +45,15 @@ WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness) {
     return guiWritePolicy(c);
 }
 
+WritePolicy serviceClientPolicy(const UserConfig& c) {
+    WritePolicy p = guiWritePolicy(c);
+    if (c.vendorFallback) {
+        p.allowHardwareWrites = true;
+        for (auto off : outputWriteOffsets(Output::Speaker)) p.hardwareWriteOffsets.push_back(off);
+    }
+    return p;
+}
+
 std::vector<std::size_t> permissionOffsets(const std::string& name) {
     using namespace settings_off;
     if (name == "speaker") return outputWriteOffsets(Output::Speaker);

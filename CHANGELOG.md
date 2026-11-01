@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- One program owns the CONNECT 2: while the background service runs, the window and `openwitty-cli` use the device
+  through the service's private socket (no more hand-over; CLI reads work while the window is open). The service
+  checks every write against the user's permissions. Without the service, clients open the device directly.
 - Settings ▸ Desktop integration: "Name the CONNECT 2 channels in audio apps" (on by default): DAWs show
   1 Microphone, 2 Instrument, 3/4 Loopback L/R and Output L/R instead of capture_FL … (JACK pretty names in
   PipeWire's metadata, display only; the background service sets them again after a replug).

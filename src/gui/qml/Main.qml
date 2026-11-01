@@ -14,7 +14,7 @@ Window {
     readonly property string uiState: device.values["ui.state"] || "disconnected"
     readonly property string uiError: (device.values["ui.error"] || "").split("\n")[0]
     // transport name for display ("usb" -> "USB")
-    readonly property string backendLabel: device.backend === "usb" ? "USB" : device.backend
+    readonly property string backendLabel: device.backend === "usb" ? "USB" : device.backend === "service" ? "USB via service" : device.backend
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
     // Phase 10A: plain-language list of what the session may change on the real device (from can.<key>).

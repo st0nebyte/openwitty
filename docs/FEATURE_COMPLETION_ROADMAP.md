@@ -181,12 +181,21 @@ write authorization; fixed in 630f725), afterwards the window followed too (focu
 **Owner decisions (2026-10-31):** 12E stays as built — X closes the window while the tray icon and the background
 service keep running (keys, follow and focus keep working; the tray reopens the window); "start minimized" = the tray
 autostart (Desktop integration). **No volume limit** (requirement 9 dropped). Phase 12 is complete apart from the
-later single device-owning service.
+later single device-owning service — **done 2026-11-01** (see below).
 
 **Plan:** 12A decode byte 59 (binary + read-only device value) → 12B hardware test: byte 59 = headphones, KDE volume
 moves the headphone level (headphones unplugged, low levels) → 12C follow active output in the service with both
 special-case settings + volume limit → 12D extended custom-button modes with per-device memory → 12E tray behaviour
 (close/start to tray), later one device-owning service with the GUI as its client.
+
+**Single device owner (2026-11-01):** `openwitty-volumed` keeps the CONNECT 2 open and serves the window and the CLI over a
+private Unix socket (`transport/DeviceService`: transport calls 1:1, so every client-side check stays; the service
+re-checks each write: controller only, write guard, permitted bytes against a fresh read, permitted triggers -
+`serviceClientPolicy`). One controller at a time (the window or a CLI write); while it is connected the service pauses
+its own desktop link and follower but keeps the device; readers (CLI reads) work alongside. Without the service the
+clients open USB directly (`ServiceOrDirectTransport`). Tests `DeviceService.*`; audit rule added. Live (read-only):
+CLI read in 8 ms while the service runs; the window took control and the service paused; on closing the service
+resumed with a read-only start.
 
 ## Phase 11 — fully working private version (owner mandate, 2026-10-27)
 

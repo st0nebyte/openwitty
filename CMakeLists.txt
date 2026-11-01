@@ -77,6 +77,7 @@ add_library(lewitt_core STATIC
     src/transport/InterfaceSelection.cpp
     src/transport/UsbDiagnostics.cpp
     src/transport/SerializedTransport.cpp
+    src/transport/DeviceService.cpp
     src/protocol/WriteGuard.cpp
     src/core/DeviceSession.cpp
     src/core/WriteVerification.cpp
@@ -245,6 +246,7 @@ if(LEWITT_BUILD_TESTS)
                                         tests/cpp/test_split_sources.cpp       # Phase 11A.4 separate inputs
                                         tests/cpp/test_sample_rates.cpp        # SR: allowed rates for apps
                                         tests/cpp/test_port_names.cpp          # readable channel names
+                                        tests/cpp/test_device_service.cpp      # single device owner
                                         tests/cpp/test_user_config.cpp)        # Phase 8G user configuration
     target_link_libraries(lewitt_tests PRIVATE lewitt_core lewitt_desktop GTest::gtest_main)
     if(LEWITT_ENABLE_USB)
@@ -252,7 +254,7 @@ if(LEWITT_BUILD_TESTS)
         # the authorization check), so none of them can reach a device. Never add a case here that
         # sets every required variable to exactly 1 without --mock.
         set(_ow_cli $<TARGET_FILE:openwitty-cli>)
-        set(_ow_unset --unset=LEWITT_ALLOW_HARDWARE_WRITE --unset=LEWITT_ALLOW_WRITE_SPEAKER_VOLUME)
+        set(_ow_unset --unset=LEWITT_ALLOW_HARDWARE_WRITE --unset=LEWITT_ALLOW_WRITE_SPEAKER_VOLUME LEWITT_NO_DEVICE_SERVICE=1)
         add_test(NAME cli_rejects_nan_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume nan)
         add_test(NAME cli_rejects_inf_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume -inf --execute)
         add_test(NAME cli_rejects_out_of_range_volume COMMAND ${CMAKE_COMMAND} -E env ${_ow_unset} ${_ow_cli} write speaker-volume 0.5 --execute)

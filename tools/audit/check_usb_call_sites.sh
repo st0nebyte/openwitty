@@ -69,10 +69,12 @@ if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src
 # only paired with guiWritePolicy(speaker, headphone, ledBrightness) - the union of exactly those fields' bytes.
 # The settings backend itself never writes the device.
 if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -vE 'readOnlyHardwareOptions\(\)|outputControlHardwareOptions\(\)' >/dev/null; then echo "FAIL GUI constructs a UsbTransport with unreviewed options"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() or the gated output options only"; fi
+# 2026-11-01 (single device owner): the one site builds the direct transport inside the service-or-direct fallback;
+# write-capable options only when a permission is on, and only then with guiWritePolicy(userConfig).
 n_out=$(grep -c 'outputControlHardwareOptions()' src/gui/DeviceController.cpp)
-if [ "$n_out" -ne 1 ] || ! grep -B2 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'if (anyWritePermission)' \
+if [ "$n_out" -ne 1 ] || ! grep 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'anyWritePermission ? outputControlHardwareOptions() : readOnlyHardwareOptions()' \
    || ! grep -B6 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'const bool anyWritePermission = anyDeviceWritePermission(userConfig);' \
-   || ! grep 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'guiWritePolicy(userConfig)'; then
+   || ! grep -q 'if (anyWritePermission) adoptSession(std::move(transport), guiWritePolicy(userConfig));' src/gui/DeviceController.cpp; then
     echo "FAIL GUI writes must be one gated outputControlHardwareOptions()+guiWritePolicy(confirmed fields) site"; fail=1
 else echo "ok   GUI writes: one site, only with a confirmed permission, policy = union of the confirmed fields"; fi
 # Phase 11A: guiWritePolicy = the union of the enabled permission groups (core/UserConfig devicePermissions(), all
@@ -125,7 +127,9 @@ else echo "FAIL output write policy scope changed"; fail=1; fi
 if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/daemon/main.cpp \
    && grep -q 'envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME")' src/daemon/main.cpp \
    && grep -q 'bool writes{false};' src/daemon/main.cpp \
-   && grep -q 'readOnlyHardwareOptions()), WritePolicy{}' src/daemon/main.cpp \
+   && grep -q 'writable ? outputControlHardwareOptions() : readOnlyHardwareOptions()' src/daemon/main.cpp \
+   && grep -q 'const bool writable = eff == Effective::Fallback || follow || anyDeviceWritePermission(watch.config);' src/daemon/main.cpp \
+   && grep -q 'WritePolicy p = writes ? outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false) : WritePolicy{};' src/daemon/main.cpp \
    && grep -q 'a.writes = a.ok && a.mode == Mode::Fallback;' src/daemon/main.cpp \
    && [ "$(grep -cE 'a\.writes *=' src/daemon/main.cpp)" -eq 1 ] \
    && ! grep -nE 'hardwareWriteOffsets|allowHardwareWrites|sendTrigger|commit\(' src/daemon/main.cpp src/desktop/*.cpp >/dev/null \
@@ -135,6 +139,18 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
     # so a headphone target is refused by the session in the daemon.
     echo "ok   openwitty-volumed: read-only mirror default, vendor writes only via --vendor-fallback (policy: speaker bytes, exact double opt-in), one verified write path"
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
+# Single device owner (2026-11-01): the service checks every client write itself - only the controller, the write guard,
+# on real hardware only bytes/triggers of the user's permissions (serviceClientPolicy = the window's policy + confirmed
+# fallback speaker bytes), compared with a fresh read.
+if grep -q 'policyNow = serviceClientPolicy(watch.config);' src/daemon/main.cpp \
+   && grep -A4 'WritePolicy serviceClientPolicy' src/core/OutputControl.cpp | grep -q 'WritePolicy p = guiWritePolicy(c);' \
+   && grep -A6 'WritePolicy serviceClientPolicy' src/core/OutputControl.cpp | grep -q 'outputWriteOffsets(Output::Speaker)' \
+   && grep -q 'if (!controller) return makeError(Errc::WritesDisabled' src/transport/DeviceService.cpp \
+   && grep -q 'checkWriteAllowed(id, data, ctx)' src/transport/DeviceService.cpp \
+   && grep -q 'auto now = t.read(MessageId::Settings);' src/transport/DeviceService.cpp \
+   && grep -q 'if (auto c = checkWrite(\*t, id, payload, controller); !c)' src/transport/DeviceService.cpp; then
+    echo "ok   service checks every client write (controller only, write guard, permitted bytes vs fresh read, permitted triggers)"
+else echo "FAIL service client write checks changed"; fail=1; fi
 # Phase 12C: the daemon's only other write scope is "follow active output" = byte 59, added by withFollowOutput()
 wfo=$(awk '/^WritePolicy withFollowOutput\(WritePolicy base\)/,/^}/' src/core/OutputControl.cpp)
 if [ -n "$wfo" ] && [ "$(printf '%s' "$wfo" | grep -c 'push_back')" -eq 2 ] \

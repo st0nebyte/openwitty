@@ -24,6 +24,7 @@
 #include "desktop/DeviceSampleRate.hpp"
 #endif
 #include "transport/UsbDiagnostics.hpp"
+#include "transport/DeviceService.hpp"
 #include "transport/UsbTransport.hpp"
 
 using namespace lewitt;
@@ -298,10 +299,14 @@ void DeviceWorker::connectUsb() {
     // Phase 10B: only the individually confirmed fields are writable (union of speaker 20-22, headphone 27-29,
     // LED brightness 37); nothing confirmed = the read-only transport options.
     const bool anyWritePermission = anyDeviceWritePermission(userConfig);
-    if (anyWritePermission)
-        adoptSession(std::make_unique<UsbTransport>(outputControlHardwareOptions()), guiWritePolicy(userConfig));
-    else
-        adoptSession(std::make_unique<UsbTransport>(readOnlyHardwareOptions()));
+    // Single device owner: through the background service when it runs (it holds the device; this window controls
+    // it through the service), otherwise directly as before.
+    auto direct = [anyWritePermission]() -> std::unique_ptr<IDeviceTransport> {
+        return std::make_unique<UsbTransport>(anyWritePermission ? outputControlHardwareOptions() : readOnlyHardwareOptions());
+    };
+    auto transport = std::make_unique<ServiceOrDirectTransport>(deviceServiceSocketPath(), ServiceRole::Controller, direct);
+    if (anyWritePermission) adoptSession(std::move(transport), guiWritePolicy(userConfig));
+    else adoptSession(std::move(transport));
     // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
     // independent of output control.
     desktopLinkWanted_ = userConfig.desktopVolumeSync == DesktopVolumeSync::Mirror;

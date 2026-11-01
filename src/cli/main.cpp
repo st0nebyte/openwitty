@@ -50,6 +50,7 @@
 #include "transport/MockTransport.hpp"
 #include "core/Authorization.hpp"
 #include "transport/ControlLease.hpp"
+#include "transport/DeviceService.hpp"
 #include "transport/UsbDiagnostics.hpp"
 #include "transport/UsbTransport.hpp"
 #include "lewitt/version.hpp"
@@ -203,7 +204,14 @@ int cmdRead(const ReadArgs& a) {
         o.interfaceNumber = a.interfaceNumber;
         if (a.autoInterface) o.interfaceStrategy = InterfaceStrategy::VendorControlAuto;
         o.allowDisruptive = envAuthorized("LEWITT_ALLOW_DISRUPTIVE");   // checked above too
-        t = std::make_unique<UsbTransport>(o);
+        // Default options: through the background service when it runs (it holds the device), else directly.
+        // Explicit low-level options (--method, --request, --interface N) always go to USB directly.
+        const bool defaults = a.autoInterface && a.method == AccessMethod::InterfaceRecipient && a.request == MemRequest::Uac2Mem;
+        if (defaults)
+            t = std::make_unique<ServiceOrDirectTransport>(deviceServiceSocketPath(), ServiceRole::Reader,
+                                                           [o] { return std::make_unique<UsbTransport>(o); });
+        else
+            t = std::make_unique<UsbTransport>(o);
     }
     if (auto s = t->open(); !s) { printError(s.error(), "open"); return exitCodeFor(s.error().code); }
     auto r = t->read(id);
@@ -364,7 +372,15 @@ int cmdWriteField(const FieldSpec& f, const WriteArgs& a) {
         o.request = MemRequest::Uac2Mem;
         o.interfaceNumber = a.interfaceNumber;
         o.allowWrites = a.execute;   // transport-level: no write ioctl is even attempted on a dry run
-        t = std::make_unique<UsbTransport>(o);
+        // Without --interface: through the background service when it runs. The service additionally checks the
+        // write against the OpenWitty permissions (Settings > Device control) and refuses it while a window controls
+        // the device.
+        if (a.interfaceNumber < 0)
+            t = std::make_unique<ServiceOrDirectTransport>(deviceServiceSocketPath(),
+                                                           a.execute ? ServiceRole::Controller : ServiceRole::Reader,
+                                                           [o] { return std::make_unique<UsbTransport>(o); });
+        else
+            t = std::make_unique<UsbTransport>(o);
     }
     pol.allowHardwareWrites = a.execute;           // session-level gate; irrelevant for mock
     for (std::size_t i = 0; i < f.length; ++i)    // core-level scope: exactly this field's bytes

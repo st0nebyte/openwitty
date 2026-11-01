@@ -59,6 +59,7 @@ QGuiApplication* app() {
     static QTemporaryDir* configHome = [] {
         auto* d = new QTemporaryDir();
         qputenv("XDG_CONFIG_HOME", d->path().toUtf8());
+        qputenv("LEWITT_NO_DEVICE_SERVICE", "1");   // never reach the developer's running OpenWitty service
         return d;
     }();
     (void)configHome;
