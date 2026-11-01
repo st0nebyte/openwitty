@@ -50,6 +50,7 @@
 #include "desktop/AudioSetupCheck.hpp"
 #include "core/OutputFollow.hpp"
 #include "desktop/DesktopVolumeLink.hpp"
+#include "desktop/PortNames.hpp"
 #include "transport/ControlLease.hpp"
 #include "transport/UsbTransport.hpp"
 
@@ -280,6 +281,7 @@ int main(int argc, char** argv) {
     OnceLog wait;
     std::string lastNotice;
     auto nextPoll = DesktopVolumeLink::Clock::now();
+    auto nextNames = DesktopVolumeLink::Clock::now();
     const std::string dir = ControlLease::currentSessionDirectory();
 
     auto release = [&] {
@@ -303,6 +305,13 @@ int main(int argc, char** argv) {
             } else if (follower) {
                 follower = std::make_unique<OutputFollower>(*session, followConfig(watch.config), PollPolicy{}, say);
             }
+        }
+        // Readable CONNECT 2 channel names in audio apps (display-only PipeWire metadata; set again after a replug or
+        // a PipeWire restart). From the user settings only, never in a dry run.
+        if (!a.explicitMode && eff != Effective::DryRun && watch.config.nameChannels &&
+            DesktopVolumeLink::Clock::now() >= nextNames) {
+            nextNames = DesktopVolumeLink::Clock::now() + std::chrono::seconds(10);
+            if (const int n = applyPortNames(); n > 0) say("channel names set in audio apps: " + std::to_string(n));
         }
         if (eff == Effective::Idle) {
             release();

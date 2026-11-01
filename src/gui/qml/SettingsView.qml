@@ -443,6 +443,12 @@ Rectangle {
                            "stale": "The separate inputs were set up for another CONNECT 2 input; switch off and on again.",
                            "unavailable": "The CONNECT 2 input is not present in the desktop audio right now."})[integration.splitSources]
                          + (integration.audioRestartNeeded ? " Takes effect after restarting desktop audio." : "") }
+            // Readable channel names (JACK pretty names) for the CONNECT 2 ports, display only
+            ToggleSwitch { objectName: "nameChannelsSwitch"; width: 310; label: "Name the CONNECT 2 channels in audio apps"
+                           checked: integration.nameChannels
+                           tip: "DAWs such as Ardour show 1 Microphone, 2 Instrument, 3/4 Loopback L/R and Output L/R "
+                              + "instead of capture_FL ... (labels only; nothing is rerouted)"
+                           onToggled: (b) => integration.setNameChannels(b) }
             // SR: allow 44.1 / 48 / 96 kHz in PipeWire (otherwise everything is resampled to 48 kHz)
             ToggleSwitch { objectName: "sampleRatesSwitch"; width: 310; label: "Allow 44.1 and 96 kHz for apps (experimental)"
                            checked: integration.extraSampleRates

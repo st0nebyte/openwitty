@@ -1,4 +1,5 @@
 #include "IntegrationSettings.hpp"
+#include "desktop/PortNames.hpp"
 
 #include <QClipboard>
 #include <QDir>
@@ -297,6 +298,34 @@ void IntegrationSettings::setFollowMoveFocus(bool on) {
     UserConfig next = cfg_;
     next.followMoveFocus = on;
     save(next);
+}
+
+namespace {
+// The window's command runner, in the shape the desktop helpers use.
+lewitt::CommandRunner commandRunner(const IntegrationSettings::Runner& r) {
+    return [r](const std::vector<std::string>& argv, std::string* out) {
+        if (argv.empty()) return -1;
+        QStringList args;
+        for (std::size_t i = 1; i < argv.size(); ++i) args << QString::fromStdString(argv[i]);
+        QString o;
+        const int rc = r(QString::fromStdString(argv[0]), args, &o);
+        if (out) *out = o.toStdString();
+        return rc;
+    };
+}
+}  // namespace
+
+void IntegrationSettings::setNameChannels(bool on) {
+    if (on == cfg_.nameChannels) return;
+    UserConfig next = cfg_;
+    next.nameChannels = on;
+    save(next);
+    if (on) lewitt::applyPortNames(commandRunner(runner_));
+    else lewitt::clearPortNames(commandRunner(runner_));
+}
+
+int IntegrationSettings::applyChannelNames() {
+    return cfg_.nameChannels ? lewitt::applyPortNames(commandRunner(runner_)) : 0;
 }
 
 QVariantMap IntegrationSettings::permissions() const {

@@ -228,6 +228,8 @@ The CONNECT 2 is a class-compliant USB audio device; DAWs need no OpenWitty code
 
 * **Channels:** capture 1 = microphone, 2 = instrument, 3/4 = loopback (computer playback) L/R; playback 1/2 = the
   stereo output that feeds speakers and headphones.
+  With "Name the CONNECT 2 channels in audio apps" (Desktop integration, on by default) DAWs show these names
+  instead of capture_FL/FR/RL/RR; the background service keeps them set.
 * **Backends:** Ardour's ALSA backend opens the device directly (desktop audio on the CONNECT 2 pauses meanwhile).
   With `pipewire-jack` instead of `jack2`, JACK applications share the device with the desktop and also see the
   separate inputs.

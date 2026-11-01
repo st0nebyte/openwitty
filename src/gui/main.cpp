@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
     engine.rootContext()->setContextProperty("integration", &integration);
     GuiPreferences prefs;                       // gui.conf: onboarding done, show tooltips (no device settings)
     engine.rootContext()->setContextProperty("prefs", &prefs);
+    QTimer::singleShot(1500, &integration, [&integration] { integration.applyChannelNames(); });
     PresetStore presetStore(&controller);       // ~/.local/share/openwitty/presets
     engine.rootContext()->setContextProperty("presets", &presetStore);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,

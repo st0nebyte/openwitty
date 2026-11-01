@@ -11,6 +11,9 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- Settings ▸ Desktop integration: "Name the CONNECT 2 channels in audio apps" (on by default): DAWs show
+  1 Microphone, 2 Instrument, 3/4 Loopback L/R and Output L/R instead of capture_FL … (JACK pretty names in
+  PipeWire's metadata, display only; the background service sets them again after a replug).
 - Settings ▸ Presets: save the current settings under a name and load them again (OpenWitty's own `.owpreset` JSON
   in `~/.local/share/openwitty/presets`; output levels only when chosen). Loading lists every change first, marks
   louder ones, skips settings without permission, and sends them one by one (mutes first, unmutes last, level

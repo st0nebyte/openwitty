@@ -101,7 +101,7 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
         const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control" ||
-                           key == "follow_both_on" || key == "follow_both_muted" || key == "follow_move_focus" || key == "button_follow" ||
+                           key == "follow_both_on" || key == "follow_both_muted" || key == "follow_move_focus" || key == "name_channels" || key == "button_follow" ||
                            isPermissionKey(key);
         if (!known) {
             r.warnings.push_back("unknown key '" + key + "' ignored");
@@ -126,10 +126,10 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
                 if (keyOk && (b == "1" || b == "2")) r.config.buttonFollow.push_back(k + ":" + b);
                 else r.warnings.push_back("button_follow: '" + item + "' is not <16 hex digits>:<1|2>, ignored");
             }
-        } else if (key == "follow_move_focus") {
+        } else if (key == "follow_move_focus" || key == "name_channels") {
             const int b = parseBool(value);
             if (b < 0) r.warnings.push_back(key + ": '" + value + "' is not true|false, using true");
-            r.config.followMoveFocus = b != 0;
+            (key == "name_channels" ? r.config.nameChannels : r.config.followMoveFocus) = b != 0;
         } else if (key == "follow_both_on" || key == "follow_both_muted") {
             const bool on = key == "follow_both_on";
             FollowPref& f = on ? r.config.followBothOn : r.config.followBothMuted;
@@ -162,6 +162,7 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         else if (key == "follow_both_on") r.config.followBothOn = FollowPref::Speakers;
         else if (key == "follow_both_muted") r.config.followBothMuted = FollowPref::Keep;
         else if (key == "follow_move_focus") r.config.followMoveFocus = true;
+        else if (key == "name_channels") r.config.nameChannels = true;
         else if (key == "button_follow") r.config.buttonFollow.clear();
         else flag(r.config, key) = false;
     }
@@ -195,7 +196,9 @@ std::string serializeUserConfig(const UserConfig& c) {
       << "follow_both_on = " << pref(c.followBothOn) << "\n"
       << "follow_both_muted = " << pref(c.followBothMuted) << "\n"
       << "# With follow_active_output: also move the touch-wheel focus to that output.\n"
-      << "follow_move_focus = " << (c.followMoveFocus ? "true" : "false") << "\n";
+      << "follow_move_focus = " << (c.followMoveFocus ? "true" : "false") << "\n"
+      << "# Readable channel names for the CONNECT 2 in audio apps (1 Microphone ... ; display only).\n"
+      << "name_channels = " << (c.nameChannels ? "true" : "false") << "\n";
     if (!c.buttonFollow.empty()) {
         o << "# Custom button \"switch outputs + follow volume\" per device (key = hash of the serial number).\n"
           << "button_follow = ";

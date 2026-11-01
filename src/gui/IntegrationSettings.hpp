@@ -27,6 +27,7 @@ class IntegrationSettings : public QObject {
     Q_PROPERTY(QString followBothOn READ followBothOn NOTIFY changed)
     Q_PROPERTY(QString followBothMuted READ followBothMuted NOTIFY changed)
     Q_PROPERTY(bool followMoveFocus READ followMoveFocus NOTIFY changed)
+    Q_PROPERTY(bool nameChannels READ nameChannels NOTIFY changed)
     // Phase 12D: device key -> native base function (1|2) of the extended custom-button modes.
     Q_PROPERTY(QVariantMap buttonFollow READ buttonFollow NOTIFY changed)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
@@ -80,6 +81,12 @@ public:
     Q_INVOKABLE void setFollowBothMuted(const QString& v);
     bool followMoveFocus() const { return cfg_.followMoveFocus; }
     Q_INVOKABLE void setFollowMoveFocus(bool on);
+    // Readable CONNECT 2 channel names in audio apps (display-only PipeWire metadata): on sets them now, off removes
+    // the ones OpenWitty set. The background service keeps them set while it runs.
+    bool nameChannels() const { return cfg_.nameChannels; }
+    Q_INVOKABLE void setNameChannels(bool on);
+    // Sets missing names now when the setting is on (window start, for when the service is not running).
+    Q_INVOKABLE int applyChannelNames();
     QVariantMap buttonFollow() const;
     // base 1|2 sets this device's extended mode (needs the GUI's confirmation); any other value removes it.
     Q_INVOKABLE void setButtonFollow(const QString& deviceKey, int base, bool confirmed);
