@@ -113,13 +113,15 @@ Window {
                 border.color: "#5a5a5a"
                 opacity: device.simulated ? 1 : 0.55
                 Text { x: 8; anchors.verticalCenter: parent.verticalCenter; color: "#f0f0f0"; font.pixelSize: 11
-                       text: device.values["sampleRate"] === undefined ? "Unknown"
-                             : (device.values["sampleRate"] / 1000).toString() + " kHz" }
+                       text: device.values["sampleRate"] !== undefined ? (device.values["sampleRate"] / 1000).toString() + " kHz"
+                             : device.values["sampleRate.source"] === "idle" ? "Idle" : "Unknown" }
                 Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter
                        color: "#777"; font.pixelSize: 9; text: "▴\n▾"; lineHeight: 0.75 }
                 MouseArea { anchors.fill: parent; enabled: device.simulated; onClicked: rateMenu.visible = !rateMenu.visible }
                 ToolTip_ { visible: rateMa.containsMouse; text: device.simulated ? "Simulated sample rate"
-                                                              : "Set by the audio system (not controlled here)" }
+                                                              : device.values["sampleRate.source"] === "idle"
+                                                                ? "No audio is playing or recording on the CONNECT 2; the rate is set when audio starts"
+                                                                : "Set by the audio system (not controlled here)" }
                 MouseArea { id: rateMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
             }
             ToggleButton { x: 686; y: 16; width: 21; height: 22; icon: "settings"

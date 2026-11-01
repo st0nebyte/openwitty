@@ -541,6 +541,7 @@ void DeviceWorker::refreshDeviceRate(bool force) {
     if (!force && (++ratePolls_ % 48) != 0) return;     // about once a second at the 48 Hz status cadence
     const auto r = readConnect2SampleRate(rateProcRoot_);
     deviceRate_ = r.hz;
+    deviceRateIdle_ = !r.hz && r.reason.rfind("no stream open", 0) == 0;
     session_->setSampleRateHint(deviceRate_.value_or(0));
 }
 
@@ -746,7 +747,8 @@ void DeviceWorker::publish() {
     if (sim && cs == ConnectionState::Connected) v["sampleRate"] = sampleRate_;
     else if (!sim && cs == ConnectionState::Connected && deviceRate_) v["sampleRate"] = *deviceRate_;
     else v["sampleRate"] = QVariant();                  // unknown: the UI shows "Unknown"
-    v["sampleRate.source"] = sim ? QString("simulated") : deviceRate_ ? QString("device") : QString("unknown");
+    v["sampleRate.source"] = sim ? QString("simulated") : deviceRate_ ? QString("device")
+                           : deviceRateIdle_ ? QString("idle") : QString("unknown");
     v["restarting"] = restarting_;
     // Phase 7A connection presentation. One state, derived only from facts the worker knows.
     if (cs == ConnectionState::Connected) { lostLink_ = false; intentionalDisconnect_ = false; }

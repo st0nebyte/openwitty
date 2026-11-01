@@ -85,6 +85,7 @@ private:
     bool refuseUnauthorized(const QString& key);
     void refreshDeviceRate(bool force);
     std::optional<unsigned> deviceRate_;
+    bool deviceRateIdle_{false};   // the CONNECT 2 sound card exists but no stream is open
     int ratePolls_{0};
 public:
     std::string rateProcRoot_{"/proc/asound"};   // tests point this at a fixture directory

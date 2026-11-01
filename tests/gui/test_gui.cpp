@@ -2359,6 +2359,27 @@ TEST(SampleRate10B, UnknownOnAnIdleOrMissingDeviceAndNeverTheSimulatedDefault) {
     EXPECT_TRUE(unknownShown);
 }
 
+// 2026-11-01 (owner): with the card present but no stream open the label says "Idle", not "Unknown".
+TEST(SampleRate10B, ACardWithoutAnOpenStreamIsShownAsIdle) {
+    app();
+    RealLike r{lewitt::WritePolicy{}};
+    const QString card = r.proc.path() + "/card3";
+    QDir().mkpath(card + "/pcm0p/sub0");
+    QFile id(card + "/usbid"); ASSERT_TRUE(id.open(QIODevice::WriteOnly)); id.write("29c2:0004\n"); id.close();
+    QFile hw(card + "/pcm0p/sub0/hw_params"); ASSERT_TRUE(hw.open(QIODevice::WriteOnly)); hw.write("closed\n"); hw.close();
+    r.c->refreshSampleRateForTesting();
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("sampleRate.source").toString() == "idle"; }));
+    EXPECT_FALSE(r.c->values().value("sampleRate").isValid());
+    EXPECT_EQ(r.c->values().value("dsp.state").toString(), "unknown") << "idle infers no rate";
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    bool idleShown = false;
+    for (QObject* o : root->findChildren<QObject*>())
+        if (o->property("text").toString() == "Idle") idleShown = true;
+    EXPECT_TRUE(idleShown);
+}
+
 TEST(SampleRate10B, AConfirmed96kHzMakesDenoiseAndCompUnavailable) {
     app();
     RealLike r{lewitt::WritePolicy{}};
