@@ -17,20 +17,9 @@ Window {
     readonly property string backendLabel: device.backend === "usb" ? "USB" : device.backend === "service" ? "USB via service" : device.backend
     readonly property bool live: device.connection === "Connected"
     readonly property bool interactive: live && device.writable
-    // Phase 10A: plain-language list of what the session may change on the real device (from can.<key>).
-    function authorizedSummary() {
-        var groups = [["speaker volume", "spk.volume"], ["speaker mute", "spk.mute"], ["headphone volume", "hp.volume"],
-                      ["headphone mute", "hp.mute"], ["LED brightness", "set.ledBrightness"], ["input gain/mute", "in1.gain"],
-                      ["input processing", "in1.highPass"], ["monitoring", "mon.mix"], ["LED colours/button", "set.customButton"],
-                      ["48 V", "in1.phantom"], ["output modes", "set.highVolume"], ["routing", "set.mixToSpeakers"], ["volume target (follow)", "set.volumeMapping"], ["autogain", "autogain1"]];
-        var out = [];
-        for (var i = 0; i < groups.length; ++i) if (device.values["can." + groups[i][1]] === true) out.push(groups[i][0]);
-        var other = 0;
-        for (var k in device.values)
-            if (k.indexOf("can.") === 0 && device.values[k] === true) other++;
-        if (other > out.length) out.push("other authorized controls");
-        return out.length ? out.join(", ") : "nothing";
-    }
+    // Debug mode (openwitty --debug): developer buttons in the status bar.
+    readonly property bool debug: typeof debugMode !== "undefined" && debugMode === true
+    readonly property bool writeLocked: device.values["write.locked"] === true
     readonly property string selectedChannel: device.values["selected.channel"] || "unknown"
     readonly property bool panicMuted: win.live && device.values["mute.allFour"] === true
     readonly property string settingsFreshness: device.values["fresh.settings"] || "unavailable"
@@ -200,7 +189,7 @@ Window {
                width: Math.max(0, (panicMuteIndicator.visible ? panicMuteIndicator.x : controls.x) - x - 10)
                elide: Text.ElideRight
                color: win.dataStale ? "#ffb4a8"
-                    : win.freshnessWarning.length ? Theme.warn
+                    : win.freshnessWarning.length || (win.uiState === "real-writable" && win.writeLocked) ? Theme.warn
                     : win.uiState === "simulated" ? Theme.sim
                     : win.uiState === "real-readonly" || win.uiState === "real-writable" ? "#9ec7ff"
                     : win.uiState === "error" || win.uiState === "connection-lost" ? Theme.bad : Theme.textDim
@@ -212,8 +201,11 @@ Window {
                      : win.uiState === "real-readonly"
                      ? "CONTROL LINK, READ-ONLY — " + (device.values["ui.device"] || "CONNECT 2")
                        + ". Audio and front-panel readiness not verified."
+                     : win.uiState === "real-writable" && win.writeLocked
+                     ? "Changes stopped: " + (device.values["write.lockReason"] || "a change was not confirmed by the device")
+                       + ". Check the device, then click Reconnect."
                      : win.uiState === "real-writable"
-                     ? "REAL DEVICE — can change: " + win.authorizedSummary() + ". All other controls are display-only."
+                     ? (device.values["ui.device"] || "CONNECT 2") + " connected (" + win.backendLabel + ")."
                      : win.uiState === "connecting"
                      ? (device.values["ui.detail"] === "Taking over from the OpenWitty background service"
                         ? "Connecting — taking over the CONNECT 2 from the OpenWitty background service…"
@@ -221,13 +213,15 @@ Window {
                      : win.uiState === "connection-lost"
                      ? "Connection to the device was lost — retrying when it reappears. " + win.uiError
                      : win.uiState === "error" ? "Cannot communicate with the device. " + win.uiError
-                     : "No device connected. Use “USB (read-only)” to look for a CONNECT 2." }
+                     : "No CONNECT 2 found. Plug it in; OpenWitty connects by itself (or click Connect)." }
         Text { id: panicMuteIndicator; objectName: "panicMuteIndicator"; visible: win.panicMuted; anchors.verticalCenter: parent.verticalCenter; anchors.right: controls.left
                anchors.rightMargin: 10; color: "#ff9a9a"; font.pixelSize: 10; font.bold: true
                text: "ALL MAIN CHANNELS MUTED" }
         Row { id: controls; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 6
-            ToggleButton { width: 90; height: 20; text: "Mock device"; onClicked: device.connectMock() }
-            ToggleButton { width: 100; height: 20; text: "USB (read-only)"; onClicked: device.connectUsb() }
+            ToggleButton { width: 90; height: 20; text: "Mock device"; visible: win.debug; onClicked: device.connectMock() }
+            ToggleButton { objectName: "connectButton"; width: 80; height: 20
+                           text: device.simulated ? "Real device" : win.writeLocked || win.live ? "Reconnect" : "Connect"
+                           onClicked: device.connectUsb() }
             ToggleButton { width: 52; height: 20; text: "Unplug"; visible: device.simulated; onClicked: device.simulateUnplug() }
             ToggleButton { width: 52; height: 20; text: "Replug"; visible: device.simulated; onClicked: device.simulateReplug() }
         }

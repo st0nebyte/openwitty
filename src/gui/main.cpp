@@ -26,26 +26,30 @@ int main(int argc, char** argv) {
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("openwitty"), QIcon(QStringLiteral(":/openwitty.png"))));
     QGuiApplication::setDesktopFileName(LEWITT_APP_DESKTOP_ID);   // Wayland app-id / icon matching
     QCommandLineParser p;
+    // Debug mode: hardware-test tools and experimental options in Settings > Debug, developer buttons in the status bar.
+    // The developer options below are listed in --help only together with --debug.
+    const bool debugAsked = app.arguments().contains("--debug");
+    QCommandLineOption debug("debug", "Debug mode: show Settings > Debug (hardware check, experimental options) and the "
+                                      "developer buttons. Not needed for normal use.");
+    p.addOption(debug);
     QCommandLineOption mock("mock", "Start with the simulated device.");
-    p.addOption(mock);
     QCommandLineOption legacyPolling("diagnostic-legacy-polling",
         "DIAGNOSTIC: use the former read-only 2 Hz settings / 4 Hz status cadence (default 16/48 Hz).");
-    p.addOption(legacyPolling);
     QCommandLineOption shot("screenshot", "Save a screenshot to <file> and exit.", "file");
-    p.addOption(shot);
     QCommandLineOption sizeOpt("size", "Window size WxH (for screenshots).", "WxH");
-    p.addOption(sizeOpt);
-    QCommandLineOption show("show", "Open a page at start: settings | settings-<section> (audio, leds, button, presets, device, desktop) | wizard | onboarding.", "page");
-    p.addOption(show);
+    QCommandLineOption show("show", "Open a page at start: settings | settings-<section> (audio, leds, button, presets, desktop, debug) | wizard | onboarding.", "page");
     QCommandLineOption quitAfterSeconds("quit-after-seconds",
         "DIAGNOSTIC: quit normally after 1–1800 seconds.", "seconds");
-    p.addOption(quitAfterSeconds);
     QCommandLineOption hwCheck("hw-check",
         "DIAGNOSTIC, for owner-approved hardware tests: record a settings baseline at connect and report, on stderr and on "
-        "Settings > Device control, which settings changed after each write or on request. Read-only; uses this "
+        "Settings > Debug, which settings changed after each write or on request (implies --debug). Read-only; uses this "
         "window's own device connection; prints field names and the old/new values of changed bytes only, no device "
         "identifiers.");
-    p.addOption(hwCheck);
+    if (!debugAsked)
+        for (QCommandLineOption* o : {&mock, &legacyPolling, &shot, &sizeOpt, &show, &quitAfterSeconds, &hwCheck})
+            o->setFlags(QCommandLineOption::HiddenFromHelp);
+    for (const QCommandLineOption* o : {&mock, &legacyPolling, &shot, &sizeOpt, &show, &quitAfterSeconds, &hwCheck})
+        p.addOption(*o);
     p.setApplicationDescription(QStringLiteral(LEWITT_NOTICE));
     p.addHelpOption();
     p.addVersionOption();
@@ -99,6 +103,7 @@ int main(int argc, char** argv) {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("device", &controller);
     engine.rootContext()->setContextProperty("integration", &integration);
+    engine.rootContext()->setContextProperty("debugMode", p.isSet(debug) || p.isSet(hwCheck));
     GuiPreferences prefs;                       // gui.conf: onboarding done, show tooltips (no device settings)
     engine.rootContext()->setContextProperty("prefs", &prefs);
     QTimer::singleShot(1500, &integration, [&integration] { integration.applyChannelNames(); });
@@ -117,7 +122,7 @@ int main(int argc, char** argv) {
         if (engine.rootObjects().isEmpty() || page.isEmpty()) return;
         QObject* root = engine.rootObjects().first();
         if (page == "settings") root->setProperty("showSettings", true);
-        if (page.startsWith("settings-")) {   // settings-<section>: audio, leds, button, presets, device, desktop
+        if (page.startsWith("settings-")) {   // settings-<section>: audio, leds, button, presets, desktop, debug
             root->setProperty("showSettings", true);
             if (auto* sv = root->findChild<QObject*>("settingsView")) sv->setProperty("open", page.mid(9));
         }

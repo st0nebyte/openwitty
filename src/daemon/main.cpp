@@ -145,7 +145,7 @@ struct OnceLog {
 };
 
 // The device transport is shared between the service's own session and its socket server (single device owner).
-// `writable`: the transport allows writes at all (some permission, the fallback or follow is on); what may be written
+// `writable`: the transport allows writes at all (clients can connect, or the fallback or follow is on); what may be written
 // is decided by the session's policy (the service's own writes) and the server's policy (clients).
 std::unique_ptr<DeviceSession> makeSession(bool writes, bool follow, bool writable,
                                           std::shared_ptr<IDeviceTransport>& shared) {
@@ -280,11 +280,9 @@ int main(int argc, char** argv) {
     std::unique_ptr<DeviceSession> session;
     std::shared_ptr<IDeviceTransport> shared;
     // Single device owner: the window and the CLI use the device through this socket (config-driven service only).
-    std::mutex policyM;
-    WritePolicy policyNow = serviceClientPolicy(watch.config);
     std::unique_ptr<DeviceServer> server;
     if (!a.explicitMode) {
-        server = std::make_unique<DeviceServer>([&] { std::lock_guard lk(policyM); return policyNow; }, say);
+        server = std::make_unique<DeviceServer>([] { return serviceClientPolicy(); }, say);
         if (auto s = server->start(deviceServiceSocketPath()); !s) {
             say("device sharing for the window and CLI: off (" + s.error().message + ")");
             server.reset();
@@ -318,13 +316,9 @@ int main(int argc, char** argv) {
 
     while (!gStop) {
         if (!a.explicitMode && watch.poll()) {
-            {
-                std::lock_guard lk(policyM);
-                policyNow = serviceClientPolicy(watch.config);
-            }
             const Effective e = fromConfig(watch.config);
             const bool f = !a.explicitMode && e != Effective::DryRun && followWritesWanted(watch.config);
-            const bool wantWritable = e == Effective::Fallback || f || anyDeviceWritePermission(watch.config);
+            const bool wantWritable = e == Effective::Fallback || f || server != nullptr;
             if (e != eff || f != follow || (session && wantWritable != openWritable)) {
                 say(std::string("settings changed: ") + describe(e) + (f ? " + follow active output" : ""));
                 release();                    // the next start is read-only again, with the new mode
@@ -360,7 +354,7 @@ int main(int argc, char** argv) {
         }
         if (!session || session->needsReconnect()) {
             link.reset();
-            const bool writable = eff == Effective::Fallback || follow || anyDeviceWritePermission(watch.config);
+            const bool writable = eff == Effective::Fallback || follow || server != nullptr;   // clients control the device
             session = makeSession(eff == Effective::Fallback, follow, writable, shared);
             openWritable = writable;
             if (auto s = session->connect(); !s) {

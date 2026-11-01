@@ -11,22 +11,30 @@ Tested with **one LEWITT CONNECT 2 on one system**: CachyOS, Linux 7.3.0, KDE Pl
 PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
 
 ### Added
+- **Product mode:** no more permission switches. Every setting verified on the real CONNECT 2 works from the window
+  right away; Settings ▸ Device control is gone (its keys in `openwitty.conf` are ignored). Safety stays built in:
+  only known settings bytes are written, every write is read back, large increases go in verified steps, and 48 V,
+  the louder output modes and the routing changes ask once. A stopped write shows in the status bar with a
+  **Reconnect** button.
+- **Debug mode** (`openwitty --debug`, also implied by `--hw-check`): Settings ▸ Debug (hardware check, last device
+  change) and the experimental options (vendor fallback, 44.1/96 kHz); the developer start options appear in
+  `--help` only together with `--debug`. Removed the disabled placeholders (firmware update, factory reset buttons).
 - One program owns the CONNECT 2: while the background service runs, the window and `openwitty-cli` use the device
   through the service's private socket (no more hand-over; CLI reads work while the window is open). The service
-  checks every write against the user's permissions. Without the service, clients open the device directly.
+  checks every write against the window's policy. Without the service, clients open the device directly.
 - Settings ▸ Desktop integration: "Name the CONNECT 2 channels in audio apps" (on by default): DAWs show
   1 Microphone, 2 Instrument, 3/4 Loopback L/R and Output L/R instead of capture_FL … (JACK pretty names in
   PipeWire's metadata, display only; the background service sets them again after a replug).
 - Settings ▸ Presets: save the current settings under a name and load them again (OpenWitty's own `.owpreset` JSON
   in `~/.local/share/openwitty/presets`; output levels only when chosen). Loading lists every change first, marks
-  louder ones, skips settings without permission, and sends them one by one (mutes first, unmutes last, level
+  louder ones, skips settings OpenWitty cannot change, and sends them one by one (mutes first, unmutes last, level
   increases in verified steps).
 - Settings: the CONNECT 2 firmware version is shown as its USB revision (e.g. 1.21), read from sysfs.
 - Denoise: switching on reuses the stored noise measurement (dialog only when none exists); right-click measures again; the meter line shows only while Denoise is on.
 - Custom button: "toggle mute (+ mic) / speakers + follow volume" extended modes, remembered per device (anonymous key); "Follow active output" is then on and greyed out with a note.
 - Follow active output also moves the touch-wheel focus to that output (can be switched off).
 - Settings ▸ Audio: "Follow active output" - the system volume keys control the output you can hear; choices for "both on" and "both muted" (Phase 12C, also in the background service).
-- Settings ▸ Audio: "Map native volume controls to: None / Speakers / Headphones" (byte 59, *Routing* permission; Headphones asks first).
+- Settings ▸ Audio: "Map native volume controls to: None / Speakers / Headphones" (byte 59; Headphones asks first).
 - Settings ▸ Desktop integration: "Allow 44.1 and 96 kHz for apps" (PipeWire allowed rates; shows the live value).
 - Input meters: a blue line marks the noise floor from the last Denoise measurement (bytes 8/17, hover for the value).
 - Settings ▸ Audio: "Input/playback mix applies to speakers" and "Mobile streaming mode" under a new *Routing*

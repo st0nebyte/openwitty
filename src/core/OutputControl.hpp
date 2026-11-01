@@ -2,6 +2,7 @@
 // Qt-free; shared by the GUI, the CLI and openwitty-volumed so the safety rules cannot drift apart.
 #pragma once
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "core/DeviceSession.hpp"
@@ -28,18 +29,20 @@ std::vector<std::size_t> outputWriteOffsets(Output o);
 WritePolicy outputWritePolicy(bool speaker, bool headphone);
 // Phase 12C: `base` plus byte 59 (native volume mapping) and 56 (touch focus) for "follow active output"; nothing else.
 WritePolicy withFollowOutput(WritePolicy base);
-// Phase 10B: the GUI's hardware write policy - exactly the union of the individually confirmed permissions:
-// speaker volume+mute (bytes 20-22), headphone volume+mute (27-29), LED brightness (37). No triggers, no routing
-// or persistent changes. All false = the read-only default (no hardware writes at all).
+// A write policy for exactly the given control groups (controlGroups(); unknown names add nothing): the union of their
+// bytes and triggers, routing changes only with "routing". Never persistent changes, never a byte outside the groups.
+WritePolicy groupsWritePolicy(const std::vector<std::string>& groups);
+// Scoped policy for tests: speaker volume+mute (bytes 20-22), headphone volume+mute (27-29), LED brightness (37).
 WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness);
-// Phase 11A: the same for every permission group in UserConfig (devicePermissions()): exactly the union of the enabled
-// groups' bytes; triggers only with the measurement permission (measurement session + autogain words). Never routing,
-// never persistent changes, never mix-to-speakers (byte 23, value set unknown) or the streaming-mode bytes.
-WritePolicy guiWritePolicy(const struct UserConfig& c);
-// Single device owner: what the background service lets its clients (window, CLI) write - exactly the window's policy,
-// plus the speaker volume/mute bytes when the user confirmed the vendor fallback.
-WritePolicy serviceClientPolicy(const struct UserConfig& c);
-// The bytes and triggers of one permission (empty for an unknown name).
+// Every control group verified on the real CONNECT 2 (2026-10-26..11-01): speaker, headphone, ledBrightness, inputs,
+// processing, monitoring, appearance, phantom, outputModes, routing, followOutput, measurements.
+const std::vector<std::string>& controlGroups();
+// The window's policy (product mode, no permission switches): all control groups. Everything else - unknown bytes,
+// persistent changes, firmware update, factory reset, the device-restarting macOS streaming mode - stays refused.
+WritePolicy appWritePolicy();
+// Single device owner: what the background service lets its clients (window, CLI) write - the window's policy.
+WritePolicy serviceClientPolicy();
+// The bytes and triggers of one control group (empty for an unknown name).
 std::vector<std::size_t> permissionOffsets(const std::string& name);
 std::vector<Trigger> permissionTriggers(const std::string& name);
 

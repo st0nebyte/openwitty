@@ -328,34 +328,9 @@ int IntegrationSettings::applyChannelNames() {
     return cfg_.nameChannels ? lewitt::applyPortNames(commandRunner(runner_)) : 0;
 }
 
-QVariantMap IntegrationSettings::permissions() const {
-    QVariantMap m;
-    for (const auto& p : lewitt::devicePermissions()) m[QString::fromUtf8(p.name)] = cfg_.*(p.field);
-    return m;
-}
-
-QString IntegrationSettings::permissionDescription(const QString& name) const {
-    const auto* p = lewitt::findDevicePermission(name.toStdString());
-    return p ? QString::fromUtf8(p->description) : QString();
-}
-
-void IntegrationSettings::setPermission(const QString& name, bool on, bool confirmed) {
-    const auto* p = lewitt::findDevicePermission(name.toStdString());
-    if (!p) return;
-    if (on && !confirmed) return;
+void IntegrationSettings::setFollowActiveOutput(bool on) {
     UserConfig next = cfg_;
-    next.*(p->field) = on;
-    if (on && (name == "speaker" || name == "headphone")) next.legacyOutputControlPending = false;   // reconfirmed
-    save(next);
-}
-
-void IntegrationSettings::setSpeakerControl(bool on, bool confirmed) { setPermission("speaker", on, confirmed); }
-void IntegrationSettings::setHeadphoneControl(bool on, bool confirmed) { setPermission("headphone", on, confirmed); }
-void IntegrationSettings::setLedBrightnessControl(bool on, bool confirmed) { setPermission("ledBrightness", on, confirmed); }
-
-void IntegrationSettings::dismissLegacyOutputControl() {
-    UserConfig next = cfg_;
-    next.legacyOutputControlPending = false;
+    next.followActiveOutput = on;
     save(next);
 }
 

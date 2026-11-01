@@ -261,8 +261,8 @@ disables and stops it.
 While it runs, the service is the **only program that talks to the CONNECT 2**: the window and `openwitty-cli` reach
 the device through its private socket (`$XDG_RUNTIME_DIR/openwitty/device.sock`, this user only). The window takes
 control there (the service pauses its own work until the window closes); `openwitty-cli read …` works at the same
-time. The service checks every write again against your permissions (Settings ▸ Device control); CLI writes through
-the service therefore need the matching permission too. Without the service everything opens the device directly, as
+time. The service checks every write again: only the controlling client may write, and only the settings OpenWitty's
+window may change. Without the service everything opens the device directly, as
 before. Command line:
 
 ```sh
@@ -293,12 +293,12 @@ works the same without it. Tested offscreen; on KDE Plasma it uses the standard 
 **"Reset desktop integration"** turns everything off again, disables the service and removes the tray login entry. The settings live in
 `~/.config/openwitty/openwitty.conf`; deleting that file restores the defaults.
 
-One option on that page writes the device and needs confirmation: the *vendor fallback* (experimental, not
-validated on hardware; only for a device that ignores the desktop volume). The switches that let OpenWitty's own
-controls write the device are on **Settings → Device control** (speaker, headphone, LED brightness, input gain/mute,
-input processing, monitoring, LED colours/custom button, 48 V, output modes, autogain), each off by default and each
-confirmed separately. A settings file from an older OpenWitty with
-`output_control = true` grants nothing any more: the page asks you to turn on the controls you want again.
+OpenWitty's own controls need no permission switches: every setting that was verified on the real CONNECT 2 can be
+changed from the window, every change is read back, and switching on 48 V, the louder output modes, mix to speakers,
+mobile streaming or headphone volume keys asks once. Two experimental options are shown only in **debug mode**
+(`openwitty --debug`): the *vendor fallback* (writes the device; only for a device that ignores the desktop volume;
+not validated on hardware) and "Allow 44.1 and 96 kHz for apps". Permission keys from older OpenWitty versions in
+`openwitty.conf` are ignored.
 
 ## Uninstall
 

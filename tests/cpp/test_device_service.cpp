@@ -6,7 +6,6 @@
 
 #include "FakeHardware.hpp"
 #include "core/OutputControl.hpp"
-#include "core/UserConfig.hpp"
 #include "transport/DeviceService.hpp"
 #include "transport/MockTransport.hpp"
 #include "transport/SerializedTransport.hpp"
@@ -87,9 +86,7 @@ TEST(DeviceService, OnlyOneControllerAtATimeAndTheServiceKnowsIt) {
 
 TEST(DeviceService, OnRealHardwareTheServiceAllowsOnlyPermittedBytesAndTriggers) {
     Service s(/*real=*/true);
-    UserConfig cfg;
-    cfg.ledBrightnessControl = true;
-    s.policy = guiWritePolicy(cfg);
+    s.policy = groupsWritePolicy({"ledBrightness"});
     ServiceTransport c(s.dir.sock(), ServiceRole::Controller);
     ASSERT_TRUE(c.open().ok());
     const auto before = s.mock->settingsBytes();
@@ -102,13 +99,12 @@ TEST(DeviceService, OnRealHardwareTheServiceAllowsOnlyPermittedBytesAndTriggers)
     EXPECT_EQ(s.mock->settingsBytes()[settings_off::kMute[0]], before[settings_off::kMute[0]]) << "nothing sent";
     Bytes trig(0x40, 0);
     trig[0] = static_cast<std::uint8_t>(Trigger::AutoGainMicrophone);
-    EXPECT_FALSE(c.write(MessageId::Triggers, trig).ok()) << "no measurement permission";
-    cfg.measurementControl = true;
-    s.policy = guiWritePolicy(cfg);
+    EXPECT_FALSE(c.write(MessageId::Triggers, trig).ok()) << "measurements not in the policy";
+    s.policy = groupsWritePolicy({"ledBrightness", "measurements"});
     EXPECT_TRUE(c.write(MessageId::Triggers, trig).ok());
     s.policy = WritePolicy{};
     EXPECT_FALSE(c.write(MessageId::Settings, settingsWith(*s.mock, settings_off::kLedBrightness, 43)).ok())
-        << "permissions are read at every write";
+        << "the policy is read at every write";
 }
 
 TEST(DeviceService, WithoutTheServiceTheClientOpensTheDeviceDirectly) {

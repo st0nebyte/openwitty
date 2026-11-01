@@ -1001,24 +1001,20 @@ TEST(Integration, DefaultsAreOffAndNothingIsRunOnStartup) {
     auto s = makeSettings(calls);
     EXPECT_FALSE(s->desktopSync());
     EXPECT_FALSE(s->vendorFallback());
-    EXPECT_FALSE(s->speakerControl());
-    EXPECT_FALSE(s->headphoneControl());
-    EXPECT_FALSE(s->ledBrightnessControl());
+    EXPECT_FALSE(s->followActiveOutput());
     EXPECT_EQ(s->serviceState(), "disabled");
     for (const auto& c : calls.log) EXPECT_TRUE(c.contains(" show ")) << c.toStdString();   // only a status query
 }
 
-TEST(Integration, DeviceWritingOptionsNeedConfirmationAndFallbackNeedsSync) {
+TEST(Integration, FallbackNeedsConfirmationAndSync) {
     app();
     ASSERT_TRUE(lewitt::saveUserConfig({}, lewitt::userConfigPath()).ok());
     Calls calls;
     auto s = makeSettings(calls);
     int applied = 0;
     QObject::connect(s.get(), &IntegrationSettings::configApplied, [&] { ++applied; });
-    s->setSpeakerControl(true, /*confirmed=*/false);
-    EXPECT_FALSE(onDisk().speakerControl);
-    s->setSpeakerControl(true, true);
-    EXPECT_TRUE(onDisk().speakerControl);
+    s->setFollowActiveOutput(true);                       // a plain feature switch: no confirmation
+    EXPECT_TRUE(onDisk().followActiveOutput);
     s->setVendorFallback(true, true);                     // sync is off: refused
     EXPECT_FALSE(onDisk().vendorFallback);
     s->setDesktopSync(true);
@@ -1029,7 +1025,7 @@ TEST(Integration, DeviceWritingOptionsNeedConfirmationAndFallbackNeedsSync) {
     EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
     s->setDesktopSync(false);                              // turning sync off also turns the fallback off
     EXPECT_FALSE(onDisk().vendorFallback);
-    EXPECT_TRUE(onDisk().speakerControl);                  // separate setting, untouched
+    EXPECT_TRUE(onDisk().followActiveOutput);              // separate setting, untouched
     EXPECT_EQ(applied, 4);
     for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable")) << c.toStdString();   // never starts the service
 }
@@ -1300,9 +1296,7 @@ TEST(GuiPermissions, SpeakerHeadphoneControlEnablesOnlyTheFourOutputControls) {
     ASSERT_TRUE(root);
     auto* banner = root->findChild<QObject*>("connectionBannerText");
     ASSERT_TRUE(banner);
-    EXPECT_EQ(banner->property("text").toString(),
-              "REAL DEVICE — can change: speaker volume, speaker mute, headphone volume, headphone mute. "
-              "All other controls are display-only.");
+    EXPECT_TRUE(banner->property("text").toString().contains(" connected (")) << banner->property("text").toString().toStdString();
     EXPECT_TRUE(enabledOf(root.get(), "fader_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "mute_spk"));
     EXPECT_TRUE(enabledOf(root.get(), "fader_hp"));
@@ -1310,6 +1304,27 @@ TEST(GuiPermissions, SpeakerHeadphoneControlEnablesOnlyTheFourOutputControls) {
     for (const char* n : {"mute_loop", "gainKnob1", "gainKnob2", "phantomButton1", "autogainButton1", "inputMute1",
                           "dimButton", "monitorMixKnob", "autosetupButton", "gainLockSwitch", "ledBrightnessFader"})
         EXPECT_FALSE(enabledOf(root.get(), n)) << n;
+}
+
+// Product mode (2026-11-01): the window's own policy enables every verified control, but never the device restart.
+TEST(GuiPermissions, TheAppPolicyEnablesEveryVerifiedControl) {
+    app();
+    RealLike r(lewitt::appWritePolicy());
+    for (const char* k : {"spk.volume", "spk.mute", "hp.volume", "hp.mute", "in1.gain", "in1.mute", "in1.phantom",
+                          "in1.highPass", "in2.preamp", "in1.denoise", "loop.mute", "mon.mix", "mon.mic", "out.dim",
+                          "out.mono", "set.ledBrightness", "set.customButton", "set.highVolume", "set.led.icons",
+                          "set.mixToSpeakers", "set.mobileStreaming", "set.volumeMapping", "autogain1", "autosetup"})
+        EXPECT_TRUE(r.can(k)) << k;
+    EXPECT_FALSE(r.can("set.macosStreaming"));
+    QQmlEngine engine;
+    auto root = loadMain(*r.c, engine);
+    ASSERT_TRUE(root);
+    for (const char* n : {"fader_spk", "mute_spk", "gainKnob1", "phantomButton1", "inputMute1", "dimButton",
+                          "monitorMixKnob", "autosetupButton"})
+        EXPECT_TRUE(enabledOf(root.get(), n)) << n;
+    auto* banner = root->findChild<QObject*>("connectionBannerText");
+    ASSERT_TRUE(banner);
+    EXPECT_FALSE(banner->property("text").toString().contains("display-only"));
 }
 
 TEST(GuiPermissions, ARefusedChangeIsNotShownAsAppliedAndNothingIsSent) {
@@ -1386,92 +1401,62 @@ std::vector<std::size_t> changedOffsets(const lewitt::Bytes& a, const lewitt::By
 }
 }  // namespace
 
-TEST(Permissions10B, EachPermissionIsIndependentAndUnrelatedSettingsArePreserved) {
+TEST(ProductMode, AnOldPermissionFileKeepsUnrelatedSettingsAndLosesThePermissionKeysAtTheNextSave) {
     app();
-    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nvendor_fallback = false\n");
+    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nspeaker_control = true\nled_brightness_control = true\n"
+                    "routing_control = false\noutput_control = true\n");
     Calls calls;
     auto s = makeSettings(calls);
-    s->setLedBrightnessControl(true, true);
-    EXPECT_TRUE(onDisk().ledBrightnessControl);
-    EXPECT_FALSE(onDisk().speakerControl);
-    EXPECT_FALSE(onDisk().headphoneControl);
-    s->setHeadphoneControl(true, true);
-    s->setSpeakerControl(true, false);                      // not confirmed: refused
-    EXPECT_FALSE(onDisk().speakerControl);
-    EXPECT_TRUE(onDisk().headphoneControl);
-    s->setLedBrightnessControl(false, false);               // turning off needs no confirmation
-    EXPECT_FALSE(onDisk().ledBrightnessControl);
-    EXPECT_TRUE(onDisk().headphoneControl);                 // the others stay
+    EXPECT_TRUE(s->desktopSync());
+    EXPECT_TRUE(s->configWarnings().isEmpty());              // obsolete keys are not reported as unknown
+    s->setFollowActiveOutput(true);
+    QFile f(QString::fromStdString(lewitt::userConfigPath()));
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(f.readAll());
+    for (const char* k : {"speaker_control", "led_brightness_control", "routing_control", "output_control"})
+        EXPECT_FALSE(text.contains(k)) << k;
+    EXPECT_TRUE(text.contains("follow_active_output = true"));
     EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
-    EXPECT_FALSE(onDisk().vendorFallback);
-    for (const auto& c : calls.log) EXPECT_FALSE(c.contains("enable") || c.contains("disable")) << c.toStdString();
 }
 
-TEST(Permissions10B, LegacyOutputControlAsksForReconfirmationAndGrantsNothing) {
-    app();
-    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nvendor_fallback = false\noutput_control = true\n");
-    Calls calls;
-    auto s = makeSettings(calls);
-    EXPECT_TRUE(s->legacyOutputControlPending());
-    EXPECT_FALSE(s->speakerControl());
-    EXPECT_FALSE(s->headphoneControl());
-    s->setLedBrightnessControl(true, true);                 // an unrelated permission keeps the notice
-    EXPECT_TRUE(onDisk().legacyOutputControlPending);
-    s->setHeadphoneControl(true, true);                     // reconfirming an output permission ends it
-    EXPECT_FALSE(onDisk().legacyOutputControlPending);
-    EXPECT_FALSE(onDisk().speakerControl);                  // only what was reconfirmed
-    EXPECT_EQ(onDisk().desktopVolumeSync, lewitt::DesktopVolumeSync::Mirror);
-    writeConfigText("output_control = true\n");
-    auto t = makeSettings(calls);
-    t->dismissLegacyOutputControl();
-    EXPECT_FALSE(onDisk().legacyOutputControlPending);
-    EXPECT_FALSE(onDisk().speakerControl || onDisk().headphoneControl || onDisk().ledBrightnessControl);
-}
-
-TEST(Permissions10B, ResetTurnsEveryWritePermissionOff) {
-    app();
-    writeConfigText("speaker_control = true\nheadphone_control = true\nled_brightness_control = true\noutput_control = true\n");
-    Calls calls;
-    auto s = makeSettings(calls);
-    EXPECT_TRUE(s->resetToDefaults());
-    EXPECT_EQ(onDisk(), lewitt::UserConfig{});
-}
-
-TEST(Permissions10B, ConfirmationDialogCancelGrantsNothingEnableGrantsOnlyThatField) {
+TEST(ProductMode, SettingsShowTheDebugSectionOnlyInDebugMode) {
     app();
     writeConfigText("[openwitty]\n");
     Calls calls;
     auto s = makeSettings(calls);
-    DeviceController c;
-    QQmlEngine engine;
-    engine.rootContext()->setContextProperty("device", &c);
-    engine.rootContext()->setContextProperty("integration", s.get());
-    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
-    std::unique_ptr<QObject> root(comp.create());
-    ASSERT_TRUE(root);
-    root->setProperty("showSettings", true);                 // Settings > Desktop integration
-    QObject* sv = root->findChild<QObject*>("settingsView");
-    ASSERT_TRUE(sv);
-    sv->setProperty("open", "device");                        // Settings > Device control
-    QCoreApplication::processEvents();
-    QObject* sw = root->findChild<QObject*>("ledControlSwitch");
-    QObject* dialog = root->findChild<QObject*>("confirmWriteDialog");
-    QObject* cancel = root->findChild<QObject*>("confirmWriteCancel");
-    QObject* enable = root->findChild<QObject*>("confirmWriteEnable");
-    ASSERT_TRUE(sw && dialog && cancel && enable);
-    QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
-    EXPECT_TRUE(dialog->property("visible").toBool());
-    EXPECT_EQ(dialog->property("field").toString(), "led");
-    QMetaObject::invokeMethod(cancel, "clicked");
-    EXPECT_FALSE(dialog->property("visible").toBool());
-    EXPECT_FALSE(s->ledBrightnessControl());
-    EXPECT_FALSE(sw->property("checked").toBool());        // the switch shows the real (unchanged) state
-    QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
-    QMetaObject::invokeMethod(enable, "clicked");
-    EXPECT_TRUE(s->ledBrightnessControl());
-    EXPECT_FALSE(s->speakerControl());
-    EXPECT_FALSE(s->headphoneControl());
-    EXPECT_TRUE(sw->property("checked").toBool());
+    for (bool debug : {false, true}) {
+        DeviceController c;
+        QQmlEngine engine;
+        engine.rootContext()->setContextProperty("device", &c);
+        engine.rootContext()->setContextProperty("integration", s.get());
+        engine.rootContext()->setContextProperty("debugMode", debug);
+        QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
+        for (const auto& e : comp.errors()) ADD_FAILURE() << e.toString().toStdString();
+        std::unique_ptr<QObject> root(comp.create());
+        ASSERT_TRUE(root);
+        root->setProperty("showSettings", true);
+        QCoreApplication::processEvents();
+        auto* rootItem = qobject_cast<QQuickItem*>(root->findChild<QObject*>("settingsView"));
+        ASSERT_TRUE(rootItem);
+        auto find = [&](const QString& n) -> QQuickItem* {
+            std::function<QQuickItem*(QQuickItem*)> rec = [&](QQuickItem* i) -> QQuickItem* {
+                if (!i) return nullptr;
+                if (i->objectName() == n) return i;
+                for (QQuickItem* ch : i->childItems())
+                    if (QQuickItem* f = rec(ch)) return f;
+                return nullptr;
+            };
+            return rec(rootItem);
+        };
+        EXPECT_EQ(find("sectionHeader_debug") != nullptr, debug) << debug;
+        EXPECT_EQ(find("sectionHeader_device"), nullptr) << "no Device control section any more";
+        EXPECT_EQ(find("speakerControlSwitch"), nullptr);
+        rootItem->setProperty("open", "desktop");
+        QCoreApplication::processEvents();
+        QQuickItem* fb = find("vendorFallbackSwitch");
+        ASSERT_TRUE(fb);
+        EXPECT_EQ(fb->isVisible(), debug) << "the experimental fallback is only shown in debug mode";
+    }
 }
 
 TEST(Permissions10B, EveryCombinationAuthorizesExactlyItsControls) {
@@ -1954,7 +1939,7 @@ TEST(HwCheck10B2, ReplacingTheBaselineNeedsTheExplicitTwoStepActionAndIsReported
     QQmlEngine engine;
     auto root = loadMain(*r.c, engine);
     root->setProperty("showSettings", true);
-    root->findChild<QObject*>("settingsView")->setProperty("open", "device");
+    root->findChild<QObject*>("settingsView")->setProperty("open", "debug");
     QCoreApplication::processEvents();
     QObject* button = root->findChild<QObject*>("hwCheckBaselineButton");
     QObject* confirm = root->findChild<QObject*>("hwCheckReplaceConfirm");
@@ -2117,11 +2102,7 @@ TEST(Controls11A, SimulatedControlsStayLive) {
 
 // ---- Phase 11A: grouped permissions on (fake) real hardware ---------------------------------------------------------
 namespace {
-lewitt::UserConfig withPermission(const char* name) {
-    lewitt::UserConfig c;
-    c.*(lewitt::findDevicePermission(name)->field) = true;
-    return c;
-}
+lewitt::WritePolicy withPermission(const char* name) { return lewitt::groupsWritePolicy({name}); }
 // Repeater delegates have no QObject parent: search the visual item tree.
 QQuickItem* findItem(QQuickItem* from, const QString& name) {
     if (!from) return nullptr;
@@ -2148,7 +2129,7 @@ TEST(Permissions11AGui, EachGroupWritesOnlyItsControlsBytes) {
         {"phantom", "in1.phantom", true}, {"outputModes", "set.highImpedance", true},
     };
     for (const auto& c : cases) {
-        RealLike r(lewitt::guiWritePolicy(withPermission(c.perm)));
+        RealLike r(withPermission(c.perm));
         ASSERT_TRUE(r.can(c.key)) << c.key;
         const lewitt::Bytes before = deviceBytes(r);
         r.c->setValue(c.key, c.value);
@@ -2171,7 +2152,7 @@ TEST(Permissions11AGui, EachGroupWritesOnlyItsControlsBytes) {
 
 TEST(Permissions11AGui, RealDeviceGainRisesAtMostSixDbPerSet) {
     app();
-    RealLike r(lewitt::guiWritePolicy(withPermission("inputs")));
+    RealLike r(withPermission("inputs"));
     const double start = r.c->values().value("in1.gain").toDouble();
     r.c->setValue("in1.gain", start + 30.0);
     r.c->flush();
@@ -2181,7 +2162,7 @@ TEST(Permissions11AGui, RealDeviceGainRisesAtMostSixDbPerSet) {
 
 TEST(Permissions11AGui, AutogainSendsOnlyMeasurementTriggersAndNoSettingsWrite) {
     app();
-    RealLike r(lewitt::guiWritePolicy(withPermission("measurements")));
+    RealLike r(withPermission("measurements"));
     ASSERT_TRUE(r.can("autogain1"));
     EXPECT_FALSE(r.can("in1.gain"));
     r.c->trigger("autogain1");
@@ -2191,62 +2172,17 @@ TEST(Permissions11AGui, AutogainSendsOnlyMeasurementTriggersAndNoSettingsWrite) 
     EXPECT_EQ(tr[0], static_cast<std::uint16_t>(lewitt::Trigger::BeginMeasurementSession));
     EXPECT_EQ(tr[1], static_cast<std::uint16_t>(lewitt::Trigger::AutoGainMicrophone));
     EXPECT_EQ(lewitt::testing::settingsWrites(r.mock), 0);
-    RealLike none(lewitt::guiWritePolicy(lewitt::UserConfig{}));
+    RealLike none(lewitt::groupsWritePolicy({}));
     none.c->trigger("autogain1");
     none.c->flush();
     EXPECT_TRUE(none.mock.triggers().empty());
-}
-
-TEST(Permissions11AGui, NewSwitchesNeedTheirConfirmationAndGrantOnlyThemselves) {
-    app();
-    writeConfigText("[openwitty]\n");
-    Calls calls;
-    auto s = makeSettings(calls);
-    DeviceController c;
-    QQmlEngine engine;
-    engine.rootContext()->setContextProperty("device", &c);
-    engine.rootContext()->setContextProperty("integration", s.get());
-    QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(LEWITT_QML_DIR "/Main.qml")));
-    std::unique_ptr<QObject> root(comp.create());
-    ASSERT_TRUE(root);
-    root->setProperty("showSettings", true);
-    root->findChild<QObject*>("settingsView")->setProperty("open", "device");
-    QCoreApplication::processEvents();
-    QObject* dialog = root->findChild<QObject*>("confirmWriteDialog");
-    QObject* cancel = root->findChild<QObject*>("confirmWriteCancel");
-    QObject* enable = root->findChild<QObject*>("confirmWriteEnable");
-    ASSERT_TRUE(dialog && cancel && enable);
-    for (const char* n : {"inputs", "processing", "monitoring", "appearance", "phantom", "outputModes", "measurements"}) {
-        auto* win = qobject_cast<QQuickWindow*>(root.get());
-        ASSERT_TRUE(win);
-        QObject* sw = findItem(win->contentItem(), QString("permSwitch_") + n);
-        ASSERT_TRUE(sw) << n;
-        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
-        EXPECT_TRUE(dialog->property("visible").toBool()) << n;
-        EXPECT_EQ(dialog->property("field").toString(), n);
-        QMetaObject::invokeMethod(cancel, "clicked");
-        EXPECT_FALSE(s->permissions().value(n).toBool()) << n;
-        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, true));
-        QMetaObject::invokeMethod(enable, "clicked");
-        EXPECT_TRUE(s->permissions().value(n).toBool()) << n;
-        int on = 0;
-        for (const auto& v : s->permissions()) on += v.toBool();
-        EXPECT_EQ(on, 1) << n;
-        QMetaObject::invokeMethod(sw, "toggled", Q_ARG(bool, false));                 // off without a dialog
-        EXPECT_FALSE(s->permissions().value(n).toBool()) << n;
-        EXPECT_FALSE(dialog->property("visible").toBool()) << n;
-    }
-    s->setPermission("inputs", true, false);                                         // API refuses unconfirmed
-    EXPECT_FALSE(s->permissions().value("inputs").toBool());
-    s->setPermission("everything", true, true);                                       // unknown: no-op
-    EXPECT_FALSE(lewitt::anyDeviceWritePermission(onDisk()));
 }
 
 TEST(Permissions11AGui, HardwareCheckExpectsTheBytesOfWrittenControlsOnly) {
     app();
     BlockRealUsb isolate;
     isolate.lease.reset();
-    RealLike r(lewitt::guiWritePolicy(withPermission("inputs")), /*hwCheck=*/true);
+    RealLike r(withPermission("inputs"), /*hwCheck=*/true);
     ASSERT_TRUE(waitFor([&] { return r.c->values().value("hwcheck.state").toString() == "recorded"; }));
     r.c->setValue("in1.mute", true);
     r.c->flush();
@@ -2264,9 +2200,7 @@ TEST(Permissions11AGui, HardwareCheckExpectsTheBytesOfWrittenControlsOnly) {
 
 TEST(Permissions11AGui, TriggersStopAfterAnUnconfirmedWriteLikeSettingsWrites) {
     app();
-    lewitt::UserConfig cfg = withPermission("measurements");
-    cfg.ledBrightnessControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements", "ledBrightness"}));
     r.hw->dropWrites = true;                                   // the next settings SET is acknowledged but ignored
     const int original = r.c->values().value("set.ledBrightness").toInt();
     r.c->setValue("set.ledBrightness", original == 60 ? 40 : 60);
@@ -2441,15 +2375,15 @@ TEST(GuiPreferences10B, DefaultsPersistenceAndSafeFallback) {
     }
 }
 
-TEST(GuiPreferences10B, SeparateFromDeviceWritePermissions) {
+TEST(GuiPreferences10B, SeparateFromTheSettingsFile) {
     app();
-    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nled_brightness_control = true\n");
+    writeConfigText("[openwitty]\ndesktop_volume_sync = mirror\nfollow_active_output = true\n");
     const lewitt::UserConfig before = onDisk();
     GuiPreferences p;                                        // default path, next to openwitty.conf
     EXPECT_TRUE(p.path().endsWith("/openwitty/gui.conf"));
     p.setShowTooltips(!p.showTooltips());
     p.setOnboardingDone(!p.onboardingDone());
-    EXPECT_EQ(onDisk(), before);                             // the device permissions file is untouched
+    EXPECT_EQ(onDisk(), before);                             // openwitty.conf is untouched
 }
 
 TEST(GuiPreferences10B, OnboardingFinishAndTooltipSwitchAreRemembered) {
@@ -2699,9 +2633,7 @@ TEST(SplitSources11A4, WritesConfigForTheCurrentNodeAndRestartsOnlyWhenConfirmed
 // timeout (once), instead of leaving the device in its measurement session.
 TEST(Measurement11B, StalledAutogainIsClosedAfterTheTimeout) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements"}));
     r.mock.setAutoGainStalls(true);
     ASSERT_TRUE(r.can("autogain1"));
     r.c->trigger("autogain1");
@@ -2723,9 +2655,7 @@ TEST(Measurement11B, StalledAutogainIsClosedAfterTheTimeout) {
 
 TEST(Measurement11B, CompletedAutogainSendsEndSessionOnce) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements"}));
     r.c->trigger("autogain2");
     ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
     auto t = r.mock.triggers();
@@ -2739,9 +2669,7 @@ TEST(Measurement11B, CompletedAutogainSendsEndSessionOnce) {
 // finished (and get its end-session word) before the device reported it running.
 TEST(Measurement11B, SecondMeasurementDoesNotFinishOnTheOldProgress) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements"}));
     r.c->trigger("autogain1");
     ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
     ASSERT_EQ(r.mock.triggers().back(), 5);
@@ -2758,9 +2686,7 @@ TEST(Measurement11B, SecondMeasurementDoesNotFinishOnTheOldProgress) {
 // Real device: the autogain button asks first; nothing is sent until Start.
 TEST(Measurement11B, AutogainButtonAsksBeforeEveryMeasurement) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements"}));
     MainView v(*r.c);
     QQuickItem* btn = v.item("autogainButton1");
     ASSERT_TRUE(btn && btn->isEnabled());
@@ -2818,10 +2744,7 @@ TEST(Controls11B, ShiftWheelGivesFineFaderSteps) {
 // noise measurement; Measure sends begin + word 6; the session ends after completion; switching off is a plain write.
 TEST(Measurement11B, DenoiseOnOffersTheMeasurement) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    cfg.processingControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements", "processing"}));
     ASSERT_TRUE(r.can("denoise1"));
     ASSERT_TRUE(r.can("in1.denoise"));
     ASSERT_FALSE(r.c->values().value("in1.denoise").toBool());
@@ -2855,9 +2778,7 @@ TEST(Measurement11B, DenoiseOnOffersTheMeasurement) {
 }
 
 TEST(Measurement11B, PolicyAllowsOnlySingleInputDenoiseWords) {
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    const auto p = lewitt::guiWritePolicy(cfg);
+    const auto p = lewitt::groupsWritePolicy({"measurements"});
     auto has = [&](lewitt::Trigger t) { return std::find(p.hardwareTriggers.begin(), p.hardwareTriggers.end(), t) != p.hardwareTriggers.end(); };
     EXPECT_TRUE(has(lewitt::Trigger::DenoiseMeasureMicrophone));
     EXPECT_TRUE(has(lewitt::Trigger::DenoiseMeasureInstrument));
@@ -2865,16 +2786,14 @@ TEST(Measurement11B, PolicyAllowsOnlySingleInputDenoiseWords) {
     EXPECT_FALSE(has(lewitt::Trigger::FactoryReset));
     EXPECT_FALSE(has(lewitt::Trigger::SwitchToMacOSStreamingMode));
     EXPECT_FALSE(has(lewitt::Trigger::ResetLedColors));
-    EXPECT_TRUE(lewitt::guiWritePolicy(lewitt::UserConfig{}).hardwareTriggers.empty());
+    EXPECT_TRUE(lewitt::groupsWritePolicy({}).hardwareTriggers.empty());
 }
 
 // Routing permission (2026-10-30): mix to speakers (23) and mobile streaming (67) ask before switching on and then
 // write exactly their byte; turning off needs no dialog.
 TEST(Routing11B, SwitchesAskFirstAndWriteOnlyTheirByte) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.routingControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"routing"}));
     ASSERT_TRUE(r.can("set.mixToSpeakers"));
     ASSERT_TRUE(r.can("set.mobileStreaming"));
     EXPECT_FALSE(r.can("set.highVolume"));
@@ -2926,8 +2845,8 @@ TEST(SettingsLayout, OpenSectionSitsBetweenItsHeaderAndTheNext) {
     root->setProperty("showSettings", true);
     auto* sv = root->findChild<QQuickItem*>("settingsView");
     ASSERT_TRUE(sv);
-    const QStringList keys{"audio", "leds", "button", "device", "desktop"};
-    const QStringList pages{"audioPage", "ledsPage", "buttonPage", "deviceInfoPage", "desktopIntegrationPage"};
+    const QStringList keys{"audio", "leds", "button", "presets", "desktop"};
+    const QStringList pages{"audioPage", "ledsPage", "buttonPage", "presetsPage", "desktopIntegrationPage"};
     for (int i = 0; i < keys.size(); ++i) {
         sv->setProperty("open", keys[i]);
         QCoreApplication::processEvents();
@@ -3041,9 +2960,7 @@ TEST(SampleRatesSR, UnavailableDenoiseExplainsItselfAndIgnoresClicks) {
 // need no dialog.
 TEST(Routing11B, VolumeMappingAsksBeforeHeadphonesAndWritesOnlyByte59) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.routingControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"routing"}));
     ASSERT_TRUE(r.can("set.volumeMapping"));
     QQmlEngine engine;
     auto root = loadMain(*r.c, engine);
@@ -3076,10 +2993,7 @@ TEST(Routing11B, VolumeMappingAsksBeforeHeadphonesAndWritesOnlyByte59) {
 // meter's noise-floor line is shown only while Denoise is on.
 TEST(Measurement11B, DenoiseOnReusesTheStoredLevelAndTheLineFollowsDenoise) {
     app();
-    lewitt::UserConfig cfg;
-    cfg.measurementControl = true;
-    cfg.processingControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"measurements", "processing"}));
     auto b = r.mock.settingsBytes();
     b[lewitt::settings_off::kDenoiseLevel[0]] = 0xCB;           // -53 dB from an earlier measurement
     b[lewitt::settings_off::kDenoise[0]] = 0;
@@ -3268,9 +3182,7 @@ TEST(Presets, SaveAndApplyOnTheSimulatedDevice) {
 TEST(Presets, RealDeviceRaisesGainInVerifiedStepsAndSkipsWhatIsNotAllowed) {
     app();
     QTemporaryDir dir;
-    lewitt::UserConfig cfg;
-    cfg.inputControl = true;
-    RealLike r(lewitt::guiWritePolicy(cfg));
+    RealLike r(lewitt::groupsWritePolicy({"inputs"}));
     ASSERT_TRUE(r.can("in1.gain"));
     ASSERT_FALSE(r.can("in1.preamp"));
     const double start = r.c->values()["in1.gain"].toDouble();

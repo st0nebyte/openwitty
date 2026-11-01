@@ -290,23 +290,16 @@ void DeviceWorker::connectUsb() {
     if (timer_) timer_->stop();
     usbMode_ = true;
     backoffMs_ = 1000;
-    // Real hardware: read-only options (descriptor-driven interface selection, no explicit
-    // claim/detach, writes refused at transport level; usbfs can claim implicitly for
-    // interface-recipient GETs and the session policy keeps hardware writes off).
-    // User settings (Settings > Desktop integration, core/UserConfig): each confirmed write permission adds
-    // exactly its own bytes to the session's policy; nothing else ever becomes writable here.
+    // Product mode (2026-11-01): the window controls every verified setting; the session's policy names exactly those
+    // bytes and triggers (core/OutputControl appWritePolicy), everything else stays refused.
     const UserConfig userConfig = loadUserConfig(userConfigPath()).config;
-    // Phase 10B: only the individually confirmed fields are writable (union of speaker 20-22, headphone 27-29,
-    // LED brightness 37); nothing confirmed = the read-only transport options.
-    const bool anyWritePermission = anyDeviceWritePermission(userConfig);
     // Single device owner: through the background service when it runs (it holds the device; this window controls
     // it through the service), otherwise directly as before.
-    auto direct = [anyWritePermission]() -> std::unique_ptr<IDeviceTransport> {
-        return std::make_unique<UsbTransport>(anyWritePermission ? outputControlHardwareOptions() : readOnlyHardwareOptions());
+    auto direct = []() -> std::unique_ptr<IDeviceTransport> {
+        return std::make_unique<UsbTransport>(outputControlHardwareOptions());
     };
     auto transport = std::make_unique<ServiceOrDirectTransport>(deviceServiceSocketPath(), ServiceRole::Controller, direct);
-    if (anyWritePermission) adoptSession(std::move(transport), guiWritePolicy(userConfig));
-    else adoptSession(std::move(transport));
+    adoptSession(std::move(transport), appWritePolicy());
     // Knob -> desktop mirroring (native mode, never a device write) while the GUI owns the device;
     // independent of output control.
     desktopLinkWanted_ = userConfig.desktopVolumeSync == DesktopVolumeSync::Mirror;
@@ -411,19 +404,11 @@ void DeviceWorker::endMeasurementSessionBestEffort() {
     inMeasureSession_ = false;
 }
 
-// The user changed Settings > Desktop integration. Output control decides the session's write policy,
-// so a change there opens a new session (software only: the lease stays with this process, no USB
-// reset); desktop mirroring is switched without touching the session.
+// The user changed Settings > Desktop integration: desktop mirroring and the follower are switched without touching
+// the session (its write policy does not depend on the settings file).
 void DeviceWorker::applyUserConfig() {
     const UserConfig c = loadUserConfig(userConfigPath()).config;
     if (!usbMode_ || !session_ || session_->isSimulated()) return;
-    const WritePolicy wanted = guiWritePolicy(c);
-    if (wanted.allowHardwareWrites != session_->policy().allowHardwareWrites ||
-        wanted.hardwareWriteOffsets != session_->policy().hardwareWriteOffsets ||
-        wanted.hardwareTriggers != session_->policy().hardwareTriggers) {
-        connectUsb();
-        return;
-    }
     desktopLinkWanted_ = c.desktopVolumeSync == DesktopVolumeSync::Mirror;
     configureFollower(c);
 #ifdef LEWITT_HAVE_ALSA
@@ -745,7 +730,9 @@ void DeviceWorker::publish() {
                            session_ ? QString::fromStdString(session_->info().backend.empty()
                                                                  ? "usb" : session_->info().backend)
                                     : QString(),
-                           session_ && session_->writesEnabled(), session_ && session_->isSimulated());
+                           // writable only while connected: the policy alone says nothing about a device
+                           session_ && cs == ConnectionState::Connected && session_->writesEnabled(),
+                           session_ && session_->isSimulated());
     // The sample rate comes from the audio stack, which this backend does not read yet: only the
     // simulator has a value. On real hardware the key is absent (the UI shows "Unknown").
     const bool sim = session_ && session_->isSimulated();

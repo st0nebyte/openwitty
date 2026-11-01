@@ -19,15 +19,8 @@ std::string trim(const std::string& s) {
     return s.substr(b, s.find_last_not_of(" \t\r\n") - b + 1);
 }
 bool& flag(UserConfig& c, const std::string& key) {
-    if (key == "vendor_fallback") return c.vendorFallback;
-    for (const auto& p : devicePermissions())
-        if (key == p.key) return c.*(p.field);
-    return c.legacyOutputControlPending;   // "output_control" (legacy)
-}
-bool isPermissionKey(const std::string& key) {
-    for (const auto& p : devicePermissions())
-        if (key == p.key) return true;
-    return false;
+    if (key == "follow_active_output") return c.followActiveOutput;
+    return c.vendorFallback;   // "vendor_fallback"
 }
 int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
     if (v == "true" || v == "yes" || v == "on" || v == "1") return 1;
@@ -36,48 +29,14 @@ int parseBool(const std::string& v) {     // 1 / 0 / -1 (invalid)
 }
 }  // namespace
 
-const std::vector<DevicePermission>& devicePermissions() {
-    static const std::vector<DevicePermission> t = {
-        {"speaker", "speaker_control", &UserConfig::speakerControl,
-         "OpenWitty's speaker fader and MUTE change the speaker volume and mute (settings bytes 20-22)."},
-        {"headphone", "headphone_control", &UserConfig::headphoneControl,
-         "OpenWitty's headphone fader and MUTE change the headphone volume and mute (bytes 27-29)."},
-        {"ledBrightness", "led_brightness_control", &UserConfig::ledBrightnessControl,
-         "OpenWitty's LED brightness slider changes the LED brightness (byte 37)."},
-        {"inputs", "input_control", &UserConfig::inputControl,
-         "microphone and instrument gain and mute, external gain lock (bytes 0-2, 10-12, 57)."},
-        {"processing", "processing_control", &UserConfig::processingControl,
-         "low-cut, Clipguard, preamp style, Denoise and Comp switches of both inputs (bytes 3-4, 6-7, 9, 13-16, 18)."},
-        {"monitoring", "monitoring_control", &UserConfig::monitoringControl,
-         "direct monitoring source, input/playback mix, Dim, Mono, loopback mute (bytes 19, 32-36)."},
-        {"appearance", "appearance_control", &UserConfig::appearanceControl,
-         "LED colours and the custom button function (bytes 38-53)."},
-        {"phantom", "phantom_control", &UserConfig::phantomControl,
-         "48 V phantom power for the microphone input (byte 5); each switch-on is confirmed again."},
-        {"outputModes", "output_modes_control", &UserConfig::outputModesControl,
-         "high-volume speaker mode and high-impedance headphone mode (bytes 24, 31); each switch-on is confirmed again."},
-        {"measurements", "measurement_control", &UserConfig::measurementControl,
-         "autogain and Denoise measurements (the device then changes the input gain or Denoise by itself)."},
-        {"followOutput", "follow_active_output", &UserConfig::followActiveOutput,
-         "keep the system volume on the audible output: OpenWitty switches which output the native volume controls "
-         "(byte 59) and the touch-wheel focus (byte 56) when the speaker/headphone mutes change."},
-        {"routing", "routing_control", &UserConfig::routingControl,
-         "input/playback mix to the speakers, mobile streaming mode and which output the system volume controls "
-         "(bytes 23, 59, 67); each risky change is confirmed again."},
-    };
-    return t;
-}
-
-const DevicePermission* findDevicePermission(const std::string& name) {
-    for (const auto& p : devicePermissions())
-        if (name == p.name) return &p;
-    return nullptr;
-}
-
-bool anyDeviceWritePermission(const UserConfig& c) {
-    for (const auto& p : devicePermissions())
-        if (c.*(p.field)) return true;
-    return !c.buttonFollow.empty();   // Phase 12D: an extended custom-button mode authorizes the follow writes
+bool isObsoletePermissionKey(const std::string& key) {
+    static const char* const keys[] = {"speaker_control", "headphone_control", "led_brightness_control",
+                                       "input_control", "processing_control", "monitoring_control",
+                                       "appearance_control", "phantom_control", "output_modes_control",
+                                       "measurement_control", "routing_control", "output_control"};
+    for (const char* k : keys)
+        if (key == k) return true;
+    return false;
 }
 
 ParsedUserConfig parseUserConfig(const std::string& text) {
@@ -100,9 +59,10 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
             continue;
         }
         const std::string key = trim(line.substr(0, eq)), value = trim(line.substr(eq + 1));
-        const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "output_control" ||
-                           key == "follow_both_on" || key == "follow_both_muted" || key == "follow_move_focus" || key == "name_channels" || key == "button_follow" ||
-                           isPermissionKey(key);
+        if (isObsoletePermissionKey(key)) continue;   // evaluation-build permission: no longer needed
+        const bool known = key == "desktop_volume_sync" || key == "vendor_fallback" || key == "follow_active_output" ||
+                           key == "follow_both_on" || key == "follow_both_muted" || key == "follow_move_focus" ||
+                           key == "name_channels" || key == "button_follow";
         if (!known) {
             r.warnings.push_back("unknown key '" + key + "' ignored");
             continue;
@@ -166,27 +126,19 @@ ParsedUserConfig parseUserConfig(const std::string& text) {
         else if (key == "button_follow") r.config.buttonFollow.clear();
         else flag(r.config, key) = false;
     }
-    // Legacy migration, fail-closed: the old combined output permission is never turned into the new ones. It
-    // only asks for a reconfirmation - and only while none of the new output permissions has been given.
-    if (r.config.legacyOutputControlPending && (r.config.speakerControl || r.config.headphoneControl))
-        r.config.legacyOutputControlPending = false;
-    if (r.config.legacyOutputControlPending)
-        r.warnings.push_back("output_control (from an older OpenWitty) no longer grants anything: turn on the speaker "
-                             "and/or headphone control again in Settings > Desktop integration if you want them");
     return r;
 }
 
 std::string serializeUserConfig(const UserConfig& c) {
     std::ostringstream o;
-    o << "# OpenWitty settings. Edited by OpenWitty's Settings > Desktop integration; delete this file to reset.\n"
+    o << "# OpenWitty settings. Edited by OpenWitty's Settings; delete this file to reset.\n"
       << "[openwitty]\n"
       << "# off | mirror: show the CONNECT 2's hardware speaker knob and Mute button in the desktop volume.\n"
       << "desktop_volume_sync = " << (c.desktopVolumeSync == DesktopVolumeSync::Mirror ? "mirror" : "off") << "\n"
-      << "# true writes the device: apply a desktop volume change the device did not follow (vendor protocol).\n"
+      << "# Experimental (debug mode): apply a desktop volume change the device did not follow (vendor protocol).\n"
       << "vendor_fallback = " << (c.vendorFallback ? "true" : "false") << "\n"
-      << "# Each of the following writes the device, is confirmed on its own and changes only the bytes named.\n";
-    for (const auto& p : devicePermissions())
-        o << "# true: " << p.description << "\n" << p.key << " = " << (c.*(p.field) ? "true" : "false") << "\n";
+      << "# Keep the system volume keys on the audible output (switches the CONNECT 2's volume-key mapping).\n"
+      << "follow_active_output = " << (c.followActiveOutput ? "true" : "false") << "\n";
     auto pref = [](FollowPref f) {
         return f == FollowPref::Speakers ? "speakers" : f == FollowPref::Headphones ? "headphones"
              : f == FollowPref::Keep ? "keep" : "disable";
@@ -205,10 +157,6 @@ std::string serializeUserConfig(const UserConfig& c) {
         for (std::size_t i = 0; i < c.buttonFollow.size(); ++i) o << (i ? ", " : "") << c.buttonFollow[i];
         o << "\n";
     }
-    if (c.legacyOutputControlPending)
-        o << "# Legacy setting from an older OpenWitty. It grants NOTHING; it is kept only so that Settings can ask\n"
-          << "# you to reconfirm the speaker/headphone control above. Removed when you do so or reset.\n"
-          << "output_control = true\n";
     return o.str();
 }
 

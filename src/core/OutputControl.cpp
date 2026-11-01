@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "core/UserConfig.hpp"
+#include <string>
 
 namespace lewitt {
 
@@ -38,21 +38,42 @@ WritePolicy withFollowOutput(WritePolicy base) {
 }
 
 WritePolicy guiWritePolicy(bool speaker, bool headphone, bool ledBrightness) {
-    UserConfig c;
-    c.speakerControl = speaker;
-    c.headphoneControl = headphone;
-    c.ledBrightnessControl = ledBrightness;
-    return guiWritePolicy(c);
+    std::vector<std::string> g;
+    if (speaker) g.push_back("speaker");
+    if (headphone) g.push_back("headphone");
+    if (ledBrightness) g.push_back("ledBrightness");
+    return groupsWritePolicy(g);
 }
 
-WritePolicy serviceClientPolicy(const UserConfig& c) {
-    WritePolicy p = guiWritePolicy(c);
-    if (c.vendorFallback) {
+const std::vector<std::string>& controlGroups() {
+    static const std::vector<std::string> g = {"speaker",    "headphone", "ledBrightness", "inputs",
+                                               "processing", "monitoring", "appearance",   "phantom",
+                                               "outputModes", "routing",   "followOutput", "measurements"};
+    return g;
+}
+
+WritePolicy groupsWritePolicy(const std::vector<std::string>& groups) {
+    WritePolicy p;
+    p.allowRoutingChanges = false;
+    p.allowPersistentChanges = false;
+    for (const auto& name : groups) {
+        const auto offs = permissionOffsets(name);
+        const auto trig = permissionTriggers(name);
+        if (offs.empty() && trig.empty()) continue;
         p.allowHardwareWrites = true;
-        for (auto off : outputWriteOffsets(Output::Speaker)) p.hardwareWriteOffsets.push_back(off);
+        for (auto o : offs)
+            if (std::find(p.hardwareWriteOffsets.begin(), p.hardwareWriteOffsets.end(), o) == p.hardwareWriteOffsets.end())
+                p.hardwareWriteOffsets.push_back(o);
+        for (auto tr : trig) p.hardwareTriggers.push_back(tr);
+        // Mobile streaming changes what capture channels 1/2 carry (the device's routing gate in DeviceSession).
+        if (name == "routing") p.allowRoutingChanges = true;
     }
     return p;
 }
+
+WritePolicy appWritePolicy() { return groupsWritePolicy(controlGroups()); }
+
+WritePolicy serviceClientPolicy() { return appWritePolicy(); }
 
 std::vector<std::size_t> permissionOffsets(const std::string& name) {
     using namespace settings_off;
@@ -86,23 +107,6 @@ std::vector<Trigger> permissionTriggers(const std::string& name) {
                 Trigger::AutoGainBoth, Trigger::DenoiseMeasureMicrophone, Trigger::DenoiseMeasureInstrument,
                 Trigger::EndMeasurementSession};
     return {};
-}
-
-WritePolicy guiWritePolicy(const UserConfig& c) {
-    WritePolicy p;
-    p.allowRoutingChanges = false;
-    p.allowPersistentChanges = false;
-    for (const auto& perm : devicePermissions()) {
-        if (!(c.*(perm.field))) continue;
-        p.allowHardwareWrites = true;
-        for (auto o : permissionOffsets(perm.name)) p.hardwareWriteOffsets.push_back(o);
-        for (auto t : permissionTriggers(perm.name)) p.hardwareTriggers.push_back(t);
-    }
-    // Mobile streaming changes what capture channels 1/2 carry (the device's routing gate in DeviceSession).
-    p.allowRoutingChanges = c.routingControl;
-    // Phase 12D: an extended custom-button mode chosen in the GUI authorizes the follow writes (59, 56) as well.
-    if (!c.buttonFollow.empty() && !c.followActiveOutput) p = withFollowOutput(p);
-    return p;
 }
 
 std::optional<double> normalizeOutputDb(double db) {

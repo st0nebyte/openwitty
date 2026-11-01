@@ -27,8 +27,8 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
 * **Vendor fallback (explicit opt-in).** `--vendor-fallback` additionally applies a desktop change that the device did not
   follow within the follow grace (1.5 s) through the vendor settings message: speaker bytes only, fresh snapshot, one SET, read-back verification, no retries,
   increases limited to 10 dB per step, never at startup. Intended for the verified "SET ignored" state.
-* **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker and headphone controls write the device only with the
-  confirmed *speaker control* or *headphone control* setting respectively (Settings → Device control; scoped policy). While the GUI owns the device it hosts the same mirror when
+* **GUI.** Shows the real speaker/headphone state (vendor GET). Speaker and headphone controls write the device (the window's fixed policy, every
+  write read back). While the GUI owns the device it hosts the same mirror when
   *desktop sync* is on (native mode only); the daemon yields the device to the GUI and takes it back afterwards.
 * **One writer.** All OpenWitty processes share one per-user control lease; the GUI asks the daemon to hand over with a yield
   request. Policy and write path are the same code everywhere (`core/VolumeSync`, `desktop/DesktopVolumeLink`).
@@ -102,23 +102,18 @@ written atomically by the GUI (0600, directory 0700), read by the GUI and by `op
 ```
 [openwitty]
 desktop_volume_sync = off      # off | mirror
-vendor_fallback = false        # true writes the device
-speaker_control = false        # true: OpenWitty's speaker fader/mute write the device
-headphone_control = false      # true: OpenWitty's headphone fader/mute write the device
-led_brightness_control = false # true: OpenWitty's LED brightness control writes the device
-input_control = false          # gain + mute of both inputs, gain lock (bytes 0-2, 10-12, 57)
-processing_control = false     # low-cut, Clipguard, preamp, Denoise, Comp (3-4, 6-7, 9, 13-16, 18)
-monitoring_control = false     # monitoring source, mix, Dim, Mono, loopback mute (19, 32-36)
-appearance_control = false     # LED colours, custom button (38-53)
-phantom_control = false        # 48 V (5)
-output_modes_control = false   # high-volume speakers, high-impedance headphones (24, 31)
-measurement_control = false    # autogain measurements (triggers)
+vendor_fallback = false        # experimental (debug mode): true writes the device
+follow_active_output = false   # volume keys follow the audible output (byte 59, touch focus 56)
+follow_both_on = speakers      # speakers | headphones | keep
+follow_both_muted = keep       # keep | speakers | headphones | disable
+follow_move_focus = true
+name_channels = true           # readable channel names in audio apps (display only)
 ```
-The device-control keys are set on **Settings → Device control** (each confirmed separately, applied at once by
-reconnecting the session with the matching scoped policy — exactly the union of the enabled groups' bytes; triggers only
-with `measurement_control`).
-`output_control` from an older version grants **nothing**: `output_control = true` is kept only as a reminder (with a
-"grants NOTHING" comment) until speaker or headphone control is set or the notice is dismissed.
+The window's own controls need no setting: since 2026-11-01 (product mode) the window may change every verified
+setting (core/OutputControl `appWritePolicy()` - exactly the bytes and measurement triggers of the verified control
+groups, never persistent changes, firmware update, factory reset or the device-restarting macOS streaming mode).
+The per-group keys of the evaluation builds (`speaker_control`, …, `routing_control`, `output_control`) are ignored
+without a warning and dropped at the next save.
 Missing file = defaults. Invalid values fall back to the safe default and are shown as warnings in the page and in the
 daemon log; unknown keys are ignored with a warning. Deleting the file resets everything.
 

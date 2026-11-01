@@ -69,49 +69,53 @@ if grep -nE '(allowHardwareWrites|hardwareWriteOffsets)[[:space:]]*(=|\{|:)' src
 # only paired with guiWritePolicy(speaker, headphone, ledBrightness) - the union of exactly those fields' bytes.
 # The settings backend itself never writes the device.
 if grep -nE 'UsbTransport[>(]' src/gui/*.cpp | grep -vE 'readOnlyHardwareOptions\(\)|outputControlHardwareOptions\(\)' >/dev/null; then echo "FAIL GUI constructs a UsbTransport with unreviewed options"; fail=1; else echo "ok   GUI uses readOnlyHardwareOptions() or the gated output options only"; fi
-# 2026-11-01 (single device owner): the one site builds the direct transport inside the service-or-direct fallback;
-# write-capable options only when a permission is on, and only then with guiWritePolicy(userConfig).
+# 2026-11-01 (single device owner + product mode): the one site builds the direct transport inside the service-or-direct
+# fallback, and the window's session always gets the fixed appWritePolicy() (every verified control group, nothing else);
+# no other policy builder is used in the GUI.
 n_out=$(grep -c 'outputControlHardwareOptions()' src/gui/DeviceController.cpp)
-if [ "$n_out" -ne 1 ] || ! grep 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'anyWritePermission ? outputControlHardwareOptions() : readOnlyHardwareOptions()' \
-   || ! grep -B6 'outputControlHardwareOptions()' src/gui/DeviceController.cpp | grep -q 'const bool anyWritePermission = anyDeviceWritePermission(userConfig);' \
-   || ! grep -q 'if (anyWritePermission) adoptSession(std::move(transport), guiWritePolicy(userConfig));' src/gui/DeviceController.cpp; then
-    echo "FAIL GUI writes must be one gated outputControlHardwareOptions()+guiWritePolicy(confirmed fields) site"; fail=1
-else echo "ok   GUI writes: one site, only with a confirmed permission, policy = union of the confirmed fields"; fi
-# Phase 11A: guiWritePolicy = the union of the enabled permission groups (core/UserConfig devicePermissions(), all
-# default off); never persistent changes; routing changes only from the routing permission
-# (`p.allowRoutingChanges = c.routingControl;`), mix-to-speakers (23) / native volume mapping (59) / mobile streaming (67) only in exactly that
-# group's line (2026-10-30, after the Windows-binary research); never undecoded bytes; triggers only via permissionTriggers(), which may list only measurement-session, autogain and the
-# two single-input Denoise measurement words (Phase 11B session 5; never "both", never mode/reset words).
-gwp=$(awk '/^WritePolicy guiWritePolicy\(const UserConfig& c\)/,/^}/' src/core/OutputControl.cpp)
+if [ "$n_out" -ne 1 ] || ! grep -q 'return std::make_unique<UsbTransport>(outputControlHardwareOptions());' src/gui/DeviceController.cpp \
+   || [ "$(grep -c 'adoptSession(std::move(transport), appWritePolicy());' src/gui/DeviceController.cpp)" -ne 1 ] \
+   || grep -nE 'guiWritePolicy|groupsWritePolicy|outputWritePolicy|withFollowOutput' src/gui/*.cpp src/gui/*.hpp >/dev/null; then
+    echo "FAIL GUI writes must be one outputControlHardwareOptions()+appWritePolicy() site"; fail=1
+else echo "ok   GUI writes: one site, policy = appWritePolicy() (the verified control groups)"; fi
+# Phase 11A / product mode: groupsWritePolicy = the union of the named control groups; appWritePolicy() = exactly the
+# twelve groups of controlGroups(); never persistent changes; routing changes only from the "routing" group;
+# mix-to-speakers (23) / native volume mapping (59) / mobile streaming (67) only in exactly that group's line, the touch
+# focus (56) and 59 also in the follow line; never undecoded bytes; triggers only via permissionTriggers(), which may
+# list only measurement-session, autogain and the two single-input Denoise measurement words (never "both", never
+# mode/reset words).
+gwp=$(awk '/^WritePolicy groupsWritePolicy\(const std::vector<std::string>& groups\)/,/^}/' src/core/OutputControl.cpp)
+cgr=$(awk '/^const std::vector<std::string>& controlGroups\(\)/,/^}/' src/core/OutputControl.cpp | tr -d ' \n')
 pof_all=$(awk '/^std::vector<std::size_t> permissionOffsets/,/^}/' src/core/OutputControl.cpp)
 routing_line='    if (name == "routing") return {kMixToSpeakers, kMobileStreaming, kNativeVolumeMapping};'
 follow_line='    if (name == "followOutput") return {kNativeVolumeMapping, kSelectedChannel};'
+routing_gate='        if (name == "routing") p.allowRoutingChanges = true;'
 pof=$(printf '%s\n' "$pof_all" | grep -vxF "$routing_line" | grep -vxF "$follow_line")
 ptr=$(awk '/^std::vector<Trigger> permissionTriggers/,/^}/' src/core/OutputControl.cpp)
-if [ -n "$gwp" ] && printf '%s' "$gwp" | grep -q 'if (!(c.\*(perm.field))) continue;' \
-   && printf '%s\n' "$pof_all" | grep -qxF "$routing_line" \
-   && printf '%s' "$gwp" | grep -q 'p.allowRoutingChanges = c.routingControl;' \
+if [ -n "$gwp" ] && printf '%s\n' "$gwp" | grep -qxF "$routing_gate" \
    && [ "$(printf '%s' "$gwp" | grep -c 'allowRoutingChanges')" = 2 ] \
-   && ! grep -qE 'allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true' src/core/OutputControl.cpp \
+   && printf '%s' "$gwp" | grep -q 'p.allowRoutingChanges = false;' \
+   && [ "$cgr" = 'conststd::vector<std::string>&controlGroups(){staticconststd::vector<std::string>g={"speaker","headphone","ledBrightness","inputs","processing","monitoring","appearance","phantom","outputModes","routing","followOutput","measurements"};returng;}' ] \
+   && grep -qxF 'WritePolicy appWritePolicy() { return groupsWritePolicy(controlGroups()); }' src/core/OutputControl.cpp \
+   && printf '%s\n' "$pof_all" | grep -qxF "$routing_line" \
+   && ! grep -vxF "$routing_gate" src/core/OutputControl.cpp | grep -qE 'allowRoutingChanges[[:space:]]*=[[:space:]]*true|allowPersistentChanges[[:space:]]*=[[:space:]]*true' \
    && [ -n "$pof" ] && ! printf '%s' "$pof" | grep -qE 'kMixToSpeakers|kMobileStreaming|kSelectedChannel|kNativeVolumeMapping|[^0-9](5[4-9]|6[0-9]|7[0-9])[^0-9]' \
    && [ -n "$ptr" ] && ! printf '%s' "$ptr" | grep -qE 'Switch|Factory|ResetLed|DenoiseMeasureBoth' \
    && [ "$(printf '%s' "$ptr" | grep -oE 'Trigger::[A-Za-z]+' | sort -u | tr '\n' ' ')" = "Trigger::AutoGainBoth Trigger::AutoGainInstrument Trigger::AutoGainMicrophone Trigger::BeginMeasurementSession Trigger::DenoiseMeasureInstrument Trigger::DenoiseMeasureMicrophone Trigger::EndMeasurementSession " ]; then
-    echo "ok   guiWritePolicy = union of the enabled permission groups (no persistent changes; routing and bytes 23/59/67 only via the routing permission; autogain and single-input Denoise measurement triggers only)"
-else echo "FAIL guiWritePolicy scope changed"; fail=1; fi
+    echo "ok   appWritePolicy = the twelve verified control groups (no persistent changes; routing and bytes 23/59/67 only via the routing group; autogain and single-input Denoise measurement triggers only)"
+else echo "FAIL appWritePolicy / groupsWritePolicy scope changed"; fail=1; fi
 if grep -nE 'UsbTransport|DeviceSession|commit|stageOutput|writeDevice' src/gui/IntegrationSettings.cpp >/dev/null; then
     echo "FAIL IntegrationSettings must not touch the device"; fail=1
 else echo "ok   IntegrationSettings never touches the device"; fi
-perm_fields=$(grep -cE '^[[:space:]]+bool [a-zA-Z]+Control\{' src/core/UserConfig.hpp)
-perm_false=$(grep -cE '^[[:space:]]+bool [a-zA-Z]+Control\{false\};' src/core/UserConfig.hpp)
-setter=$(awk '/^void IntegrationSettings::setPermission/,/^}/' src/gui/IntegrationSettings.cpp)
-if [ -n "$setter" ] && printf '%s' "$setter" | grep -q 'if (on && !confirmed) return;' \
-   && [ "$(grep -cE 'next\.\*\(p->field\)|next\.[a-zA-Z]+Control[[:space:]]*=' src/gui/IntegrationSettings.cpp)" -eq 1 ] \
-   && grep -q 'if (on && (!confirmed || !desktopSync())) return;' src/gui/IntegrationSettings.cpp \
+# Product mode: the settings file holds no device-write permissions any more (old keys are ignored); the only
+# device-writing option left is the experimental vendor fallback - default off, confirmed, and only with desktop sync.
+if ! grep -qE '^[[:space:]]+bool [a-zA-Z]+Control\{' src/core/UserConfig.hpp \
    && grep -q 'bool vendorFallback{false};' src/core/UserConfig.hpp \
-   && [ "$perm_fields" -ge 10 ] && [ "$perm_fields" -eq "$perm_false" ] \
-   && ! grep -nE '[a-zA-Z]+Control[[:space:]]*=[[:space:]]*(true|.*legacyOutputControl)|\.\*\([a-z.]+field\)[[:space:]]*=[[:space:]]*true' src/core/UserConfig.cpp >/dev/null; then
-    echo "ok   device-writing settings default off, need confirmation, and the legacy setting grants nothing"
-else echo "FAIL device-writing settings must default off and need confirmation (legacy must grant nothing)"; fail=1; fi
+   && grep -q 'if (on && (!confirmed || !desktopSync())) return;' src/gui/IntegrationSettings.cpp \
+   && grep -q 'if (isObsoletePermissionKey(key)) continue;' src/core/UserConfig.cpp \
+   && ! grep -nE 'vendorFallback[[:space:]]*=[[:space:]]*true' src/core/UserConfig.cpp >/dev/null; then
+    echo "ok   no permission settings; the vendor fallback defaults off and needs confirmation and desktop sync"
+else echo "FAIL settings must hold no write permissions; the vendor fallback must default off and need confirmation"; fail=1; fi
 # the GUI-hosted desktop link only mirrors (native mode); it never uses the vendor fallback
 if grep -q 'o.deviceWrites = DeviceWriteMode::Native' src/gui/DeviceController.cpp && ! grep -q 'DeviceWriteMode::Fallback' src/gui/*.cpp; then
     echo "ok   GUI desktop link is native (mirror-only)"
@@ -128,7 +132,7 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
    && grep -q 'envAuthorized("LEWITT_ALLOW_HARDWARE_WRITE") && envAuthorized("LEWITT_ALLOW_WRITE_SPEAKER_VOLUME")' src/daemon/main.cpp \
    && grep -q 'bool writes{false};' src/daemon/main.cpp \
    && grep -q 'writable ? outputControlHardwareOptions() : readOnlyHardwareOptions()' src/daemon/main.cpp \
-   && grep -q 'const bool writable = eff == Effective::Fallback || follow || anyDeviceWritePermission(watch.config);' src/daemon/main.cpp \
+   && grep -q 'const bool writable = eff == Effective::Fallback || follow || server != nullptr;   // clients control the device' src/daemon/main.cpp \
    && grep -q 'WritePolicy p = writes ? outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false) : WritePolicy{};' src/daemon/main.cpp \
    && grep -q 'a.writes = a.ok && a.mode == Mode::Fallback;' src/daemon/main.cpp \
    && [ "$(grep -cE 'a\.writes *=' src/daemon/main.cpp)" -eq 1 ] \
@@ -140,16 +144,15 @@ if grep -q 'outputWritePolicy(/\*speaker=\*/true, /\*headphone=\*/false)' src/da
     echo "ok   openwitty-volumed: read-only mirror default, vendor writes only via --vendor-fallback (policy: speaker bytes, exact double opt-in), one verified write path"
 else echo "FAIL openwitty-volumed write scope/gating changed"; fail=1; fi
 # Single device owner (2026-11-01): the service checks every client write itself - only the controller, the write guard,
-# on real hardware only bytes/triggers of the user's permissions (serviceClientPolicy = the window's policy + confirmed
-# fallback speaker bytes), compared with a fresh read.
-if grep -q 'policyNow = serviceClientPolicy(watch.config);' src/daemon/main.cpp \
-   && grep -A4 'WritePolicy serviceClientPolicy' src/core/OutputControl.cpp | grep -q 'WritePolicy p = guiWritePolicy(c);' \
-   && grep -A6 'WritePolicy serviceClientPolicy' src/core/OutputControl.cpp | grep -q 'outputWriteOffsets(Output::Speaker)' \
+# on real hardware only bytes/triggers of the window's policy (serviceClientPolicy = appWritePolicy(), which includes the
+# fallback's speaker bytes), compared with a fresh read.
+if grep -qF 'server = std::make_unique<DeviceServer>([] { return serviceClientPolicy(); }, say);' src/daemon/main.cpp \
+   && grep -qxF 'WritePolicy serviceClientPolicy() { return appWritePolicy(); }' src/core/OutputControl.cpp \
    && grep -q 'if (!controller) return makeError(Errc::WritesDisabled' src/transport/DeviceService.cpp \
    && grep -q 'checkWriteAllowed(id, data, ctx)' src/transport/DeviceService.cpp \
    && grep -q 'auto now = t.read(MessageId::Settings);' src/transport/DeviceService.cpp \
    && grep -q 'if (auto c = checkWrite(\*t, id, payload, controller); !c)' src/transport/DeviceService.cpp; then
-    echo "ok   service checks every client write (controller only, write guard, permitted bytes vs fresh read, permitted triggers)"
+    echo "ok   service checks every client write (controller only, write guard, the window's bytes vs fresh read, permitted triggers)"
 else echo "FAIL service client write checks changed"; fail=1; fi
 # Phase 12C: the daemon's only other write scope is "follow active output" = byte 59, added by withFollowOutput()
 wfo=$(awk '/^WritePolicy withFollowOutput\(WritePolicy base\)/,/^}/' src/core/OutputControl.cpp)
@@ -179,10 +182,10 @@ if grep -q 'InstanceChannel::Role::Failed' src/gui/main.cpp && grep -q 'Instance
    && [ "$(grep -n 'claimOrForward' src/gui/main.cpp | head -1 | cut -d: -f1)" -lt "$(grep -n 'DeviceController controller' src/gui/main.cpp | cut -d: -f1)" ]; then
     echo "ok   window/tray single-instance claim handled, before any device code"
 else echo "FAIL single-instance claim must be handled (Failed) and precede DeviceController"; fail=1; fi
-# Phase 10A/11A: triggers are authorized at exactly one place - guiWritePolicy() from permissionTriggers() (measurement
+# Phase 10A/11A: triggers are authorized at exactly one place - groupsWritePolicy() from permissionTriggers() (measurement
 # permission only, see above); nowhere else in production code.
 if grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp' | grep -v 'std::vector<Trigger> hardwareTriggers;' \
-     | grep -v '^src/core/OutputControl.cpp:.*for (auto t : permissionTriggers(perm.name)) p.hardwareTriggers.push_back(t);' >/dev/null; then
+     | grep -v '^src/core/OutputControl.cpp:.*for (auto tr : trig) p.hardwareTriggers.push_back(tr);' >/dev/null; then
     echo "FAIL production code authorizes hardware triggers:"; grep -rnE 'hardwareTriggers[[:space:]]*(=|\.push_back|\.insert|\{)' src --include='*.cpp' --include='*.hpp'; fail=1
 else echo "ok   hardware triggers only via the measurement permission (one site)"; fi
 # Phase 10A: GUI controls are enabled per capability (can.<key>), never by the global writable flag alone, and

@@ -1,4 +1,5 @@
-// Phase 11A: grouped device-write permissions. Simulation only.
+// Control groups of the window's write policy (Phase 11A groups; product mode 2026-11-01: all of them, no switches).
+// Simulation only.
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -7,7 +8,6 @@
 
 #include "core/ControlCapabilities.hpp"
 #include "core/OutputControl.hpp"
-#include "core/UserConfig.hpp"
 
 using namespace lewitt;
 
@@ -18,32 +18,10 @@ std::set<std::string> writableKeys(const WritePolicy& p) {
         if (controlWritable(k, p, /*simulated=*/false)) s.insert(k);
     return s;
 }
-UserConfig only(const DevicePermission& perm) {
-    UserConfig c;
-    c.*(perm.field) = true;
-    return c;
-}
+WritePolicy only(const std::string& group) { return groupsWritePolicy({group}); }
 }  // namespace
 
-TEST(Permissions11A, EveryPermissionDefaultsOffAndIsParsedFailClosed) {
-    EXPECT_FALSE(anyDeviceWritePermission(UserConfig{}));
-    EXPECT_EQ(devicePermissions().size(), 12u);
-    for (const auto& p : devicePermissions()) {
-        EXPECT_FALSE(UserConfig{}.*(p.field)) << p.key;
-        auto on = parseUserConfig(std::string(p.key) + " = true\n");
-        EXPECT_TRUE(on.config.*(p.field)) << p.key;
-        EXPECT_TRUE(on.warnings.empty()) << p.key;
-        EXPECT_FALSE(parseUserConfig(std::string(p.key) + " = maybe\n").config.*(p.field)) << p.key;
-        EXPECT_FALSE(parseUserConfig(std::string(p.key) + " = true\n" + p.key + " = true\n").config.*(p.field)) << p.key;
-        // round trip, and no other permission comes along
-        const auto back = parseUserConfig(serializeUserConfig(only(p)));
-        EXPECT_EQ(back.config, only(p)) << p.key;
-        EXPECT_TRUE(findDevicePermission(p.name) == &p);
-    }
-    EXPECT_EQ(findDevicePermission("everything"), nullptr);
-}
-
-TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
+TEST(ControlGroups, EachGroupAuthorizesExactlyItsControls) {
     const std::map<std::string, std::set<std::string>> expected = {
         {"speaker", {"spk.volume", "spk.mute"}},
         {"headphone", {"hp.volume", "hp.mute"}},
@@ -60,63 +38,65 @@ TEST(Permissions11A, EachGroupAuthorizesExactlyItsControls) {
         {"routing", {"set.mixToSpeakers", "set.mobileStreaming", "set.volumeMapping"}},
         {"followOutput", {"set.volumeMapping"}},
     };
-    ASSERT_EQ(expected.size(), devicePermissions().size());
-    for (const auto& p : devicePermissions())
-        EXPECT_EQ(writableKeys(guiWritePolicy(only(p))), expected.at(p.name)) << p.name;
-    // everything on: still never the macOS streaming mode (device restart); Autosetup needs processing + 48 V + measurements
-    UserConfig all;
-    for (const auto& p : devicePermissions()) all.*(p.field) = true;
-    const auto keys = writableKeys(guiWritePolicy(all));
-    EXPECT_TRUE(keys.count("set.mixToSpeakers"));
-    EXPECT_TRUE(keys.count("set.mobileStreaming"));
-    EXPECT_FALSE(keys.count("set.macosStreaming"));
-    EXPECT_TRUE(keys.count("autosetup"));
-    UserConfig noPhantom = all;
-    noPhantom.phantomControl = false;
-    EXPECT_FALSE(writableKeys(guiWritePolicy(noPhantom)).count("autosetup"));
+    ASSERT_EQ(expected.size(), controlGroups().size());
+    for (const auto& g : controlGroups()) EXPECT_EQ(writableKeys(only(g)), expected.at(g)) << g;
+    EXPECT_TRUE(writableKeys(only("everything")).empty());   // unknown names add nothing
+    EXPECT_FALSE(only("everything").allowHardwareWrites);
 }
 
-TEST(Permissions11A, PolicyGrantsRoutingOnlyViaItsPermissionAndNeverPersistenceOrDangerousTriggers) {
-    UserConfig all;
-    for (const auto& p : devicePermissions()) all.*(p.field) = true;
-    const WritePolicy w = guiWritePolicy(all);
+TEST(ControlGroups, TheAppPolicyCoversEveryVerifiedControlButNeverTheDeviceRestart) {
+    const auto keys = writableKeys(appWritePolicy());
+    for (const auto& g : controlGroups())
+        for (const auto& k : writableKeys(only(g))) EXPECT_TRUE(keys.count(k)) << g << " " << k;
+    EXPECT_TRUE(keys.count("autosetup"));
+    EXPECT_FALSE(keys.count("set.macosStreaming"));
+    // Autosetup needs processing + 48 V + measurements together
+    std::vector<std::string> noPhantom;
+    for (const auto& g : controlGroups())
+        if (g != "phantom") noPhantom.push_back(g);
+    EXPECT_FALSE(writableKeys(groupsWritePolicy(noPhantom)).count("autosetup"));
+    // the service lets its clients write exactly what the window may write
+    EXPECT_EQ(serviceClientPolicy().hardwareWriteOffsets, appWritePolicy().hardwareWriteOffsets);
+    EXPECT_EQ(serviceClientPolicy().hardwareTriggers, appWritePolicy().hardwareTriggers);
+}
+
+TEST(ControlGroups, PolicyGrantsRoutingOnlyViaItsGroupAndNeverPersistenceOrDangerousTriggers) {
+    const WritePolicy w = appWritePolicy();
     EXPECT_TRUE(w.allowHardwareWrites);
-    EXPECT_TRUE(w.allowRoutingChanges);    // only through the routing permission (below)
+    EXPECT_TRUE(w.allowRoutingChanges);
     EXPECT_FALSE(w.allowPersistentChanges);
-    for (const auto& p : devicePermissions())
-        EXPECT_EQ(guiWritePolicy(only(p)).allowRoutingChanges, std::string(p.name) == "routing") << p.name;
-    for (const auto& p : devicePermissions()) {   // the touch focus (56) only through follow active output
-        const auto o = guiWritePolicy(only(p)).hardwareWriteOffsets;
-        EXPECT_EQ(std::count(o.begin(), o.end(), settings_off::kSelectedChannel) == 1,
-                  std::string(p.name) == "followOutput") << p.name;
+    for (const auto& g : controlGroups()) EXPECT_EQ(only(g).allowRoutingChanges, g == "routing") << g;
+    for (const auto& g : controlGroups()) {   // the touch focus (56) only through follow active output
+        const auto o = only(g).hardwareWriteOffsets;
+        EXPECT_EQ(std::count(o.begin(), o.end(), settings_off::kSelectedChannel) == 1, g == "followOutput") << g;
     }
-    for (std::size_t forbidden : {
-                                  std::size_t(54), std::size_t(55), std::size_t(58), std::size_t(70)})
+    for (std::size_t forbidden : {std::size_t(54), std::size_t(55), std::size_t(58), std::size_t(70)})
         EXPECT_EQ(std::count(w.hardwareWriteOffsets.begin(), w.hardwareWriteOffsets.end(), forbidden), 0) << forbidden;
+    for (std::size_t o : w.hardwareWriteOffsets)   // no byte twice (routing and follow share 59)
+        EXPECT_EQ(std::count(w.hardwareWriteOffsets.begin(), w.hardwareWriteOffsets.end(), o), 1) << o;
     for (Trigger t : {Trigger::FactoryReset, Trigger::SwitchToMacOSStreamingMode, Trigger::SwitchToNormalMode,
                       Trigger::ResetLedColors})
         EXPECT_EQ(std::count(w.hardwareTriggers.begin(), w.hardwareTriggers.end(), t), 0);
-    for (const auto& p : devicePermissions()) {
-        const auto pol = guiWritePolicy(only(p));
-        if (std::string(p.name) == "measurements") EXPECT_FALSE(pol.hardwareTriggers.empty());
-        else EXPECT_TRUE(pol.hardwareTriggers.empty()) << p.name;
+    for (const auto& g : controlGroups()) {
+        if (g == "measurements") EXPECT_FALSE(only(g).hardwareTriggers.empty());
+        else EXPECT_TRUE(only(g).hardwareTriggers.empty()) << g;
     }
-    EXPECT_EQ(guiWritePolicy(UserConfig{}).allowHardwareWrites, false);
+    EXPECT_FALSE(groupsWritePolicy({}).allowHardwareWrites);
 }
 
-TEST(Permissions11A, ThreeFlagOverloadMatchesTheTable) {
+TEST(ControlGroups, ThreeFlagOverloadMatchesTheGroups) {
     for (int m = 0; m < 8; ++m) {
-        UserConfig c;
-        c.speakerControl = m & 1;
-        c.headphoneControl = m & 2;
-        c.ledBrightnessControl = m & 4;
-        const auto a = guiWritePolicy(c), b = guiWritePolicy(m & 1, m & 2, m & 4);
+        std::vector<std::string> g;
+        if (m & 1) g.push_back("speaker");
+        if (m & 2) g.push_back("headphone");
+        if (m & 4) g.push_back("ledBrightness");
+        const auto a = groupsWritePolicy(g), b = guiWritePolicy(m & 1, m & 2, m & 4);
         EXPECT_EQ(a.hardwareWriteOffsets, b.hardwareWriteOffsets);
         EXPECT_EQ(a.allowHardwareWrites, b.allowHardwareWrites);
     }
 }
 
-TEST(Permissions11A, GainIncreaseIsBoundedPerStep) {
+TEST(ControlGroups, GainIncreaseIsBoundedPerStep) {
     EXPECT_DOUBLE_EQ(limitIncrease(20.0, 50.0, kMaxGainIncreaseDb), 26.0);
     EXPECT_DOUBLE_EQ(limitIncrease(20.0, 5.0, kMaxGainIncreaseDb), 5.0);
 }

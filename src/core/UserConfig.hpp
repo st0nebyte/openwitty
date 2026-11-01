@@ -3,7 +3,7 @@
 // Location (XDG Base Directory): $XDG_CONFIG_HOME/openwitty/openwitty.conf, or ~/.config/openwitty/openwitty.conf.
 // Format: "key = value" lines, '#' comments, an optional [openwitty] header; unknown keys are kept as
 // warnings and ignored. Every value that is missing or cannot be parsed falls back to its safe default:
-// nothing writes the device, nothing synchronizes, until the user turns it on.
+// nothing synchronizes, follows or falls back until the user turns it on.
 #pragma once
 #include <string>
 #include <vector>
@@ -22,20 +22,8 @@ struct UserConfig {
     // with the level the device already has).
     DesktopVolumeSync desktopVolumeSync{DesktopVolumeSync::Off};
     // Only with desktopVolumeSync: if the device does not follow a desktop change, apply it through the
-    // vendor settings message (writes the device). Requires the user's explicit confirmation in the GUI.
+    // vendor settings message (writes the device). Experimental: offered only in debug mode.
     bool vendorFallback{false};
-    // Phase 10B: three independent GUI write permissions, each confirmed on its own (writes the device):
-    bool speakerControl{false};        // speaker volume + mute: settings bytes 20-22
-    bool headphoneControl{false};      // headphone volume + mute: settings bytes 27-29
-    bool ledBrightnessControl{false};  // LED brightness: settings byte 37
-    // Phase 11A: further groups, each off by default and confirmed on its own (writes the device):
-    bool inputControl{false};          // mic/instrument gain + mute, external gain lock: bytes 0-2, 10-12, 57
-    bool processingControl{false};     // low-cut, Clipguard, preamp, Denoise flag, Comp: bytes 3,4,6,7,9,13-16,18
-    bool monitoringControl{false};     // monitoring source, input/playback mix, Dim, Mono, loopback mute: 19,32-36
-    bool appearanceControl{false};     // LED colours, custom button: bytes 38-52, 53
-    bool phantomControl{false};        // 48 V phantom power (each switch-on is confirmed again): byte 5
-    bool outputModesControl{false};    // high-volume speakers, high-impedance headphones (confirmed per use): 24, 31
-    bool measurementControl{false};    // autogain measurements: measurement-session and autogain triggers
     // Phase 12C: OpenWitty keeps the native volume mapping (byte 59) on the audible output (writes the device).
     bool followActiveOutput{false};
     FollowPref followBothOn{FollowPref::Speakers};    // both outputs unmuted: speakers | headphones | keep
@@ -46,24 +34,13 @@ struct UserConfig {
     // a hash of the USB serial number (never the number itself). Choosing such a mode in the GUI authorizes the follow
     // writes (bytes 59, 56) for that device.
     std::vector<std::string> buttonFollow;
-    bool routingControl{false};        // mix to speakers, mobile streaming, native volume mapping (confirmed): 23, 59, 67
-    // Legacy (before Phase 10B): "output_control = true" authorized speaker AND headphone with one confirmation.
-    // It grants NOTHING now; this only records that the user should be asked to reconfirm the new permissions.
-    bool legacyOutputControlPending{false};
 
     bool operator==(const UserConfig&) const = default;
 };
 
-// The device-write permissions in one table: name (GUI/API), configuration key, field, one-line description.
-struct DevicePermission {
-    const char* name;
-    const char* key;
-    bool UserConfig::*field;
-    const char* description;
-};
-const std::vector<DevicePermission>& devicePermissions();
-const DevicePermission* findDevicePermission(const std::string& name);
-bool anyDeviceWritePermission(const UserConfig& c);
+// Keys of the per-group write permissions of the evaluation builds (before 2026-11-01). They are ignored without a
+// warning and dropped at the next save: the window controls every verified setting without switches.
+bool isObsoletePermissionKey(const std::string& key);
 
 struct ParsedUserConfig {
     UserConfig config;

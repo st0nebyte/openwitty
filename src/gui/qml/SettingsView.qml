@@ -16,6 +16,8 @@ Rectangle {
     function v(k, d) { var x = device.values[k]; return x === undefined ? d : x; }
     // Phase 10A: a control is enabled only if the backend says its exact bytes/trigger are authorized.
     function can(k) { return root.interactive && device.values["can." + k] === true; }
+    // Debug mode (openwitty --debug): hardware-test tools and experimental options.
+    readonly property bool debug: typeof debugMode !== "undefined" && debugMode === true
     property string open: "audio"
     // Phase 12D: this device's extended custom-button mode is in effect (stored for this device and its base is on it)
     readonly property string followKey: { var k = root.v("device.followKey", ""); return k === "simulated" ? "" : k; }
@@ -47,56 +49,6 @@ Rectangle {
         }
         return "";
     }
-    // Phase 11A: grouped, from the backend's per-control capabilities (can.<key>).
-    readonly property var capabilityGroups: [
-        ["speaker volume/mute", ["spk.volume", "spk.mute"]], ["headphone volume/mute", ["hp.volume", "hp.mute"]],
-        ["LED brightness", ["set.ledBrightness"]], ["input gain/mute", ["in1.gain", "in2.gain", "in1.mute", "in2.mute"]],
-        ["input processing", ["in1.highPass", "in1.clipguard", "in1.preamp", "in1.denoise", "in1.compress"]],
-        ["monitoring", ["mon.mix", "mon.mic", "out.dim", "out.mono", "loop.mute"]],
-        ["LED colours and custom button", ["set.led.icons", "set.customButton"]], ["48 V", ["in1.phantom"]],
-        ["output modes", ["set.highVolume", "set.highImpedance"]], ["routing", ["set.mixToSpeakers", "set.mobileStreaming"]], ["autogain", ["autogain1"]]]
-    function authorizedSummary() {
-        var out = [];
-        for (var i = 0; i < capabilityGroups.length; ++i) {
-            var keys = capabilityGroups[i][1], any = false;
-            for (var j = 0; j < keys.length; ++j) if (device.values["can." + keys[j]] === true) any = true;
-            if (any) out.push(capabilityGroups[i][0]);
-        }
-        return out.length ? out.join(", ") : "nothing (display only)";
-    }
-    // Phase 11A: the further permissions (name, switch label, tooltip, confirmation text).
-    readonly property var extraPermissions: [
-        {n: "inputs", label: "Input gain and mute",
-         confirm: "OpenWitty will be able to change the microphone and instrument gain and mute and the external gain lock. "
-                + "Gain can rise by at most 6 dB per step. Unmuting or raising gain can cause feedback through monitoring: "
-                + "keep speakers down and headphones off while you test."},
-        {n: "processing", label: "Input processing",
-         confirm: "OpenWitty will be able to switch low-cut, Clipguard, preamp style, Denoise and Comp of both inputs. "
-                + "Denoise is switched without the official noise measurement. Each change is read back."},
-        {n: "monitoring", label: "Monitoring",
-         confirm: "OpenWitty will be able to change direct monitoring (source and input/playback mix), Dim, Mono and the "
-                + "loopback mute. Monitoring changes what you hear and can create feedback; never monitor the loopback."},
-        {n: "appearance", label: "LED colours and custom button",
-         confirm: "OpenWitty will be able to change the LED colours and the custom button function. These are stored on "
-                + "the device. Each change is read back."},
-        {n: "phantom", label: "48 V phantom power",
-         confirm: "OpenWitty will be able to switch 48 V phantom power on the microphone input; each switch-on asks again. "
-                + "Phantom power can damage some ribbon microphones and causes a pop: mute outputs first."},
-        {n: "outputModes", label: "Output modes (louder)",
-         confirm: "OpenWitty will be able to switch high-volume speaker mode and high-impedance headphone mode; each "
-                + "switch-on asks again. Both can make the output much louder."},
-        {n: "followOutput", label: "Follow active output (system volume)",
-         confirm: "OpenWitty will switch which CONNECT 2 output the system volume keys control (\"Map native volume "
-                + "controls to\") to the output you can hear, whenever the speaker/headphone mutes change - also from "
-                + "the background service, and moves the touch-wheel focus along (can be switched off). Volume keys then "
-                + "act on that output directly; nothing else is written."},
-        {n: "routing", label: "Routing (mix to speakers, mobile streaming)",
-         confirm: "OpenWitty will be able to send the monitoring mix to the speakers and switch mobile streaming mode "
-                + "(inputs 1/2 carry the mic + instrument mix); each switch-on asks again."},
-        {n: "measurements", label: "Autogain and Denoise measurements",
-         confirm: "OpenWitty will be able to start the CONNECT 2's autogain and Denoise measurements (each asks again). The "
-                + "device then sets the input gain or Denoise by itself. Keep speakers down and headphones off during a measurement."}]
-
     Text { x: 16; y: 12; text: "Settings"; color: Theme.text; font.pixelSize: 15 }
     ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; y: 10; width: 60; text: "Close"
                    onClicked: root.closeRequested() }
@@ -104,7 +56,13 @@ Rectangle {
 
     // Accordion: headers up to the open one at the top, its section directly below it, the remaining headers at the
     // bottom of the column.
-    readonly property var sections: ["audio", "leds", "button", "presets", "device", "desktop"]
+    readonly property var sectionModel: {
+        var m = [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"},
+                 {k: "presets", t: "Presets"}, {k: "desktop", t: "Desktop integration"}];
+        if (root.debug) m.push({k: "debug", t: "Debug"});
+        return m;
+    }
+    readonly property var sections: sectionModel.map(function(s) { return s.k; })
     readonly property int openIndex: Math.max(0, sections.indexOf(open))
     readonly property int headerStep: 32
     function headerY(i) {
@@ -115,8 +73,7 @@ Rectangle {
     Item {
         x: 16; y: 0; width: 330; height: root.height
         Repeater {
-            model: [{k: "audio", t: "Audio"}, {k: "leds", t: "LEDs"}, {k: "button", t: "Custom button"},
-                    {k: "presets", t: "Presets"}, {k: "device", t: "Device control"}, {k: "desktop", t: "Desktop integration"}]
+            model: root.sectionModel
             Rectangle {
                 objectName: "sectionHeader_" + modelData.k
                 y: root.headerY(index)
@@ -160,33 +117,33 @@ Rectangle {
         // Phase 12C: follow active output (owner spec): OpenWitty keeps byte 59 on the audible output
         ToggleSwitch { objectName: "followOutputSwitch"; width: 330; label: "Follow active output"
                        enabled: !root.buttonExtended
-                       checked: integration.permissions["followOutput"] === true || root.buttonExtended
+                       checked: integration.followActiveOutput || root.buttonExtended
                        tip: "The system volume keys control the output you can hear (speakers or headphones)"
-                       onToggled: (b) => { if (b) confirmWrite.ask("followOutput"); else integration.setPermission("followOutput", false, false); } }
+                       onToggled: (b) => integration.setFollowActiveOutput(b) }
         Text { objectName: "followRequiredNote"; width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
                visible: root.buttonExtended
                text: "On because the custom button is set to \"switch outputs + follow volume\". Choose another custom "
                      + "button function to change this." }
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               visible: integration.permissions["followOutput"] === true || root.buttonExtended
+               visible: integration.followActiveOutput || root.buttonExtended
                text: "Speakers on only: speakers. Headphones on only: headphones. Needs desktop volume sync (Desktop integration)."
                      + (integration.desktopSync ? "" : " Desktop volume sync is off: nothing follows right now.") }
         ToggleSwitch { objectName: "followFocusSwitch"; width: 330; label: "Also move the touch-wheel focus"
-                       visible: integration.permissions["followOutput"] === true || root.buttonExtended
+                       visible: integration.followActiveOutput || root.buttonExtended
                        checked: integration.followMoveFocus
                        tip: "The touch wheel on the CONNECT 2 then controls the same output as the volume keys"
                        onToggled: (b) => integration.setFollowMoveFocus(b) }
-        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true || root.buttonExtended
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.followActiveOutput || root.buttonExtended
                text: "When both outputs are on, the volume keys control:" }
-        Row { spacing: 6; visible: integration.permissions["followOutput"] === true || root.buttonExtended
+        Row { spacing: 6; visible: integration.followActiveOutput || root.buttonExtended
             Repeater {
                 model: [{v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "keep", t: "Keep last"}]
                 ToggleButton { objectName: "followBothOn_" + modelData.v; width: 90; height: 22; text: modelData.t
                                active: integration.followBothOn === modelData.v
                                onClicked: integration.setFollowBothOn(modelData.v) } } }
-        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.permissions["followOutput"] === true || root.buttonExtended
+        Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.followActiveOutput || root.buttonExtended
                text: "When both outputs are muted:" }
-        Row { spacing: 6; visible: integration.permissions["followOutput"] === true || root.buttonExtended
+        Row { spacing: 6; visible: integration.followActiveOutput || root.buttonExtended
             Repeater {
                 model: [{v: "keep", t: "Keep last"}, {v: "speakers", t: "Speakers"}, {v: "headphones", t: "Headphones"}, {v: "disable", t: "No output"}]
                 ToggleButton { objectName: "followBothMuted_" + modelData.v; width: 74; height: 22; text: modelData.t
@@ -199,17 +156,17 @@ Rectangle {
             Repeater {
                 model: [{v: 0, t: "None"}, {v: 1, t: "Speakers"}, {v: 2, t: "Headphones"}]
                 ToggleButton { objectName: "volumeMapping" + modelData.v; width: 90; height: 22; text: modelData.t
-                               enabled: root.can("set.volumeMapping") && integration.permissions["followOutput"] !== true && !root.buttonExtended
+                               enabled: root.can("set.volumeMapping") && !integration.followActiveOutput && !root.buttonExtended
                                active: root.v("set.volumeMapping", -1) === modelData.v
-                               tip: integration.permissions["followOutput"] === true
+                               tip: integration.followActiveOutput
                                     ? "Set by \"Follow active output\"; switch that off to choose by hand"
                                     : "Which CONNECT 2 output the system volume (keyboard keys, desktop slider) controls"
                                onClicked: { if (active) return;
                                             if (modelData.v === 2 && !device.simulated) confirmLoud.askValue("set.volumeMapping", 2);
                                             else device.setValue("set.volumeMapping", modelData.v); } } } }
-        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10; visible: device.simulated || root.debug
                text: "macOS streaming mode restarts the device with another USB identity; it is not enabled in this build." }
-        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: root.can("set.macosStreaming")
+        ToggleSwitch { width: 330; label: "macOS streaming mode"; enabled: root.can("set.macosStreaming"); visible: device.simulated || root.debug
                        checked: root.v("set.macosStreaming", false)
                        tip: device.simulated ? "Simulated: restarts the (simulated) device" : "Not enabled on real hardware"
                        onToggled: (b) => confirmMode.ask(b) }
@@ -451,11 +408,13 @@ Rectangle {
                            onToggled: (b) => integration.setNameChannels(b) }
             // SR: allow 44.1 / 48 / 96 kHz in PipeWire (otherwise everything is resampled to 48 kHz)
             ToggleSwitch { objectName: "sampleRatesSwitch"; width: 310; label: "Allow 44.1 and 96 kHz for apps (experimental)"
+                           visible: root.debug || integration.extraSampleRates
                            checked: integration.extraSampleRates
                            tip: "PipeWire then runs the CONNECT 2 at the rate a DAW or player asks for (44.1, 48 or 96 kHz) "
                               + "instead of converting to 48 kHz. Applies to all sound cards."
                            onToggled: (b) => integration.setExtraSampleRates(b) }
             Text { objectName: "sampleRatesText"; width: 310; wrapMode: Text.WordWrap; font.pixelSize: 10; color: Theme.textDim
+                   visible: root.debug || integration.extraSampleRates
                    text: (integration.extraSampleRates ? "On: apps can switch between 44.1, 48 and 96 kHz. At 96 kHz the CONNECT 2 has no Denoise and Comp. "
                                                          + "Warning: repeated rate changes made the CONNECT 2's audio hang until it was unplugged (2026-10-31)."
                                                        : "Off: desktop audio runs at PipeWire's default rate; other rates are converted.")
@@ -463,14 +422,17 @@ Rectangle {
                          + (integration.audioRestartNeeded ? " Takes effect after restarting desktop audio." : "") }
             ToggleButton { objectName: "restartAudioButton"; visible: integration.audioRestartNeeded; width: 170; height: 22
                            text: "Restart desktop audio"; onClicked: confirmRestartAudio.visible = true }
-            Rectangle { width: 310; height: 1; color: "#333" }
-            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Background service option that writes the device" }
-            ToggleSwitch { width: 310; label: "Vendor fallback (writes the device)"
+            Rectangle { width: 310; height: 1; color: "#333"; visible: root.debug || integration.vendorFallback }
+            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Experimental: vendor fallback"
+                   visible: root.debug || integration.vendorFallback }
+            ToggleSwitch { objectName: "vendorFallbackSwitch"; width: 310; label: "Vendor fallback (writes the device)"
+                           visible: root.debug || integration.vendorFallback
                            enabled: integration.desktopSync
                            checked: integration.vendorFallback
                            tip: "Only for a device that does not respond to the desktop volume."
                            onToggled: (b) => { if (b) confirmFallback.visible = true; else integration.setVendorFallback(false, false); } }
             Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   visible: root.debug || integration.vendorFallback
                    text: "Only if the desktop reports that the CONNECT 2 did not follow its volume: the background "
                        + "service then applies it through the device's own protocol." }
 
@@ -486,59 +448,41 @@ Rectangle {
         }
     }
 
-    // Device control (Phase 10B): the independent permissions that let this window write the real CONNECT 2.
+    // Debug (openwitty --debug): hardware-test tools; nothing here is needed for normal use.
     Flickable {
-        objectName: "deviceInfoPage"
-        visible: root.open === "device"
+        objectName: "debugInfoPage"
+        visible: root.open === "debug"
         x: 16; y: root.bodyY; width: 340; height: root.bodyH; clip: true
-        contentHeight: deviceCol.height
+        contentHeight: debugCol.height
     Column {
-        id: deviceCol
+        id: debugCol
         width: 330; spacing: 8
         Text { width: 330; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
-               text: "On the real CONNECT 2 every control is display-only unless you allow it here. Each permission is "
-                   + "separate, off by default and covers only its own setting." }
-        Text { objectName: "deviceControlSummary"; width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               text: "Currently allowed: " + (device.simulated ? "everything (simulated device)" : root.authorizedSummary()) }
+               text: "Debug mode: tools for hardware tests and experimental options. Not needed for normal use; "
+                   + "start OpenWitty normally to hide this section." }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "In debug mode, Desktop integration also shows the experimental options: vendor fallback and "
+                   + "44.1 / 96 kHz for apps." }
+        Text { objectName: "debugLastWrite"; width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "Last device change: " + (device.values["write.key"] ? device.values["write.key"] + " - "
+                     + (device.values["write.outcome"] || "") + (device.values["write.message"] ? " (" + device.values["write.message"] + ")" : "")
+                     : "none yet") }
+        Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+               text: "Connection: " + (device.backend || "none") + (device.simulated ? " (simulated)" : "") }
     }
     }
     Flickable {
-        objectName: "deviceControlPage"
-        visible: root.open === "device"
+        objectName: "debugToolsPage"
+        visible: root.open === "debug"
         x: 390; y: 60; width: 320; height: root.height - 70; clip: true
         contentHeight: deviceRightCol.height
         Column {
             id: deviceRightCol
             width: 310; spacing: 6
-            Text { width: 310; color: Theme.text; font.pixelSize: 12; text: "Options that write the device" }
-            Text { visible: integration.legacyOutputControlPending; width: 310; wrapMode: Text.WordWrap
-                   objectName: "legacyOutputNotice"; color: Theme.warn; font.pixelSize: 10
-                   text: "An older OpenWitty had one combined speaker/headphone permission. It no longer grants anything: "
-                       + "turn on the speaker and/or headphone control below if you want them." }
-            ToggleButton { visible: integration.legacyOutputControlPending; width: 90; height: 20; text: "Dismiss"
-                           onClicked: integration.dismissLegacyOutputControl() }
-            ToggleSwitch { objectName: "speakerControlSwitch"; width: 310; label: "Speaker volume and mute"
-                           checked: integration.speakerControl
-                           tip: "Lets this window change the speaker volume and mute (bytes 20-22) - nothing else."
-                           onToggled: (b) => { if (b) confirmWrite.ask("speaker"); else integration.setSpeakerControl(false, false); } }
-            ToggleSwitch { objectName: "headphoneControlSwitch"; width: 310; label: "Headphone volume and mute"
-                           checked: integration.headphoneControl
-                           tip: "Lets this window change the headphone volume and mute (bytes 27-29) - nothing else."
-                           onToggled: (b) => { if (b) confirmWrite.ask("headphone"); else integration.setHeadphoneControl(false, false); } }
-            ToggleSwitch { objectName: "ledControlSwitch"; width: 310; label: "LED brightness"
-                           checked: integration.ledBrightnessControl
-                           tip: "Lets this window change the LED brightness (byte 37) - nothing else."
-                           onToggled: (b) => { if (b) confirmWrite.ask("led"); else integration.setLedBrightnessControl(false, false); } }
-            Repeater {
-                model: root.extraPermissions
-                ToggleSwitch { objectName: "permSwitch_" + modelData.n; width: 310; label: modelData.label
-                               checked: integration.permissions[modelData.n] === true
-                               tip: integration.permissionDescription(modelData.n)
-                               onToggled: (b) => { if (b) confirmWrite.ask(modelData.n); else integration.setPermission(modelData.n, false, false); } }
-            }
             Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-                   text: "Each permission is separate, off by default and changes only its own setting. Every change is "
-                       + "read back; volume increases are limited to 10 dB per step. Separate from desktop sync." }
+                   visible: device.values["hwcheck.enabled"] !== true
+                   text: "Hardware check: start with openwitty --hw-check to record a settings baseline and compare "
+                       + "the device after each change." }
             Text { objectName: "writeLockedNotice"; width: 310; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
                    visible: device.values["write.locked"] === true
                    text: "Device writes stopped: " + (device.values["write.lockReason"] || "") + "." }
@@ -672,18 +616,15 @@ Rectangle {
 
     // right column
     Column {
-        visible: root.open !== "desktop" && root.open !== "device" && root.open !== "presets"
+        visible: root.open !== "desktop" && root.open !== "debug" && root.open !== "presets"
         x: 390; y: 60; width: 310; spacing: 10
         Text { width: 310; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 12; text: "OpenWitty " + Qt.application.version + " — unofficial, experimental; not affiliated with LEWITT" }
         Text { color: Theme.textDim; font.pixelSize: 12
                text: "CONNECT 2 firmware version: " + (device.simulated ? "simulated"
                      : (root.v("device.usbRevision", "") !== "" && root.v("device.usbRevision", "") !== "-")
                        ? root.v("device.usbRevision", "") + " (USB revision)" : "unknown") }
-        Row { spacing: 8
-            ToggleButton { width: 120; height: 26; text: "Check for updates"; primary: true; enabled: false; tip: "Not implemented" }
-            ToggleButton { width: 100; height: 26; text: "Manual update"; enabled: false; tip: "Firmware update is out of scope" } }
         Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
-               text: "Firmware update and factory reset are disabled: they are destructive/persistent and not validated." }
+               text: "Firmware update and factory reset are not part of OpenWitty; use LEWITT's official app for them." }
         Rectangle { width: 310; height: 1; color: "#333" }
         ToggleSwitch { objectName: "showTooltipsSwitch"; width: 310; label: "Show tooltips"; checked: Hint.enabled
                        onToggled: (b) => { Hint.enabled = b; if (!b) Hint.clear();
@@ -691,10 +632,6 @@ Rectangle {
         ToggleSwitch { width: 310; label: "Retrigger onboarding"; checked: false
                        onToggled: (b) => { if (b) root.onboardingRequested(); } }
     }
-    ToggleButton { anchors.right: parent.right; anchors.rightMargin: 16; anchors.bottom: parent.bottom
-                   visible: root.open !== "desktop" && root.open !== "device" && root.open !== "presets"
-                   anchors.bottomMargin: 14; width: 100; text: "Factory reset"; enabled: false
-                   tip: "Disabled by policy" }
 
     Rectangle {
         id: confirmMode
@@ -753,51 +690,12 @@ Rectangle {
     }
 
     Rectangle {
-        id: confirmWrite
-        objectName: "confirmWriteDialog"
-        visible: false; z: 20; anchors.centerIn: parent; width: 330; radius: 6
-        color: Theme.panelHi; border.color: Theme.warn
-        height: Math.max(160, confirmCol.height + 30)
-        property string field: ""
-        function ask(f) { field = f; visible = true; }
-        function accept() {
-            visible = false;
-            if (field === "speaker") integration.setSpeakerControl(true, true);
-            else if (field === "headphone") integration.setHeadphoneControl(true, true);
-            else if (field === "led") integration.setLedBrightnessControl(true, true);
-            else integration.setPermission(field, true, true);
-        }
-        function extraText(f) {
-            for (var i = 0; i < root.extraPermissions.length; ++i)
-                if (root.extraPermissions[i].n === f) return root.extraPermissions[i].confirm;
-            return "";
-        }
-        Column { id: confirmCol; anchors.centerIn: parent; spacing: 10
-            Text { width: 300; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
-                   text: confirmWrite.field === "speaker"
-                         ? "OpenWitty will be able to change the CONNECT 2's speaker volume and mute - only those. "
-                           + "Each change is read back; it can get at most 10 dB louder per step. Turn your monitors down first."
-                         : confirmWrite.field === "headphone"
-                         ? "OpenWitty will be able to change the CONNECT 2's headphone volume and mute - only those. "
-                           + "Each change is read back; it can get at most 10 dB louder per step. Take your headphones off first."
-                         : confirmWrite.field === "led"
-                         ? "OpenWitty will be able to change the CONNECT 2's LED brightness - only that, no colours and "
-                           + "no audio setting. Each change is read back."
-                         : confirmWrite.extraText(confirmWrite.field) }
-            Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
-                ToggleButton { objectName: "confirmWriteCancel"; width: 70; text: "Cancel"; onClicked: confirmWrite.visible = false }
-                ToggleButton { objectName: "confirmWriteEnable"; width: 70; text: "Enable"; active: true; activeColor: Theme.warn
-                               onClicked: confirmWrite.accept() } }
-        }
-    }
-
-    Rectangle {
         id: confirmReset
         visible: false; z: 20; anchors.centerIn: parent; width: 300; height: 140; radius: 6
         color: Theme.panelHi; border.color: Theme.warn
         Column { anchors.centerIn: parent; spacing: 10
             Text { width: 270; wrapMode: Text.WordWrap; color: Theme.text; font.pixelSize: 11
-                   text: "Turn off desktop volume sync, the vendor fallback, every device-control permission, the background "
+                   text: "Turn off desktop volume sync, follow active output, the vendor fallback, the background "
                        + "service and the system tray icon? The kernel quirk, if you installed it, is not touched." }
             Row { spacing: 8; anchors.horizontalCenter: parent.horizontalCenter
                 ToggleButton { width: 70; text: "Cancel"; onClicked: confirmReset.visible = false }
@@ -880,7 +778,7 @@ Rectangle {
                        + "Changes are sent in a safe order (mutes first, unmutes last); level increases go in small, verified steps." }
             Text { width: 370; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    visible: presetConfirm.notAllowed.length > 0
-                   text: "Skipped (no permission in Device control): " + presetConfirm.notAllowed.join("; ") }
+                   text: "Skipped (not supported by OpenWitty): " + presetConfirm.notAllowed.join("; ") }
             Text { width: 370; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    visible: (presetConfirm.info.ignored || []).length > 0
                    text: "Not understood, ignored: " + (presetConfirm.info.ignored || []).join(", ") }

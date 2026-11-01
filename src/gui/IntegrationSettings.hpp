@@ -15,14 +15,8 @@ class IntegrationSettings : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool desktopSync READ desktopSync NOTIFY changed)
     Q_PROPERTY(bool vendorFallback READ vendorFallback NOTIFY changed)
-    // Phase 10B: independent device-write permissions (each confirmed on its own, off by default).
-    Q_PROPERTY(bool speakerControl READ speakerControl NOTIFY changed)
-    Q_PROPERTY(bool headphoneControl READ headphoneControl NOTIFY changed)
-    Q_PROPERTY(bool ledBrightnessControl READ ledBrightnessControl NOTIFY changed)
-    // An older settings file had the combined output_control = true; it grants nothing now (reconfirm).
-    Q_PROPERTY(bool legacyOutputControlPending READ legacyOutputControlPending NOTIFY changed)
-    // Phase 11A: every device-write permission by name (core/UserConfig devicePermissions()): name -> on/off.
-    Q_PROPERTY(QVariantMap permissions READ permissions NOTIFY changed)
+    // Phase 12C: keep the system volume keys on the audible output (switches the device's volume-key mapping).
+    Q_PROPERTY(bool followActiveOutput READ followActiveOutput NOTIFY changed)
     // Phase 12C: follow active output choices: "speakers" | "headphones" | "keep" (| "disable" for both muted).
     Q_PROPERTY(QString followBothOn READ followBothOn NOTIFY changed)
     Q_PROPERTY(QString followBothMuted READ followBothMuted NOTIFY changed)
@@ -69,11 +63,8 @@ public:
 
     bool desktopSync() const { return cfg_.desktopVolumeSync == lewitt::DesktopVolumeSync::Mirror; }
     bool vendorFallback() const { return cfg_.vendorFallback; }
-    bool speakerControl() const { return cfg_.speakerControl; }
-    bool headphoneControl() const { return cfg_.headphoneControl; }
-    bool ledBrightnessControl() const { return cfg_.ledBrightnessControl; }
-    bool legacyOutputControlPending() const { return cfg_.legacyOutputControlPending; }
-    QVariantMap permissions() const;
+    bool followActiveOutput() const { return cfg_.followActiveOutput; }
+    Q_INVOKABLE void setFollowActiveOutput(bool on);
     QString followBothOn() const;
     QString followBothMuted() const;
     // Unknown values are ignored; "disable" only for both muted.
@@ -90,9 +81,6 @@ public:
     QVariantMap buttonFollow() const;
     // base 1|2 sets this device's extended mode (needs the GUI's confirmation); any other value removes it.
     Q_INVOKABLE void setButtonFollow(const QString& deviceKey, int base, bool confirmed);
-    // Turning a permission on needs `confirmed` (the GUI's dialog); turning it off never does. Unknown names: no-op.
-    Q_INVOKABLE void setPermission(const QString& name, bool on, bool confirmed);
-    Q_INVOKABLE QString permissionDescription(const QString& name) const;
     QString configPath() const { return path_; }
     QStringList configWarnings() const { return warnings_; }
     QString serviceState() const { return serviceState_; }
@@ -122,13 +110,8 @@ public:
 
     Q_INVOKABLE void refresh();                        // config + service state + setup check
     Q_INVOKABLE void setDesktopSync(bool on);          // off also turns the vendor fallback off
-    // Device-writing options: only with explicit confirmation from the UI dialog.
+    // Experimental (debug mode): only with explicit confirmation from the UI dialog.
     Q_INVOKABLE void setVendorFallback(bool on, bool confirmed);
-    // Turning on needs confirmed = true (the UI's dialog); turning off always works. Each changes only its own key.
-    Q_INVOKABLE void setSpeakerControl(bool on, bool confirmed);
-    Q_INVOKABLE void setHeadphoneControl(bool on, bool confirmed);
-    Q_INVOKABLE void setLedBrightnessControl(bool on, bool confirmed);
-    Q_INVOKABLE void dismissLegacyOutputControl();
     // systemctl --user enable --now / disable --now; turning it off is always allowed, turning it on
     // needs desktop sync. Returns whether the resulting service state is the requested one.
     Q_INVOKABLE bool setBackgroundService(bool on);

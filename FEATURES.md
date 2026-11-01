@@ -7,15 +7,15 @@ Sources: official online guide (documented behaviour, screenshots), macOS and Wi
 Summary of the hardware evidence (2026-11-01; the current per-feature status is the parity table in
 `docs/FEATURE_COMPLETION_ROADMAP.md`, which supersedes older rows here):
 * Transport, the read-only messages and the settings bytes of all physical controls: confirmed.
-* GUI writes on the real device, each behind its own permission and read back - among them output volume/mute,
+* GUI writes on the real device, read back - since 2026-11-01 without permission switches (product mode) - among them output volume/mute,
   LED brightness, input processing, routing (bytes 23, 59, 67), follow-output, the custom button, autogain and
   Denoise measurements and the full Autosetup flow (mic). Which control is verified: the roadmap's parity table.
 * Not exercised on hardware: presets as a whole (they use the same verified writes), the instrument Autosetup.
 
 "RE" = what reverse engineering still has to establish.
 Implementation key: **core** = Qt-free codec + session + tests; **GUI** = QML control (on real hardware:
-what its permission allows). Since Phase 10A every GUI control is enabled by its own capability (`can.<key>`,
-`core/ControlCapabilities`); measurement triggers need the *measurements* permission.
+what the window's fixed policy allows). Every GUI control is enabled by its own capability (`can.<key>`,
+`core/ControlCapabilities`), derived from `appWritePolicy()` (the verified control groups).
 
 | # | Feature (official behaviour) | GUI location | Protocol | Implementation | Missing RE | HW |
 |---|---|---|---|---|---|---|

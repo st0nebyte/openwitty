@@ -50,15 +50,15 @@ What works on real hardware (one device, one system):
 
 Optional and limited:
 
-- **Device control** (Settings → Device control): separate switches, each off by default and each confirmed
-  on its own — speaker volume/mute, headphone volume/mute, LED brightness, input gain/mute (with gain lock),
-  input processing (low-cut, Clipguard, preamp, Denoise, Comp), monitoring (source, mix, Dim, Mono, loopback
-  mute), LED colours and custom button, 48 V, output modes (high-volume speakers, high-impedance headphones;
-  each switch-on confirmed again) and autogain measurements. Each switch lets OpenWitty write only its own
-  bytes; one write per deliberate change (dragging previews, the release sends); volume at most 10 dB and gain
-  at most 6 dB higher per write; every write is read back and never retried. Hardware status: LED brightness
-  passed its GUI hardware test (HW-1); the other groups are tested offline and await their hardware sessions.
-  Mix-to-speakers and the streaming modes stay display-only (their device values are not known yet).
+- **Device control:** every setting verified on the real CONNECT 2 works from the window without permission
+  switches — speaker and headphone volume/mute, input gain/mute (with gain lock), input processing (low-cut,
+  Clipguard, preamp, Denoise, Comp), monitoring (source, mix, Dim, Mono, loopback mute), LED brightness and
+  colours, custom button, 48 V, output modes, routing (mix to speakers, mobile streaming, volume-key mapping),
+  follow active output, Autosetup and presets. One write per deliberate change (dragging previews, the release
+  sends); large increases go in verified steps (volume 10 dB, gain 6 dB); every write is read back and never
+  retried; 48 V, the louder modes and the routing changes ask once. macOS streaming mode, firmware update and
+  factory reset are not available.
+- **Debug mode** (`openwitty --debug`): the hardware check and experimental options; not needed for normal use.
 - **CLI writes** (`openwitty-cli write …`, explicit opt-in variables): LED brightness and speaker
   volume/mute were verified on hardware; instrument mute is prepared but never executed.
 - **Vendor fallback** for the desktop volume (off by default): only for a device state in which
