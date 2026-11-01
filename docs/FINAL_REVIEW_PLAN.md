@@ -83,3 +83,5 @@ Each step ends with a written result in `docs/FINAL_REVIEW_RESULTS.md`; failures
 9. **Owner decisions:** merge to `main`, tag, release, visibility. Nothing of this happens without them.
 
 **Exit criteria:** no open S1/S2 issue; every step above has a result; the owner signs off.
+
+Feature ideas beyond the official app (not planned, decided after the review): `docs/FEATURE_IDEAS.md`.
