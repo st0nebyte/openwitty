@@ -74,6 +74,7 @@ PipeWire 1.6 / WirePlumber 0.5. Everything else is untested.
   you to reconfirm the controls you want.
 
 ### Fixed
+- Autosetup: advances after a successful measurement on the real device; switches 48 V before the gain measurement; new ambient-noise step when Denoise is chosen.
 - Greyed-out buttons (Denoise/Comp at 96 kHz) show why on hover; the noise-floor tooltip is no longer covered by the next strip.
 - Separate inputs: no false "set up for another CONNECT 2" warning right after restarting desktop audio.
 - Settings: each category opens directly under its header (accordion); long sections scroll instead of overlapping.

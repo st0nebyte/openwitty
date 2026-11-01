@@ -180,7 +180,7 @@ Window {
         OnboardingOverlay { objectName: "onboardingOverlay"; visible: win.showOnboarding; x: 0; y: 0; width: parent.width; height: parent.height; z: 12
                             onFinished: { win.showOnboarding = false;
                                           if (typeof prefs !== "undefined") prefs.setOnboardingDone(true); } }
-        AutosetupWizard { visible: win.showWizard; x: 0; y: 0; width: parent.width; height: parent.height; z: 11
+        AutosetupWizard { objectName: "autosetupWizard"; visible: win.showWizard; x: 0; y: 0; width: parent.width; height: parent.height; z: 11
                           interactive: win.interactive && device.values["can.autosetup"] === true
                           onCloseRequested: win.showWizard = false }
     }

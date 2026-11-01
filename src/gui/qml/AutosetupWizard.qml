@@ -11,7 +11,7 @@ Rectangle {
     property bool interactive: false
     signal closeRequested()
     color: "#262626"
-    property int step: -1                // -1 = chooser
+    property int step: -1                // -1 = chooser; 1..5 guided steps, 7 ambient noise test, 6 summary
     property string target: "both"       // mic | inst | both
     property bool phantom: false
     property int preamp: 0
@@ -24,6 +24,31 @@ Rectangle {
     // Phase 11B session 4: on hardware a successful mic autogain reported result code 1, which the decoded reading calls
     // "failed". Until the code is understood, only the simulated device's outcome is shown as a failure.
     readonly property bool failed: device.simulated && autoState === "finished" && outcome === 1
+    // 2026-11-01: 48 V is switched on before the measurement (a condenser mic gives no signal without it); the
+    // measurement waits a few seconds after switching so the capsule can charge.
+    property bool phantomSettling: false
+    Timer { id: phantomTimer; interval: 5000; onTriggered: root.phantomSettling = false }
+    function phantomBeforeMeasuring() {
+        if (phantom && target !== "inst" && device.values["in1.phantom"] !== true) {
+            device.setValue("in1.phantom", true);
+            phantomSettling = true;
+            phantomTimer.restart();
+        }
+    }
+    // Ambient noise test (official "Now test your ambient noise"): only when Denoise is chosen; mic, then instrument.
+    readonly property bool noiseTest: denoise && dsp
+    property var noiseQueue: []
+    property string noiseRunning: ""
+    function startNoiseTest() {
+        noiseQueue = target === "mic" ? ["denoise1"] : target === "inst" ? ["denoise2"] : ["denoise1", "denoise2"];
+        nextNoise();
+    }
+    function nextNoise() {
+        if (noiseQueue.length === 0) { noiseRunning = ""; step = 6; return; }
+        noiseRunning = noiseQueue[0];
+        noiseQueue = noiseQueue.slice(1);
+        device.trigger(noiseRunning);
+    }
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true
                 onWheel: (w) => { w.accepted = true; } }   // modal: no click or wheel reaches the main view
 
@@ -35,9 +60,14 @@ Rectangle {
             device.setValue(p + "clipguard", clipguard);
             if (dsp) device.setValue(p + "denoise", denoise);
         }
-        if (phantom && ins.indexOf(1) >= 0) device.setValue("in1.phantom", true);
+        if (phantom && ins.indexOf(1) >= 0 && device.values["in1.phantom"] !== true) device.setValue("in1.phantom", true);
     }
-    onAutoStateChanged: if (step === 5 && autoState === "finished" && outcome !== 1) step = 6
+    // Advance when the measurement finished (on the real device a successful autogain reports result code 1).
+    onAutoStateChanged: {
+        if (autoState !== "finished" && autoState !== "timeout") return;
+        if (step === 5 && !failed) step = noiseTest ? 7 : 6;
+        else if (step === 7 && noiseRunning !== "") nextNoise();
+    }
 
     // title bar of the "wizard window"
     Rectangle { x: 0; y: 0; width: parent.width; height: 22; color: "#343434"
@@ -90,7 +120,8 @@ Rectangle {
             Text { anchors.centerIn: parent; color: "#fff"; font.pixelSize: 18
                    text: ["", "Does your microphone need +48 V?", "Choose a sound for your preamps",
                           "Would you like to reduce background noise?", "Would you like to use Clipguard?",
-                          "Let's test your sound!", "Autosetup will apply these settings"][Math.max(0, root.step)] } }
+                          "Let's test your sound!", "Autosetup will apply these settings",
+                          "Now test your ambient noise"][Math.max(0, root.step)] } }
         Column {
             x: 40; y: 66; width: parent.width - 80; spacing: 12
             visible: root.step === 1
@@ -138,10 +169,26 @@ Rectangle {
             Rectangle { width: parent.width; height: 10; radius: 5; color: Theme.well
                 Rectangle { width: parent.width * Math.min(100, root.progress) / 100; height: parent.height; radius: 5
                             color: root.failed ? Theme.danger : Theme.meterGreen } }
+            Text { visible: root.phantomSettling; color: Theme.warn; font.pixelSize: 11
+                   text: "+48 V was just switched on: wait a moment for the microphone…" }
             ToggleButton { width: 140; height: 30; text: root.failed ? "Repeat" : "Start measure"; primary: true
-                           enabled: root.interactive && root.autoState !== "running"
+                           enabled: root.interactive && root.autoState !== "running" && !root.phantomSettling
                            onClicked: device.trigger(root.target === "mic" ? "autogain1"
                                                   : root.target === "inst" ? "autogain2" : "autogainBoth") }
+        }
+        Column {
+            x: 40; y: 66; width: parent.width - 80; spacing: 12; visible: root.step === 7
+            Text { width: parent.width; wrapMode: Text.WordWrap; color: "#cfcfcf"; font.pixelSize: 12
+                   text: root.noiseRunning !== "" ? "Stay quiet… measuring the background noise"
+                         + (root.target === "both" ? (root.noiseRunning === "denoise1" ? " (microphone)" : " (instrument)") : "")
+                         : "Stay quiet for about 10 seconds while the device measures the background noise. "
+                           + "It then switches Denoise on by itself." }
+            Rectangle { width: parent.width; height: 10; radius: 5; color: Theme.well
+                Rectangle { width: parent.width * Math.min(100, root.noiseRunning !== "" ? root.progress : 0) / 100
+                            height: parent.height; radius: 5; color: Theme.meterGreen } }
+            ToggleButton { objectName: "autosetupNoiseStart"; width: 140; height: 30; text: "Start measure"; primary: true
+                           enabled: root.interactive && root.noiseRunning === "" && root.autoState !== "running"
+                           onClicked: root.startNoiseTest() }
         }
         Column {
             x: 40; y: 66; width: parent.width - 80; spacing: 8; visible: root.step === 6
@@ -157,12 +204,16 @@ Rectangle {
             spacing: 8
             ToggleButton { width: 70; height: 26; text: "Cancel"; onClicked: { root.step = -1; root.closeRequested(); } }
             ToggleButton { width: 70; height: 26; text: "Back"; active: true
-                           onClicked: root.step = (root.step <= 1 || (root.step === 2 && root.target !== "mic" && root.target !== "both")) ? -1 : root.step - 1 }
+                           enabled: root.noiseRunning === "" && root.autoState !== "running"
+                           onClicked: root.step = root.step === 7 ? 5
+                                      : (root.step <= 1 || (root.step === 2 && root.target !== "mic" && root.target !== "both")) ? -1 : root.step - 1 }
             ToggleButton { width: 70; height: 26; text: root.step === 6 ? "Apply" : "Next"; primary: true
-                           enabled: root.step !== 6 || root.interactive
+                           enabled: (root.step !== 6 || root.interactive) && root.noiseRunning === "" && root.autoState !== "running"
                            onClicked: {
                                if (root.step === 6) { root.apply(); root.step = -1; root.closeRequested(); }
-                               else if (root.step === 1) root.step = 2;
+                               else if (root.step === 1) { root.phantomBeforeMeasuring(); root.step = 2; }
+                               else if (root.step === 5) root.step = root.noiseTest ? 7 : 6;   // skip the measurement
+                               else if (root.step === 7) root.step = 6;                       // skip the noise test
                                else root.step += 1;
                            } }
         }

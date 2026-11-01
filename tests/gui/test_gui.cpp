@@ -3056,3 +3056,32 @@ TEST(Measurement11B, DenoiseOnReusesTheStoredLevelAndTheLineFollowsDenoise) {
     for (int i = 0; i < 5; ++i) QCoreApplication::processEvents();
     EXPECT_TRUE(marker->isVisible()) << "Denoise on: the stored level is shown";
 }
+
+// 2026-11-01: the Autosetup flow on the (simulated) device: 48 V is switched before the gain measurement, a finished
+// measurement advances by itself, and with Denoise chosen the ambient noise test runs (mic, then instrument) before the
+// summary.
+TEST(Autosetup, FlowSwitches48VFirstAndRunsTheNoiseTest) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.connection() == "Connected"; }));
+    MainView v(c);
+    v.root->setProperty("showWizard", true);
+    auto* wiz = v.root->findChild<QObject*>("autosetupWizard");
+    ASSERT_TRUE(wiz);
+    auto pump = [&] { for (int i = 0; i < 5; ++i) { QCoreApplication::processEvents(); c.flush(); } };
+    wiz->setProperty("target", "mic");
+    wiz->setProperty("phantom", true);
+    wiz->setProperty("denoise", true);
+    wiz->setProperty("step", 1);
+    ASSERT_FALSE(c.values().value("in1.phantom").toBool());
+    QMetaObject::invokeMethod(wiz, "phantomBeforeMeasuring");
+    ASSERT_TRUE(waitFor([&] { c.flush(); return c.values().value("in1.phantom").toBool(); })) << "48 V before measuring";
+    EXPECT_TRUE(wiz->property("phantomSettling").toBool());
+    wiz->setProperty("step", 5);
+    c.trigger("autogain1");
+    ASSERT_TRUE(waitFor([&] { pump(); return wiz->property("step").toInt() == 7; }, 5000)) << "advance to the noise test";
+    QMetaObject::invokeMethod(wiz, "startNoiseTest");
+    ASSERT_TRUE(waitFor([&] { pump(); return wiz->property("step").toInt() == 6; }, 5000)) << "then the summary";
+    EXPECT_TRUE(c.values().value("in1.denoise").toBool()) << "the device switched Denoise on after measuring";
+}
