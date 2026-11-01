@@ -150,6 +150,9 @@ private:
     // Phase 11B session 4: when the running measurement started (timeout closes the measurement session).
     std::chrono::steady_clock::time_point autoStarted_{};
     QString autoKey_;
+    // 2026-11-01: the device keeps progress 100 from the previous measurement until the new one starts; a measurement
+    // only counts as finished after its progress was seen below 100 (else it "finished" the instant it was started).
+    bool autoSawProgress_{false};
 public:
     static constexpr int kMeasurementTimeoutMs = 45000;
     // Tests only: pretend the running measurement started `ms` earlier.

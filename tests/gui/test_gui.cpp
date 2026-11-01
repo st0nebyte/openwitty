@@ -2711,6 +2711,26 @@ TEST(Measurement11B, CompletedAutogainSendsEndSessionOnce) {
     EXPECT_EQ(t.back(), 5);
 }
 
+// 2026-11-01 live test: the device keeps progress 100 after a measurement. The next measurement must not count as
+// finished (and get its end-session word) before the device reported it running.
+TEST(Measurement11B, SecondMeasurementDoesNotFinishOnTheOldProgress) {
+    app();
+    lewitt::UserConfig cfg;
+    cfg.measurementControl = true;
+    RealLike r(lewitt::guiWritePolicy(cfg));
+    r.c->trigger("autogain1");
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
+    ASSERT_EQ(r.mock.triggers().back(), 5);
+    r.c->trigger("denoise1");
+    r.c->flush();
+    QCoreApplication::processEvents();
+    EXPECT_EQ(r.c->values().value("auto.state").toString(), "running") << "old progress 100 is not a result";
+    EXPECT_EQ(r.mock.triggers().back(), 6) << "no end-session right after the measurement word";
+    ASSERT_TRUE(waitFor([&] { r.c->flush(); return r.c->values().value("auto.state").toString() == "finished"; }, 5000));
+    EXPECT_FALSE(r.mock.autoGainRunning()) << "finished only after the device completed";
+    EXPECT_EQ(r.mock.triggers().back(), 5);
+}
+
 // Real device: the autogain button asks first; nothing is sent until Start.
 TEST(Measurement11B, AutogainButtonAsksBeforeEveryMeasurement) {
     app();

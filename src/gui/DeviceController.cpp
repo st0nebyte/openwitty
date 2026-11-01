@@ -901,8 +901,9 @@ void DeviceWorker::publish() {
         // Auto-gain workflow derived from the status progress / result bits.
         int prog = st.autosetupProgress();
         QString state = autoState_;
+        if (autoState_ == "running" && prog < 100) autoSawProgress_ = true;
         if (autoState_ == "running" && mock_ && !mock_->autoGainRunning() && prog >= 100) state = "finished";
-        if (autoState_ == "running" && !mock_ && prog >= 100) state = "finished";
+        if (autoState_ == "running" && !mock_ && autoSawProgress_ && prog >= 100) state = "finished";
         // Phase 11B session 4: a measurement that never reports completion must not leave the device in its
         // measurement session; after the timeout the end-session word is sent once (as the official app does when
         // its measurement window closes) and the state says so.
@@ -969,7 +970,7 @@ void DeviceWorker::trigger(const QString& name) {
     if (!b) { report(b); publish(); return; }
     inMeasureSession_ = true;
     auto s = session_->sendTrigger(map[name]);
-    if (s) { autoState_ = "running"; autoStarted_ = std::chrono::steady_clock::now(); autoKey_ = name; }
+    if (s) { autoState_ = "running"; autoSawProgress_ = false; autoStarted_ = std::chrono::steady_clock::now(); autoKey_ = name; }
     else { report(s); (void)session_->sendTrigger(Trigger::EndMeasurementSession); inMeasureSession_ = false; }
     if (hwCheck_) {
         // The device sets the measured gain itself: those bytes are expected to change from here on.
