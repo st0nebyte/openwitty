@@ -2226,7 +2226,16 @@ void setRawMix(lewitt::MockTransport& mock, double deviceValue) {   // the field
 TEST(MonitorMix, RealDeviceValuesAreShownOnTheObservedScaleAndClamped) {
     app();
     RealLike r{lewitt::WritePolicy{}};
+    {   // the raw readout is a debug-mode detail
+        QQmlEngine plain;
+        auto normal = loadMain(*r.c, plain);
+        ASSERT_TRUE(normal);
+        QObject* ro = normal->findChild<QObject*>("monitorMixReadout");
+        ASSERT_TRUE(ro);
+        EXPECT_FALSE(ro->property("visible").toBool());
+    }
     QQmlEngine engine;
+    engine.rootContext()->setContextProperty("debugMode", true);
     auto root = loadMain(*r.c, engine);
     ASSERT_TRUE(root);
     QObject* knob = root->findChild<QObject*>("monitorMixKnob");
@@ -3239,4 +3248,31 @@ TEST(Qml, PresetsPageSavesAndAsksBeforeLoading) {
     ASSERT_TRUE(dlg);
     EXPECT_TRUE(dlg->property("visible").toBool());
     EXPECT_EQ(dlg->property("changes").toList().size(), 0) << "saved just now: nothing to change";
+}
+
+// Owner wish (2026-11-01): the channel the device's touch wheel controls is shown by its icon in the selection colour
+// (a generated *-selected.svg, no shader tint), not by a frame around the strip.
+TEST(GuiPolish, TheSelectedChannelIconLoadsTheSelectionColourVariant) {
+    app();
+    DeviceController c;
+    c.connectMock();
+    ASSERT_TRUE(waitFor([&] { return c.connection() == "Connected" && c.values().contains("selected.channel"); }));
+    QQmlEngine engine;
+    auto root = loadMain(c, engine);
+    ASSERT_TRUE(root);
+    auto* win = qobject_cast<QQuickWindow*>(root.get());
+    ASSERT_TRUE(win);
+    const QString sel = c.values().value("selected.channel").toString();
+    int highlighted = 0;
+    for (const char* n : {"channelIconMic", "channelIconInstrument", "channelIcon_spk", "channelIcon_hp"}) {
+        QQuickItem* icon = findItem(win->contentItem(), n);
+        ASSERT_TRUE(icon) << n;
+        QQuickItem* img = findItem(icon, "glyphImage");
+        ASSERT_TRUE(img) << n;
+        const bool on = icon->property("highlighted").toBool();
+        highlighted += on;
+        EXPECT_EQ(img->property("source").toUrl().toString().endsWith("-selected.svg"), on) << n;
+        EXPECT_EQ(img->property("status").toInt(), 1) << n << ": the icon file loads (Image.Ready)";
+    }
+    EXPECT_EQ(highlighted, sel == "unknown" ? 0 : 1) << sel.toStdString();
 }

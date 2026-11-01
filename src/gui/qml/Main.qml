@@ -107,11 +107,13 @@ Window {
                 Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter
                        color: "#777"; font.pixelSize: 9; text: "▴\n▾"; lineHeight: 0.75 }
                 MouseArea { anchors.fill: parent; enabled: device.simulated; onClicked: rateMenu.visible = !rateMenu.visible }
-                ToolTip_ { visible: rateMa.containsMouse; text: device.simulated ? "Simulated sample rate"
-                                                              : device.values["sampleRate.source"] === "idle"
-                                                                ? "The desktop audio rate; no app is playing or recording on the CONNECT 2 right now"
-                                                                : "Set by the audio system (not controlled here)" }
-                MouseArea { id: rateMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                MouseArea { id: rateMa; objectName: "sampleRateHover"; anchors.fill: parent; hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                            onEntered: Hint.show(device.simulated ? "Simulated sample rate"
+                                                 : device.values["sampleRate.source"] === "idle"
+                                                 ? "Desktop audio rate (nothing is playing or recording right now)"
+                                                 : "Sample rate, set by the desktop audio")
+                            onExited: Hint.clear() }
             }
             ToggleButton { x: 686; y: 16; width: 21; height: 22; icon: "settings"
                            tip: "Open the settings panel"; onClicked: win.showSettings = true }

@@ -75,11 +75,10 @@ Item {
                     y: Math.min(parent.height - height, parent.height * (1 - root.frac(root.noiseFloorDb)) - height / 2)
                     color: "#75b9ff"
                     MouseArea { id: nfHover; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true
-                                onContainsMouseChanged: root.noiseTipShown = containsMouse }
-                    ToolTip_ { visible: nfHover.containsMouse && Hint.enabled; x: 12
-                               text: "Measured noise floor: " + Math.round(root.noiseFloorDb) + " dB"
-                                     + (root.noiseFloorDb < root.minDb ? " (below the scale)" : "")
-                                     + "\nfrom the last Denoise measurement" }
+                                onEntered: Hint.show("Noise floor from the last Denoise measurement: "
+                                                     + Math.round(root.noiseFloorDb) + " dB"
+                                                     + (root.noiseFloorDb < root.minDb ? " (below the scale)" : ""))
+                                onExited: Hint.clear() }
                 }
                 Shape {   // sampled peak hold; not an unobserved inter-sample peak
                     id: peak

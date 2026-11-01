@@ -19,7 +19,7 @@ Item {
     GlyphIcon { x: 42.5 - width / 2; y: 8; width: 30; height: 30
                 kind: group === "loop" ? "loop" : group === "spk" ? "speakers" : "headphones"
                 objectName: "channelIcon_" + root.group
-                color: root.physicalSelected ? Theme.selected : "#f0f0f0" }
+                highlighted: root.physicalSelected; color: "#f0f0f0" }
     LevelMeter { x: group === "loop" ? 7 : 5; y: 44; height: 187; stereo: true; scale: true
                  stageScale: root.stageScale
                  objectName: root.group === "loop" ? "meterLoopback" : root.group === "spk" ? "meterSpeaker" : "meterHeadphone"

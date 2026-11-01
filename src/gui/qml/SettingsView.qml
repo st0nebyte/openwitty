@@ -101,7 +101,7 @@ Rectangle {
         ToggleSwitch { objectName: "mixToSpeakersSwitch"; width: 330; label: "Input/playback mix applies to speakers"
                        enabled: root.can("set.mixToSpeakers")
                        checked: root.v("set.mixToSpeakers", false)
-                       tip: "The speakers play the monitoring mix (inputs + computer) instead of the computer only"
+                       tip: "The speakers play the monitoring mix, not only the computer audio"
                        onToggled: (b) => confirmLoud.ask("set.mixToSpeakers", b) }
         ToggleSwitch { width: 330; label: "High impedance headphone mode"; enabled: root.can("set.highImpedance")
                        checked: root.v("set.highImpedance", false)
@@ -112,13 +112,13 @@ Rectangle {
         ToggleSwitch { objectName: "mobileStreamingSwitch"; width: 330; label: "Mobile streaming mode"
                        enabled: root.can("set.mobileStreaming")
                        checked: root.v("set.mobileStreaming", false)
-                       tip: "Microphone and instrument mix to software input 1/2 (official description)"
+                       tip: "Inputs 1 and 2 both carry the microphone + instrument mix"
                        onToggled: (b) => confirmLoud.ask("set.mobileStreaming", b) }
         // Phase 12C: follow active output (owner spec): OpenWitty keeps byte 59 on the audible output
         ToggleSwitch { objectName: "followOutputSwitch"; width: 330; label: "Follow active output"
                        enabled: !root.buttonExtended
                        checked: integration.followActiveOutput || root.buttonExtended
-                       tip: "The system volume keys control the output you can hear (speakers or headphones)"
+                       tip: "The volume keys control the output you can hear"
                        onToggled: (b) => integration.setFollowActiveOutput(b) }
         Text { objectName: "followRequiredNote"; width: 330; wrapMode: Text.WordWrap; color: Theme.warn; font.pixelSize: 10
                visible: root.buttonExtended
@@ -131,7 +131,7 @@ Rectangle {
         ToggleSwitch { objectName: "followFocusSwitch"; width: 330; label: "Also move the touch-wheel focus"
                        visible: integration.followActiveOutput || root.buttonExtended
                        checked: integration.followMoveFocus
-                       tip: "The touch wheel on the CONNECT 2 then controls the same output as the volume keys"
+                       tip: "The CONNECT 2's touch wheel controls the same output"
                        onToggled: (b) => integration.setFollowMoveFocus(b) }
         Text { width: 330; color: Theme.text; font.pixelSize: 11; visible: integration.followActiveOutput || root.buttonExtended
                text: "When both outputs are on, the volume keys control:" }
@@ -280,9 +280,9 @@ Rectangle {
                                                  && (opt.o.x === true) === root.buttonExtended } }
                 Text { x: 24; width: 306; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter
                        color: opt.o.x ? Theme.accent : Theme.text; font.pixelSize: 11; text: opt.o.t }
-                ToolTip_ { visible: optHover.containsMouse && opt.o.x === true && Hint.enabled; x: 24; text: "OpenWitty extension: "
-                           + "the native function plus \"follow active output\" for this CONNECT 2" }
-                MouseArea { id: optHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                MouseArea { id: optHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
+                            onEntered: if (opt.o.x === true) Hint.show("OpenWitty extension: the volume keys also follow the output you hear")
+                            onExited: Hint.clear() }
                 // the base already on the device: only OpenWitty's setting changes, no device write (no permission needed)
                 MouseArea { anchors.fill: parent; enabled: root.can("set.customButton") || root.v("set.customButton", -1) === opt.o.v
                             onClicked: {
@@ -344,7 +344,7 @@ Rectangle {
             Rectangle { width: 330; height: 1; color: "#333" }
             ToggleSwitch { width: 330; label: "Show the volume knob in the desktop volume"
                            checked: integration.desktopSync
-                           tip: "Keeps the KDE/PipeWire volume in step with the CONNECT 2's speaker volume knob. Never writes the device."
+                           tip: "The desktop volume follows the CONNECT 2's speaker knob"
                            onToggled: (b) => integration.setDesktopSync(b) }
             Text { width: 330; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "Linux cannot see when you turn the speaker volume knob, so OpenWitty passes it on to the "
@@ -367,7 +367,7 @@ Rectangle {
                            enabled: integration.serviceState !== "not-installed" && integration.serviceState !== "unknown"
                                     && (integration.desktopSync || checked)
                            checked: integration.serviceState === "enabled" || integration.serviceState === "active"
-                           tip: "Starts the openwitty-volumed user service with your desktop session (systemctl --user)."
+                           tip: "Starts OpenWitty's background service with your desktop session"
                            onToggled: (b) => integration.setBackgroundService(b) }
             Text { width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "Background service: " + ({"not-installed": "not installed", "disabled": "off",
@@ -379,7 +379,7 @@ Rectangle {
             ToggleSwitch { objectName: "trayAutostartSwitch"; width: 310; label: "Show OpenWitty in the system tray"
                            visible: integration.trayInstalled
                            checked: integration.trayAutostart
-                           tip: "Adds an OpenWitty icon to the system tray, now and at every login."
+                           tip: "Shows an OpenWitty icon in the system tray, also after login"
                            onToggled: (b) => integration.setTrayAutostart(b) }
             Text { visible: integration.trayInstalled; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "The icon shows whether the knob display and the background service are on, and opens this "
@@ -390,8 +390,7 @@ Rectangle {
             ToggleSwitch { objectName: "splitSourcesSwitch"; width: 310; label: "Separate inputs for apps"
                            enabled: integration.splitSources !== "unavailable" || checked
                            checked: integration.splitSources === "on" || integration.splitSources === "stale"
-                           tip: "Adds \"CONNECT 2 Microphone\", \"CONNECT 2 Instrument\" and \"CONNECT 2 Loopback\" as inputs "
-                              + "that apps (voice chat, streaming) can pick directly."
+                           tip: "Microphone, Instrument and Loopback as separate inputs for apps"
                            onToggled: (b) => integration.setSplitSources(b) }
             Text { objectName: "splitSourcesText"; width: 310; wrapMode: Text.WordWrap; font.pixelSize: 10
                    color: integration.splitSources === "stale" ? Theme.warn : Theme.textDim
@@ -403,15 +402,13 @@ Rectangle {
             // Readable channel names (JACK pretty names) for the CONNECT 2 ports, display only
             ToggleSwitch { objectName: "nameChannelsSwitch"; width: 310; label: "Name the CONNECT 2 channels in audio apps"
                            checked: integration.nameChannels
-                           tip: "DAWs such as Ardour show 1 Microphone, 2 Instrument, 3/4 Loopback L/R and Output L/R "
-                              + "instead of capture_FL ... (labels only; nothing is rerouted)"
+                           tip: "Audio apps show 1 Microphone, 2 Instrument, 3/4 Loopback (labels only)"
                            onToggled: (b) => integration.setNameChannels(b) }
             // SR: allow 44.1 / 48 / 96 kHz in PipeWire (otherwise everything is resampled to 48 kHz)
             ToggleSwitch { objectName: "sampleRatesSwitch"; width: 310; label: "Allow 44.1 and 96 kHz for apps (experimental)"
                            visible: root.debug || integration.extraSampleRates
                            checked: integration.extraSampleRates
-                           tip: "PipeWire then runs the CONNECT 2 at the rate a DAW or player asks for (44.1, 48 or 96 kHz) "
-                              + "instead of converting to 48 kHz. Applies to all sound cards."
+                           tip: "Apps may switch between 44.1, 48 and 96 kHz (all sound cards)"
                            onToggled: (b) => integration.setExtraSampleRates(b) }
             Text { objectName: "sampleRatesText"; width: 310; wrapMode: Text.WordWrap; font.pixelSize: 10; color: Theme.textDim
                    visible: root.debug || integration.extraSampleRates

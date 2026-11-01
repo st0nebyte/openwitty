@@ -20,7 +20,6 @@ Item {
     // Phase 10B: Denoise/Comp at 96 kHz. "unknown" (real device, no confirmed rate) is not shown as unavailable.
     readonly property bool dsp: device.values["dsp.state"] !== "unavailable"
     readonly property bool dspUnknown: device.values["dsp.state"] === "unknown"
-    readonly property string dspTip: dspUnknown ? " (availability depends on the sample rate, which is unknown)" : ""
     readonly property bool pending: device.values["pending." + p + "gain"] === true
     width: 152; height: 267
 
@@ -38,7 +37,7 @@ Item {
     GlyphIcon { x: 90 - 12; y: 8; width: 24; height: 24; kind: root.mic ? "mic" : "guitar"
                 objectName: root.mic ? "channelIconMic" : "channelIconInstrument"
                 // the channel the device's touch wheel controls: icon in the selection colour (owner wish)
-                color: root.physicalSelected ? Theme.selected : "#ececec" }
+                highlighted: root.physicalSelected; color: "#ececec" }
 
     Row {   // LC / 48V / Clipguard (instrument has no 48V)
         x: root.mic ? 45 : 60; y: 45; spacing: 4
@@ -88,8 +87,8 @@ Item {
         ToggleButton { id: denoiseButton; objectName: "denoiseButton" + root.index
                        width: 57; height: 20; text: "Denoise"; enabled: root.can(root.p + "denoise"); unavailable: !root.dsp
                        tip: !root.dsp ? "Choose lower sample rate to enable this function"
-                            : "Good for live streaming" + root.dspTip
-                              + (root.canMeasureDenoise ? " - right-click: measure the background noise again" : "")
+                            : "Good for live streaming"
+                              + (root.canMeasureDenoise ? " (right-click: measure again)" : "")
                        active: root.v("denoise", false)
                        // The device keeps the measured level (bytes 8/17) while Denoise is off, so switching on reuses it
                        // (owner wish 2026-10-31); the measurement dialog only comes up when no level was ever measured.
@@ -100,7 +99,7 @@ Item {
                                    enabled: root.canMeasureDenoise && !denoiseButton.unavailable
                                    onClicked: denoiseConfirm.visible = true } }
         ToggleButton { width: 57; height: 20; text: "Comp"; enabled: root.can(root.p + "compress"); unavailable: !root.dsp
-                       tip: root.dsp ? "Consistent level, louder signal, finished sound" + root.dspTip : "Choose lower sample rate to enable this function"
+                       tip: root.dsp ? "Consistent level, louder signal, finished sound" : "Choose lower sample rate to enable this function"
                        active: root.v("compress", false)
                        onClicked: device.setValue(root.p + "compress", !active) }
     }

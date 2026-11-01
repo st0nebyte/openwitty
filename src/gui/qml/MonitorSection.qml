@@ -16,9 +16,7 @@ Item {
         x: 77 - width / 2; y: 123 - height / 2 + 0; bodyRadius: 41; sweepDeg: 300; labelInset: 6
         enabled: root.can("mon.mix") && device.values["inflight.mon.mix"] !== true; showValue: false; warnFrom: 1
         commitOnRelease: !device.simulated
-        tip: device.simulated ? "Hear your input signal and computer"
-             : "Monitoring mix of the CONNECT 2 (device scale -100...0 between the physical stops). "
-               + "How the values in between map to the 100:0...0:100 balance is not calibrated."
+        tip: "Balance between your inputs and the computer audio"
         // Device scale -100..0 (physical stops observed in Phase 7C), also used by the simulator since Phase 11A.
         from: -100; to: 0
         step: 1
@@ -28,7 +26,9 @@ Item {
         onCommitted: (nv) => device.setValue("mon.mix", nv)
     }
     // Phase 10B: on the real device the raw value is shown, since the label mapping is not calibrated.
-    Text { objectName: "monitorMixReadout"; visible: !device.simulated && device.values["mon.mix"] !== undefined
+    // raw device value: debug mode only (openwitty --debug)
+    Text { objectName: "monitorMixReadout"
+           visible: typeof debugMode !== "undefined" && debugMode === true && !device.simulated && device.values["mon.mix"] !== undefined
            anchors.horizontalCenter: parent.horizontalCenter; y: 168; color: Theme.textDim; font.pixelSize: 9
            text: "device value " + Math.round(root.v("mon.mix", 0)) + " (of -100...0)" }
     Text { x: 3; y: 186; horizontalAlignment: Text.AlignHCenter; width: 78; color: Theme.textDim

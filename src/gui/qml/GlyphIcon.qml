@@ -7,6 +7,8 @@ Item {
     id: root
     property string kind: "mic"
     property color color: "#a8a8a8"
+    // the selection-colour variant (channel icons only: mic, guitar, loop, speakers, headphones)
+    property bool highlighted: false
     implicitWidth: 24
     implicitHeight: 24
     readonly property string fileName: ({mic: "mic", guitar: "guitar", loop: "repeat",
@@ -18,7 +20,9 @@ Item {
         id: icon
         objectName: "glyphImage"
         anchors.fill: parent
-        source: root.fileName ? "qrc:/icons/" + root.fileName + ".svg" : ""
+        source: root.fileName ? "qrc:/icons/" + root.fileName
+                                + (root.highlighted && ["mic", "guitar", "loop", "speakers", "headphones"].indexOf(root.kind) >= 0
+                                   ? "-selected" : "") + ".svg" : ""
         sourceSize.width: Math.ceil(root.width * 4)
         sourceSize.height: Math.ceil(root.height * 4)
         fillMode: Image.PreserveAspectFit
