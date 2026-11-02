@@ -62,7 +62,7 @@ onboarding, factory reset.
     Werk auf Rot eingestellt) schwach beleuchtet" — stays dimly lit in the configured mute colour
     (factory red).
   - This is manufacturer-documented behaviour, not yet confirmed against our physical unit — see
-    `docs/HARDWARE_TEST_RESULTS.md` for the hardware-verification status once tested.
+    `docs/dev/HARDWARE_TEST_RESULTS.md` for the hardware-verification status once tested.
 * Hidden showcase mode via icon sequence on the hardware (not reproduced) — separate from the above,
   still unverified.
 * Firmware updates via Control Center; after an error power-cycle the device.

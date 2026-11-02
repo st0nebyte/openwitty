@@ -449,9 +449,9 @@ was specifically whether long-pressing the **mic/instrument select buttons** cyc
 whether any button/combo toggles **Mono or Clipguard**; the owner answered "no" to those specific
 questions. It did not rule out a hold gesture on a *different* button. It has since turned out the
 **MUTE button does have a documented hold gesture ("Panic Mute")** — this was already recorded in
-`docs/OFFICIAL_GUIDE.md` from earlier static analysis (phase 5-era), predating and independent of this
+`docs/dev/OFFICIAL_GUIDE.md` from earlier static analysis (phase 5-era), predating and independent of this
 correction, and has now been independently re-verified against the manufacturer's online guide (see
-`docs/OFFICIAL_GUIDE.md`). It was simply never in scope for the Phase 6B question above, not
+`docs/dev/OFFICIAL_GUIDE.md`). It was simply never in scope for the Phase 6B question above, not
 contradicted by it. Not yet tested against our physical unit — see the new experiment below.
 
 The owner confirmed (2026-10-14/15): no long-press gesture that **cycles a value** (preamp style,
@@ -650,12 +650,12 @@ enabled anywhere in this session.
 
 The owner pointed out LEWITT's official online guide
 (https://www.lewitt-audio.com/de/support/online-guides/connect2) documents a MUTE-button hold
-gesture ("Panic Mute"). Independently re-fetched and verified (quotes in `docs/OFFICIAL_GUIDE.md`):
+gesture ("Panic Mute"). Independently re-fetched and verified (quotes in `docs/dev/OFFICIAL_GUIDE.md`):
 short press toggles the selected channel; holding MUTE mutes all input and output channels
 simultaneously; recovery requires unmuting each channel individually (not a second hold); a muted
 channel stays dimly lit in its configured mute colour when a different channel is selected.
 
-This was already recorded in `docs/OFFICIAL_GUIDE.md` from phase-5-era static analysis, predating
+This was already recorded in `docs/dev/OFFICIAL_GUIDE.md` from phase-5-era static analysis, predating
 this project's hardware sessions entirely. What needed correcting was a Phase 6B line in this
 document (§12.7) that over-generalized a narrower answer ("no long-press gesture exists on any
 front-panel button") from a question that only asked about preamp/Mono/Clipguard cycling on the
@@ -1105,7 +1105,7 @@ sensor accuracy, peak/RMS semantics, internal averaging window, or firmware upda
 Passive sysfs descriptors showed vendor-specific interface 3 with zero non-control endpoints
 in active alternate setting 0. No documented alternative read-only meter path has been found;
 this does not prove none exists. The dedicated, unimplemented Phase 7G design is in
-`docs/PHASE7G_AUDIO_METER_PLAN.md`.
+`docs/dev/PHASE7G_AUDIO_METER_PLAN.md`.
 
 The Phase 7E mock/QML fault-injection suite passed during Phase 7F, covering independently
 delayed/stale settings and status, recovery, and reconnect without interrupting real USB.
@@ -1218,7 +1218,7 @@ mock/dry-run checks), and the standalone USB call-site audit passed. The CTests 
 physical sampling GETs. ASan/UBSan was not rerun for this small diagnostic addition.
 
 The owner then explicitly approved the two exact, sequential 10-second read-only commands in
-`docs/PHASE7G_AUDIO_METER_PLAN.md` and reported a comparable steady signal was prepared. Before
+`docs/dev/PHASE7G_AUDIO_METER_PLAN.md` and reported a comparable steady signal was prepared. Before
 execution, a fresh passive preflight reconfirmed `29c2:0004`, interface 3 `ff/f0/00` with zero
 endpoints and no bound driver, read/write usbfs permission, ALSA/PipeWire card presence, no
 OpenWitty process, and no held control lease. No other control client was started. The commands
@@ -1627,7 +1627,7 @@ audio-routing change was performed.
 
 ## 19. HW-1 — first GUI hardware write (LED brightness), 2026-10-26
 
-Owner-approved, owner present; procedure `docs/FEATURE_COMPLETION_ROADMAP.md` (HW-1, Phase 10B.2 version).
+Owner-approved, owner present; procedure `docs/dev/FEATURE_COMPLETION_ROADMAP.md` (HW-1, Phase 10B.2 version).
 Build `85eec34` (code as of `35d0d68`) installed user-local; installed `openwitty` checksum identical to the build
 output. Kernel 7.3.0, KDE Plasma 6 (Wayland), PipeWire 1.6, WirePlumber 0.5. Safety conditions confirmed by the owner
 before the window was started: no audio playing, monitors off/down, headphones off the head, device untouched.
@@ -1658,14 +1658,14 @@ login.
 
 No device access beyond what the kernel and PipeWire already hold (procfs/sysfs, cached descriptors, PipeWire
 registry); no stream, mixer, profile, volume, mute or rate change; no vendor request. Findings (A-sys) in
-`docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`: no stream open (device rate unknown), PipeWire graph 48 kHz with only
+`docs/dev/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`: no stream open (device rate unknown), PipeWire graph 48 kHz with only
 48 kHz allowed, capture terminal *Microphone* with 4 channels and no declared positions, default source muted at its
 hardware route bound to UAC2 Feature Unit 5 (0…+72 dB). No A-live or A-daw evidence.
 
 ## 21. Phase 10E — gain-control path analysis, 2026-10-26
 
 Offline analysis and passive evidence only (no mixer access, no stream, no USB request). Record and GAIN-1 plan:
-`docs/PHASE10E_GAIN_CONTROL_PATH.md`. Passive journal check: the current boot again logs FU 5 "broken mixer GET_CUR (0/18432/256
+`docs/dev/PHASE10E_GAIN_CONTROL_PATH.md`. Passive journal check: the current boot again logs FU 5 "broken mixer GET_CUR (0/18432/256
 => 6912)". Non-service accesses to the vendor interface in this boot correspond to OpenWitty windows (HW-1 and later window
 starts outside the assistant's commands); the test suite's last run produced none (test transports are simulated).
 
@@ -1674,7 +1674,7 @@ starts outside the assistant's commands); the test suite's last run produced non
 Owner-approved; no write of any kind (all OpenWitty permissions off; no mixer, route, profile or stream change).
 Kernel cache: FU 5 `Mic Capture Volume` 72,72,0,0 dB, `Mic Capture Switch` off,off. PipeWire route: 1.0 ×4, muted.
 Device (OpenWitty window, vendor read): microphone 27 dB muted, instrument 14 dB muted. Probe GET_CUR: 27.00 dB. The service
-took the device back at 22:22:50 (same process). Interpretation and limits: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 1 result).
+took the device back at 22:22:50 (same process). Interpretation and limits: `docs/dev/PHASE10E_GAIN_CONTROL_PATH.md` (step 1 result).
 The window saved its GUI preference `onboarding_done = true` when the owner dismissed the first-start introduction.
 
 ## 23. GAIN-1 step 2 — input mute/unmute, 2026-10-26 23:21–23:33: STOPPED
@@ -1683,7 +1683,7 @@ Owner-approved, physical safety confirmed. One `wpctl set-mute 65 0` at 23:29:23
 was muted again within about 1.3 s without a second command (saved by WirePlumber at 23:29:24.69; node softMute became
 true). Route/saved volumes changed to the kernel-cache view [+72, +72, 0, 0 dB]. Device compare afterwards: no settings change
 (mic 27 dB muted, instrument 14 dB muted). The re-mute command was not sent; nothing restored. The service took the device
-back at 23:33:07. Details, hypotheses and next diagnosis: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 result).
+back at 23:33:07. Details, hypotheses and next diagnosis: `docs/dev/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 result).
 
 ## 24. GAIN-1 step 2 follow-up — cache-only diagnosis, 2026-10-26 23:50 (no writes, no device read)
 
@@ -1691,7 +1691,7 @@ The authorized `amixer cget` of `Mic Capture Switch` was not run: the kernel cle
 interrupt (EP 0x83), so the read might reach the device, and all hypotheses predict "off". Passive state: input route muted,
 `save = true`, node softMute true, saved route muted. Source analysis: softMute follows any ACP mute-changed event; the
 `save = true` flag contradicts a WirePlumber route re-application; a device notification on the interrupt endpoint is the
-most plausible unverified cause. Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 follow-up).
+most plausible unverified cause. Details: `docs/dev/PHASE10E_GAIN_CONTROL_PATH.md` (step 2 follow-up).
 
 ## 25. GAIN-1 step 2R — instrumented unmute, 2026-10-27 08:01: device-initiated re-mute
 
@@ -1701,7 +1701,7 @@ with status 0; 297 ms and 809 ms later the device sent UAC2 interrupts for entit
 kernel's re-reads (GET_CUR) answered muted; PipeWire followed. No volume request, no route re-application, no other client.
 Device settings unchanged before/after (mic 27 dB, instrument 14 dB, both muted). No restoration command needed. Logging
 restored exactly, monitors stopped, usbmon unloaded; the service took the device back at 08:04:01. Raw traces kept locally
-(not committed). Details: `docs/PHASE10E_GAIN_CONTROL_PATH.md` (step 2R result).
+(not committed). Details: `docs/dev/PHASE10E_GAIN_CONTROL_PATH.md` (step 2R result).
 
 ## 2026-11-01 — Autosetup, presets and Ardour with JACK (owner present, speakers off, headphones unplugged)
 
@@ -1717,7 +1717,7 @@ restored exactly, monitors stopped, usbmon unloaded; the service took the device
 * **Login-screen rule (Plasma Login), one logout/login cycle, speakers off: PASS.** The login screen's WirePlumber
   logged the CONNECT 2 card as disabled and never created it; the service started afterwards at the unchanged level
   (−23.50 dB); the CONNECT 2 worked in the user's session. The starting level equalled the login screen's default,
-  so the log line is the decisive evidence. Details: `docs/RELEASE_READINESS.md` ("Speaker level at the login
+  so the log line is the decisive evidence. Details: `docs/dev/RELEASE_READINESS.md` ("Speaker level at the login
   screen").
 * **Product mode live check (2026-11-01, owner present, speakers off, headphones unplugged):** in the window without any
   permission switch: instrument gain 14 → ~20 → 14, Dim on → off, LED Icons colour changed and restored. Afterwards

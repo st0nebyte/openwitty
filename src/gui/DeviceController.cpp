@@ -858,7 +858,7 @@ void DeviceWorker::publish() {
         }
         v["selected.channelKnown"] = selected.has_value();
         // Purely derived display state, not a protocol concept: real hardware has no dedicated
-        // "Panic Mute" flag (confirmed 2026-10-16, docs/HARDWARE_TEST_RESULTS.md) - holding MUTE
+        // "Panic Mute" flag (confirmed 2026-10-16, docs/dev/HARDWARE_TEST_RESULTS.md) - holding MUTE
         // just sets these same four fields. True exactly when all four happen to be muted, however
         // that came about (Panic Mute or four individual presses) - this never writes anything.
         v["mute.allFour"] = s.mute(0) && s.mute(1) && s.speakerMute() && s.headphoneMute();

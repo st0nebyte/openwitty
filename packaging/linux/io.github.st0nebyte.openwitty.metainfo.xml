@@ -11,12 +11,11 @@
   <description>
     <p>OpenWitty is an independent, open-source Linux control application for LEWITT CONNECT audio
     interfaces (initially the CONNECT 2). It is not affiliated with, endorsed by or supported by LEWITT.</p>
-    <p>Status: experimental alpha, tested with one CONNECT 2 on one Linux system. It shows the live
-    device state read-only and can keep the desktop volume in step with the speaker volume knob, also
-    through an optional background user service. Most other controls work with the included simulated
-    device only. Device-changing options are off by default and need confirmation. Firmware update and
-    factory reset are not implemented, the CONNECT 6 is not supported, and it is not a replacement for
-    LEWITT CONTROL CENTER.</p>
+    <p>Status: first release, tested with one CONNECT 2 on one Linux system (KDE Plasma 6, PipeWire). It
+    controls every setting that was verified on the real device (inputs, processing, monitoring, outputs, LEDs,
+    custom button, 48 V, routing, Autosetup, presets), keeps the desktop volume in step with the volume knob,
+    also through an optional background service and tray icon, and gives the inputs readable desktop names.
+    Firmware update and factory reset are not part of OpenWitty and the CONNECT 6 is not supported.</p>
     <p>Access to the real device needs a USB permission rule installed by an administrator (included in
     distribution packages).</p>
   </description>
@@ -32,6 +31,12 @@
   <categories><category>AudioVideo</category><category>Audio</category></categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.0" date="2026-11-02" type="stable">
+      <description>
+        <p>First public release: full control of the CONNECT 2, desktop volume integration, background
+        service, tray icon, presets and desktop names for inputs and output.</p>
+      </description>
+    </release>
     <release version="0.1.0~alpha1" date="2026-10-25" type="development">
       <description>
         <p>First alpha (prepared, not yet published): live read-only view of one CONNECT 2, desktop volume

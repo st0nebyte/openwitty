@@ -2,7 +2,7 @@
 
 Audit of every GUI control against the code, the tests and the hardware evidence, as of the development branch
 after Phase 10A (2026-10-25); Phase 10B changes (2026-10-26) are marked. Supersedes the status claims in older phase notes where they disagree; the evidence
-itself is in `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md` and `PROTOCOL.md`.
+itself is in `docs/dev/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md` and `PROTOCOL.md`.
 
 **Bottom line:** OpenWitty reads and displays the CONNECT 2 well (validated live), and its desktop integration is
 validated. **The first GUI write passed on 2026-10-26: LED brightness (HW-1, W-gui).** No other GUI control has written to the real device. Real writes so far went through the CLI (LED
@@ -275,10 +275,10 @@ baselines except the headphone volume (−32.5 dB instead of −32.398 dB, agree
 6. **Small GUI items:** *done 2026-10-29:* Shift + wheel/drag moves the output faders in 0.1 dB steps (test
    `Controls11B.ShiftWheelGivesFineFaderSteps` restores −32.4 dB = bytes 154/223 exactly); show "set by the device" bytes in `--hw-check` output (done) and in diagnostics (done 2026-10-30: `openwitty-cli read settings` prints dim/mono state and the Denoise levels 8/17).
 7. **Obsolete / closed:** GAIN-1 steps 3–5 (FU 5 volume requests) — with 11C nothing writes FU 5 any more; kept as
-   history in `docs/PHASE10E_GAIN_CONTROL_PATH.md`.
+   history in `docs/dev/PHASE10E_GAIN_CONTROL_PATH.md`.
 8. **Phase 13 — product mode, private beta, final review (2026-11-01, owner decision):** permission switches removed,
    evaluation features moved to debug mode (`openwitty --debug`); the owner uses OpenWitty privately for a week and
-   reports issues; then the final review. Plan and exit criteria: `docs/FINAL_REVIEW_PLAN.md`.
+   reports issues; then the final review. Plan and exit criteria: `docs/dev/FINAL_REVIEW_PLAN.md`.
 9. **Still open, owner decisions:** login-screen WirePlumber rule live test — *done 2026-11-01, PASS on Plasma
    Login*; GitHub `refs/pull/1..3` privacy blocker — *resolved 2026-11-01 with a new clean repository*; no merge to `main`, no tag, no release, repo stays private. The background
    service picks up the new binary at the next login.
@@ -706,7 +706,7 @@ Excluded: firmware update, factory reset, device-mode switching, mobile streamin
 
 ### HW-1 procedure (LED brightness, first GUI write) — corrected in Phase 10B.1
 
-**Run on 2026-10-26: PASS** (`docs/HARDWARE_TEST_RESULTS.md` §19). Kept as the template for later GUI write steps. Each numbered step is done by the owner, or by the assistant with the owner present. No step
+**Run on 2026-10-26: PASS** (`docs/dev/HARDWARE_TEST_RESULTS.md` §19). Kept as the template for later GUI write steps. Each numbered step is done by the owner, or by the assistant with the owner present. No step
 sends anything to the device except step 6 and step 9, each a single deliberate GUI action.
 
 **Why no `openwitty-cli` reads.** While the window is open it owns the device (exclusive control lease); a CLI
@@ -811,7 +811,7 @@ interface and DAW operation are **core functionality**, not extras.
 
 **Primary references:** the official online guide (<https://www.lewitt-audio.com/support/online-guides/connect2>)
 and product page (<https://www.lewitt-audio.com/connect-2>), read 2026-10-26; a summary of the guide is in
-`docs/OFFICIAL_GUIDE.md`. Third-party projects are not a specification for this work.
+`docs/dev/OFFICIAL_GUIDE.md`. Third-party projects are not a specification for this work.
 
 ### Additional evidence classes (audio)
 
@@ -846,7 +846,7 @@ OpenWitty must not "fix" this by hiding channels: the full four-channel source s
 
 ### Phase 10D — passive audio inventory (A-sys)
 
-Full record: `docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`. Summary: no stream open (device rate unknown); graph 48 kHz
+Full record: `docs/dev/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`. Summary: no stream open (device rate unknown); graph 48 kHz
 with only 48 kHz allowed; capture terminal *Microphone*, 4 channels, no declared positions (kernel default `FL FR FC
 LFE`, PipeWire `FL FR RL RR`); default profile `output:analog-stereo+input:analog-surround-40`; alternatives
 declared but not activated (`pro-audio`, IEC958 variants that have no S/PDIF terminal in the descriptors, output- or
@@ -854,7 +854,7 @@ input-only, off); the default source's mute/volume are hardware controls bound t
 channels 1–2; channels 3–4 reject writes); nothing proves FU 5 is the preamp gain.
 
 **Phase 10E (offline):** the full control path, the kernel's broken-read-back handling and the GAIN-1 plan are in
-`docs/PHASE10E_GAIN_CONTROL_PATH.md`. Established: the default source's mute/volume are FU 5 hardware controls with no
+`docs/dev/PHASE10E_GAIN_CONTROL_PATH.md`. Established: the default source's mute/volume are FU 5 hardware controls with no
 software mute/volume on top; the ALSA/PipeWire FU 5 values are the kernel's cache of its own last write, never the
 device's gain; at every probe the kernel writes 0 dB to FU 5 (after test writes of 0/+72 dB). Likely: WirePlumber writes
 +72 dB and mute at login; the loopback channels have no mute in this path. Unknown: whether FU 5 reaches the preamp or the
@@ -1014,7 +1014,7 @@ No stream or rate is changed during planning; SR-2 onwards need approval because
 ### Acceptance criteria and evidence
 
 A parity feature counts as **done** only with: the official behaviour cited; the category; an automated test where
-code is involved; the HW/LB/DAW/SR step passed with its evidence class recorded in `docs/HARDWARE_TEST_RESULTS.md`
+code is involved; the HW/LB/DAW/SR step passed with its evidence class recorded in `docs/dev/HARDWARE_TEST_RESULTS.md`
 (date, kernel, PipeWire/WirePlumber versions, profile, rate, application versions, signals used, before/after settings
 comparison); and no unexpected settings change. Audio claims need A-live; DAW claims need A-daw for that application
 and backend. Anything else is documented as "not validated".

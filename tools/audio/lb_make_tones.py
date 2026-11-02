@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# OpenWitty LB tests (docs/FEATURE_COMPLETION_ROADMAP.md, LB-2). Usage: lb_make_tones.py <out.wav> [rate, default 48000]
+# OpenWitty LB tests (docs/dev/FEATURE_COMPLETION_ROADMAP.md, LB-2). Usage: lb_make_tones.py <out.wav> [rate, default 48000]
 # 48 kHz stereo float WAV: 1 s silence, 4 s L-only 1 kHz, 1 s silence, 4 s R-only 2 kHz, 1 s silence; -30 dBFS peak.
 import numpy as np, wave, sys
 sr=int(sys.argv[2]) if len(sys.argv) > 2 else 48000; a=10**(-30/20)

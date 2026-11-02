@@ -2,187 +2,135 @@
 
 # OpenWitty
 
-**Your interface. Your Linux. Your control.**
+**Linux control for the LEWITT CONNECT 2.**
 
-OpenWitty is an independent, open-source project bringing native Linux control to **LEWITT CONNECT audio interfaces**.
+> [!IMPORTANT]
+> **OpenWitty is unofficial.** It is an independent community project, not made, supported or endorsed by
+> LEWITT. For official software and support, see [lewitt-audio.com](https://www.lewitt-audio.com).
 
-The project aims to provide an alternative to the proprietary LEWITT CONTROL CENTER software, allowing Linux users to configure and control their audio interfaces without relying on Windows, macOS, or virtual machines.
+LEWITT's CONTROL CENTER app is available for Windows and macOS only. OpenWitty brings the same controls
+to Linux: gain, processing, monitoring, outputs, LEDs and presets for the CONNECT 2, plus a desktop integration
+that makes the interface feel at home on a Linux desktop.
 
-## Why OpenWitty?
+<p align="center"><img src="docs/screenshots/main.png" alt="OpenWitty main window (simulated device)" width="800"></p>
 
-LEWITT makes great audio hardware. Unfortunately, its CONTROL CENTER software is currently only available for Windows and macOS.
+## Features
 
-While CONNECT interfaces can retain their settings when moved between operating systems, Linux users currently need access to Windows or macOS for software-based configuration.
+**Device control.** Every setting below was verified on a real CONNECT 2:
 
-**OpenWitty aims to change that.**
+- Inputs: gain (with gain lock), mute, low-cut, Clipguard, Clean / Warm / Vivid, Denoise with noise-floor
+  measurement, Comp, 48 V phantom power
+- Monitoring: direct input source, input/playback mix, Dim, Mono, loopback mute
+- Outputs: speaker and headphone volume and mute, high-volume speaker mode, high-impedance headphone mode
+- LEDs: brightness and colours; custom button function
+- Autosetup: gain measurement, optional 48 V and ambient-noise test
+- Presets: save and load your settings
+- Live view: the window follows changes made on the device and shows level meters
 
-By reverse engineering the communication protocol used by LEWITT CONTROL CENTER, this project aims to implement the necessary device controls natively on Linux.
+**Desktop integration** (Settings ▸ Desktop integration):
 
-This project is not about criticizing LEWITT or its software. It's about making great hardware more accessible to users of an operating system that isn't officially supported.
+- The desktop volume follows the CONNECT 2's volume knob, and the volume keys control the output you can hear
+  (speakers or headphones)
+- An optional background service keeps this working while the window is closed
+- An optional tray icon shows whether the CONNECT 2 is connected
+- Readable names in the desktop and in audio apps: "CONNECT 2 Output", and separate "Microphone",
+  "Instrument" and "Loopback" inputs; DAWs show named channels
+- Optional: a desktop microphone mute that really mutes the input
+- Optional: open the window at login and reopen it where it was closed
 
-## Project Status
+**Built-in safety.** OpenWitty writes only the settings it knows and reads every change back. Large volume
+and gain increases go in steps, and 48 V or louder output modes ask before they switch on. Firmware update and
+factory reset are not part of OpenWitty.
 
-**Experimental alpha for the LEWITT CONNECT 2.** Tested with one CONNECT 2 on one Linux system
-(CachyOS, Linux 7.3, KDE Plasma 6 on Wayland, PipeWire/WirePlumber). Treat everything else as untested.
+<p align="center"><img src="docs/screenshots/settings.png" alt="OpenWitty settings (simulated device)" width="800"></p>
 
-What works on real hardware (one device, one system):
+## Tested on
 
-- **Live device state, read-only:** input gain and mute, speaker and headphone volume and mute, the
-  monitoring mix, the selected channel, Panic Mute, and level meters (16 Hz settings / 48 Hz status
-  polling). Hot-plug and reconnect.
-- **Desktop volume integration:** the KDE/PipeWire volume of the CONNECT 2 follows the
-  **speaker volume knob**, which Linux cannot see by itself (the device's volume read-back is
-  broken). It is switched on in **Settings → Desktop integration**; the optional
-  `openwitty-volumed` user service keeps it working while the window is closed and starts with
-  the desktop session. Validated with the window open and closed, handing over between the two,
-  at boot/login and across suspend/resume. It never writes the device.
-- **Optional system tray icon** (`openwitty-tray`, Settings → Desktop integration): shows whether the knob
-  display and the background service are on and opens OpenWitty; it never uses the device. Opening
-  OpenWitty while it is already open brings the existing window to the front. (Tested offscreen; a live
-  KDE check is pending.)
-- **Mute button and desktop slider work natively:** the kernel already passes the Mute button
-  and desktop volume/mute changes between the device and the desktop. OpenWitty is not involved.
-- **Kernel compatibility quirk (Linux 7.3):** on this kernel a broken microphone control of the
-  device makes the desktop lose its hardware volume for the CONNECT 2. An optional, device-specific
-  module option fixes that. OpenWitty explains and checks it, and never installs it.
-  **Side effect:** with it, the login screen's own audio session can set the speaker level — observed after a
-  logout: −23.5 dB instead of the knob position, louder or quieter (see `docs/INSTALLATION.md`).
-
-Optional and limited:
-
-- **Device control:** every setting verified on the real CONNECT 2 works from the window without permission
-  switches — speaker and headphone volume/mute, input gain/mute (with gain lock), input processing (low-cut,
-  Clipguard, preamp, Denoise, Comp), monitoring (source, mix, Dim, Mono, loopback mute), LED brightness and
-  colours, custom button, 48 V, output modes, routing (mix to speakers, mobile streaming, volume-key mapping),
-  follow active output, Autosetup and presets. One write per deliberate change (dragging previews, the release
-  sends); large increases go in verified steps (volume 10 dB, gain 6 dB); every write is read back and never
-  retried; 48 V, the louder modes and the routing changes ask once. macOS streaming mode, firmware update and
-  factory reset are not available.
-- **Debug mode** (`openwitty --debug`): the hardware check and experimental options; not needed for normal use.
-- **CLI writes** (`openwitty-cli write …`, explicit opt-in variables): LED brightness and speaker
-  volume/mute were verified on hardware; instrument mute is prepared but never executed.
-- **Vendor fallback** for the desktop volume (off by default): only for a device state in which
-  the kernel's volume control is ignored. **Not validated on hardware.**
-
-Not implemented or not validated:
-
-- **Audio streams are handled by Linux, not by OpenWitty.** The CONNECT 2 is a USB Audio Class 2 device: playback
-  (L/R) and four capture channels (microphone, instrument, loopback L, loopback R) work through the kernel and
-  PipeWire/JACK. Channel identity, the hardware loopback and DAW workflows have **not yet been validated with
-  signal**; PipeWire currently labels the four inputs as "Surround 4.0", so a stereo application may mix them.
-  This is not the Windows ASIO driver. Plan: `docs/FEATURE_COMPLETION_ROADMAP.md` (feature parity).
-- Most other controls (low-cut, 48 V, Clipguard, Denoise, Comp, LED colours, custom button, autogain/
-  autosetup, sample-rate selection) work in the **simulated device** only; on the real device
-  they are shown, not changed.
-- Firmware update and factory reset are **deliberately not implemented**.
-- **CONNECT 6 is not supported.**
-- OpenWitty is **not a replacement** for LEWITT CONTROL CENTER.
-
-## Device Support
-
-| Device | Status |
+| | |
 |---|---|
-| LEWITT CONNECT 2 | Experimental alpha: live state, desktop volume integration and the controls above validated with one device on one system |
-| LEWITT CONNECT 6 | Not supported (the architecture keeps device support separable; nothing implemented) |
+| Device | LEWITT CONNECT 2 (one unit, firmware 1.21) |
+| System | CachyOS, Linux 7.3 |
+| Desktop | **KDE Plasma 6.8 on Wayland** |
+| Audio | PipeWire 1.6, WirePlumber 0.5 |
+| Packages | Arch Linux package on CachyOS; Debian package on Debian 13 (build, install, start, removal; without the device) |
 
-## Goals
+Other distributions and desktops have not been tested. The device control works with any desktop. The desktop
+integration was developed for **KDE Plasma with PipeWire/WirePlumber**; on other desktops expect differences:
 
-- Provide native Linux control for LEWITT CONNECT audio interfaces.
-- Understand and document the communication protocol used by LEWITT CONTROL CENTER.
-- Enable device configuration without requiring Windows, macOS, or virtual machines.
-- Support multiple CONNECT devices through an extensible architecture.
-- Encourage community contributions and knowledge sharing.
-- Keep the project free, transparent, and accessible.
+- The tray icon needs a desktop with a system tray (on GNOME, an AppIndicator extension).
+- "Reopen the window where it was closed" works on KDE Plasma and in X11 sessions only, because other Wayland
+  desktops do not let apps place their own windows.
 
-## Features (CONNECT 2; mixed evidence levels)
-
-- Device discovery and connection state, with clear permission/driver diagnostics (`EACCES` vs `EBUSY` vs stall)
-- Input gain, mute, low-cut, Clipguard, 48 V, Clean/Warm/Vivid, Denoise, Compressor
-- Loopback / speaker / headphone volume and mute, input–playback mix, dim, mono
-- LED brightness and colours, custom-button function, settings preservation of unknown device bytes
-- Autosetup (gain and Denoise measurement; verified on one device)
-- Presets: save and load settings (OpenWitty's own format)
-- Pending-edit tracking and merge with external device changes
-- Desktop volume integration (Settings → Desktop integration, `openwitty-volumed`)
-
-See [FEATURES.md](FEATURES.md) for the exact list and the evidence level of each row, and
-[docs/VOLUME_INTEGRATION.md](docs/VOLUME_INTEGRATION.md) for the desktop volume integration.
+Reports from other systems are welcome. Please open an issue.
 
 ## Install
 
-See **[docs/INSTALLATION.md](docs/INSTALLATION.md)**: Arch/CachyOS package, Debian/Ubuntu package,
-user-local install, USB permissions, the optional kernel quirk, desktop integration and uninstalling.
-
-Try it without hardware:
+Download the package for your system from the
+**[latest release](https://github.com/st0nebyte/openwitty/releases/latest)**:
 
 ```sh
-cmake --preset release && cmake --build --preset release
-ctest --preset release
-build-release/src/gui/openwitty --mock      # simulated device, always labelled as simulated
+# Arch Linux / CachyOS
+sudo pacman -U openwitty-0.1.0-1-x86_64.pkg.tar.zst
+
+# Debian 13 (trixie); needs Qt 6.8 or newer
+sudo apt install ./openwitty_0.1.0-1_amd64.deb
 ```
 
-With a connected CONNECT 2 and the USB permission rule installed, start `openwitty` without
-`--mock`.
+The packages include the USB permission rule, so the CONNECT 2 is accessible right away (replug it once after
+installing). Then start **OpenWitty** from the application menu.
 
-Further reading:
+**Linux 7.3 users:** this kernel loses the desktop hardware volume of the CONNECT 2 because of a broken
+microphone control on the device. OpenWitty detects this and explains the optional fix (one module option) in
+Settings ▸ Desktop integration.
 
-- [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) — what has been tested, known limitations
-- [CHANGELOG.md](CHANGELOG.md) — draft release notes
-- [DEVELOPMENT.md](DEVELOPMENT.md) — toolchain, presets, sanitizers
-- [docs/USB_PERMISSIONS.md](docs/USB_PERMISSIONS.md) and [docs/USB_ACCESS.md](docs/USB_ACCESS.md) — udev, driver ownership
-- [docs/HARDWARE_TEST_RESULTS.md](docs/HARDWARE_TEST_RESULTS.md) — the hardware evidence
-- [PROTOCOL.md](PROTOCOL.md), [ARCHITECTURE.md](ARCHITECTURE.md), [docs/AUDIT_PHASE5E.md](docs/AUDIT_PHASE5E.md)
+Building from source, a user-local install without root, the optional desktop files and uninstalling:
+**[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
+
+Try it without the hardware:
+
+```sh
+openwitty --mock          # simulated device, always labelled as simulated
+```
+
+## Not supported
+
+- The CONNECT 6 and other LEWITT devices
+- macOS streaming mode, firmware update and factory reset (use LEWITT's official app for those)
+- Audio itself is handled by Linux (USB Audio Class 2 through the kernel and PipeWire/JACK); OpenWitty controls
+  the device's settings, not the audio streams. There is no ASIO driver on Linux, and none is needed.
+
+## Documentation
+
+- [docs/INSTALLATION.md](docs/INSTALLATION.md): install, USB permissions, kernel fix, desktop integration, uninstall
+- [docs/VOLUME_INTEGRATION.md](docs/VOLUME_INTEGRATION.md): how the desktop volume follows the knob
+- [FEATURES.md](FEATURES.md): every feature with the evidence for it
+- [PROTOCOL.md](PROTOCOL.md): the CONNECT 2's control protocol as far as it is understood
+- [ARCHITECTURE.md](ARCHITECTURE.md), [DEVELOPMENT.md](DEVELOPMENT.md), [TESTING.md](TESTING.md): for developers
+- [CHANGELOG.md](CHANGELOG.md): release notes
+- [docs/dev/](docs/dev/): the development history, hardware test logs and research notes
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/protocol`, `src/transport`, `src/core` | Qt-free core: message codecs, transports (libusb, mock), device session and write policy |
-| `src/gui`, `src/cli` | Qt 6 / QML application, diagnostic CLI |
-| `assets/` | OpenWitty branding (icons, banner) |
-| `src/desktop`, `src/daemon` | desktop (ALSA) volume integration and the `openwitty-volumed` service |
-| `packaging/` | Debian, Arch, desktop, AppStream, udev, systemd user unit, man pages |
-| `tests/`, `tools/` | tests; packaging/audit/reverse-engineering tooling |
-| `docs/` | engineering documentation |
-
-## Philosophy
-
-We believe choosing Linux shouldn't mean giving up control over your hardware.
-
-OpenWitty is built around three simple ideas:
-
-- **Freedom:** Use your hardware on the operating system of your choice.
-- **Openness:** Share knowledge, document discoveries, and develop in public.
-- **Community:** Build solutions together where official support is unavailable.
-
-**Made for Linux. Open for everyone.**
+| `src/protocol`, `src/transport`, `src/core` | Qt-free core: message codecs, USB and simulated transports, device session, write rules |
+| `src/gui`, `src/tray`, `src/cli` | Qt 6 / QML application, tray icon, command-line tool |
+| `src/desktop`, `src/daemon` | desktop (ALSA/PipeWire) integration and the `openwitty-volumed` background service |
+| `packaging/` | Arch, Debian, desktop entry, AppStream, udev, systemd, WirePlumber, man pages |
+| `tests/`, `tools/` | tests; packaging, audit and research tools |
 
 ## Contributing
 
-Contributions, ideas, protocol discoveries, testing, and documentation are welcome.
-
-Whether you're experienced in reverse engineering, audio programming, USB communication, or simply interested in helping, your involvement is appreciated.
-
-More detailed contribution guidelines will be added as the project evolves.
+Bug reports, tests on other systems, protocol findings and code are welcome. For a bug, please include what
+happened, what you expected, your distribution and desktop, and the output of `openwitty-cli diagnose`.
 
 ## License
 
-OpenWitty is released under the **MIT License**.
-
-See [LICENSE](LICENSE) for details, and [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md) for dependencies and asset notes.
+MIT: see [LICENSE](LICENSE), and [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md) for dependencies and icons.
 
 ## Disclaimer
 
-OpenWitty is an independent, community-driven open-source project.
-
-**This project is not affiliated with, sponsored by, or endorsed by LEWITT GmbH.**
-
-LEWITT, CONNECT, and CONTROL CENTER are trademarks or product names of their respective owners.
-
-All trademarks are used solely for identification and compatibility purposes.
-
-OpenWitty does not distribute proprietary LEWITT software or firmware, and does not use LEWITT artwork.
-
----
-
-*Made for Linux. Open for everyone.*
+OpenWitty is an independent, community-driven open-source project. **It is not affiliated with, sponsored by,
+supported by or endorsed by LEWITT GmbH.** LEWITT, CONNECT and CONTROL CENTER are trademarks or product names of
+their respective owners and are used here only to identify the hardware OpenWitty works with. OpenWitty contains
+no LEWITT software, firmware or artwork.

@@ -85,4 +85,4 @@ software renderer; RSS ≈ 65 MB. Real USB latency (ms) will dominate all of the
   clean (`setarch -R`). A clean TSan core run does **not** make the Qt GUI race-free.
 * Presets: `cmake --preset release|debug|mock-only|core-only|asan|tsan|warnings`.
 * Clean-clone rebuild (fresh `git clone` + `tools/setup-sysroot.sh`): release and mock-only pass.
-* Details and results: docs/AUDIT_PHASE5E.md.
+* Details and results: docs/dev/AUDIT_PHASE5E.md.

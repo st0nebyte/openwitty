@@ -1,4 +1,4 @@
--- OpenWitty DAW-1..4 test for Ardour 9 (headless; ALSA backend, or JACK = pipewire-jack). See docs/FEATURE_COMPLETION_ROADMAP.md "DAW".
+-- OpenWitty DAW-1..4 test for Ardour 9 (headless; ALSA backend, or JACK = pipewire-jack). See docs/dev/FEATURE_COMPLETION_ROADMAP.md "DAW".
 -- Run: tools/audio/daw_ardour_test.sh <session-dir> [seconds]  (owner present; speakers muted; headphones off).
 local IN_DEV  = IN_DEV  or "CONNECT 2"
 local OUT_DEV = OUT_DEV or "CONNECT 2"

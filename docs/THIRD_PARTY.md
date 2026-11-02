@@ -29,7 +29,7 @@ rootless sysroot scripts and the lintian/makepkg helper downloads are never comm
 * `docs/screenshots/*.png` — renders of OpenWitty's **own** QML interface running against the
   *simulated* device. No LEWITT screenshots or artwork are included.
 * The QML interface layout was modelled on publicly visible screenshots of the vendor's
-  control application (see `docs/VISUAL_REFERENCES.md`, `src/gui/qml/Theme.qml`); no vendor
+  control application (see `docs/dev/VISUAL_REFERENCES.md`, `src/gui/qml/Theme.qml`); no vendor
   image, font or code was copied. If the vendor objects to the similarity, the visual design
   is isolated in `src/gui/qml` and can be changed without touching the protocol/core.
 * No LEWITT logo or trade dress is used. "LEWITT", "CONNECT" and "CONTROL CENTER" are trademarks
@@ -43,7 +43,7 @@ rootless sysroot scripts and the lintian/makepkg helper downloads are never comm
   Function names/addresses quoted in docs are identifiers, not code.
 * Not tracked and never uploaded (`.gitignore`): `research/` (vendor installers, extracted
   binaries, Ghidra project/caches, fetched guide pages), `.tools/`, `.sysroot/`, `.venv/`.
-* `docs/OFFICIAL_GUIDE.md` is a paraphrased feature summary of the public online guide with a
+* `docs/dev/OFFICIAL_GUIDE.md` is a paraphrased feature summary of the public online guide with a
   source link; the guide's text and screenshots are not reproduced.
 * Interoperability analysis of a vendor's own software for the purpose of writing a compatible
   program is permitted in many jurisdictions (e.g. EU Software Directive 2009/24/EC Art. 6);

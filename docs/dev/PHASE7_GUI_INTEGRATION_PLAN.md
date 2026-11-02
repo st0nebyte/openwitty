@@ -10,7 +10,7 @@ No new hardware write path was added. Baseline: branch `phase6e-work-preparation
 commits (108/108 there) are **not** in this tree; section 7 lists where they will collide.
 
 Evidence labels used below: **HW-read** = offset confirmed by physically operating the control
-and diffing real reads (`docs/HARDWARE_TEST_RESULTS.md` §§10, 12); **HW-SET** = a real SET was
+and diffing real reads (`docs/dev/HARDWARE_TEST_RESULTS.md` §§10, 12); **HW-SET** = a real SET was
 sent and verified (only LED brightness, §13/§15); **bin** = static analysis only; **none** = no
 evidence of any kind.
 
@@ -131,7 +131,7 @@ remain read-only.
 Phase 7F performs single-owner real-GUI acceptance of the Phase 7E freshness/header changes
 without intentional USB faults. The existing lease holder must exit normally before the latest
 read-only binary is launched. The high-priority next implementation is **audio-meter motion**,
-not additional GUI hardware writes. `docs/PHASE7G_AUDIO_METER_PLAN.md` records the current
+not additional GUI hardware writes. `docs/dev/PHASE7G_AUDIO_METER_PLAN.md` records the current
 4 Hz status source, limits of its Q8.8 encoding, a separate 30/60 FPS rendering layer,
 observed-sample peak policy, tests, and approval-gated acquisition-rate experiments. No
 Phase 7G polling or rendering change is implemented here.

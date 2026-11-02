@@ -56,10 +56,10 @@ Numbers from the Phase 9C run (2026-10-25); see "Validation run" for the command
 | 17 | Tray, window activation with focus, quit, login autostart on KDE Plasma (Wayland) | PASS — "KDE Plasma acceptance (Phase 9B)" |
 | 18 | Speaker level unchanged across logout/login | **Limitation without the rule** — the login screen's own audio service sets its default level; **PASS with the optional login-screen rule** on Plasma Login (2026-11-01); see "Speaker level at the login screen (Phase 9C)" |
 | 19 | Vendor fallback on hardware | **NOT DONE** — experimental |
-| 20 | GUI device control on hardware (speaker, headphone, LED brightness; since Phase 11A also inputs, processing, monitoring, LED colours/button, 48 V, output modes, autogain) | **MOSTLY DONE** — LED brightness PASS (HW-1, 2026-10-26); Phase 11B (2026-10-27/28) PASS: inputs (mute, gain decrease/increase), processing (low-cut, Clipguard, Comp, preamp), monitoring (source, mix, Dim, Mono, loopback mute), LED colours, custom button, speaker and headphone volume/mute. Open: 48 V, output modes, autogain, gain lock toggle, Denoise (session 4 / research) — `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20 | GUI device control on hardware (speaker, headphone, LED brightness; since Phase 11A also inputs, processing, monitoring, LED colours/button, 48 V, output modes, autogain) | **MOSTLY DONE** — LED brightness PASS (HW-1, 2026-10-26); Phase 11B (2026-10-27/28) PASS: inputs (mute, gain decrease/increase), processing (low-cut, Clipguard, Comp, preamp), monitoring (source, mix, Dim, Mono, loopback mute), LED colours, custom button, speaker and headphone volume/mute. Open: 48 V, output modes, autogain, gain lock toggle, Denoise (session 4 / research) — `docs/dev/FEATURE_COMPLETION_ROADMAP.md` |
 | 20b | Separate, separately confirmed GUI permissions; legacy `output_control` grants nothing (Phase 10B) | PASS (offline tests) |
 | 20c | First-GUI-write safety (Phase 10B.1): one SET per deliberate change, stable snapshot before a real SET, stop after an unconfirmed write, in-window read-only `--hw-check` | PASS (offline tests) and used in HW-1 (PASS, 2026-10-26) |
-| 20d | Four-channel capture identity and hardware loopback with signal (LB-1/LB-2) | **NOT DONE** — channels present (read-only observation); PipeWire labels them as 4.0 surround; plan in `docs/FEATURE_COMPLETION_ROADMAP.md` |
+| 20d | Four-channel capture identity and hardware loopback with signal (LB-1/LB-2) | **NOT DONE** — channels present (read-only observation); PipeWire labels them as 4.0 surround; plan in `docs/dev/FEATURE_COMPLETION_ROADMAP.md` |
 | 20e | DAW/JACK workflows (Ardour, REAPER, Audacity, JACK API) | **NOT DONE** — test matrix DAW-1…DAW-10 planned |
 | 20a | GUI permissions match the write policy (Phase 10A: per-control capabilities; triggers need their own authorization) | PASS (offline tests) |
 
@@ -279,7 +279,7 @@ dated 2026-10-14 that never happened. Recommendation for the first public alpha:
 
 Phase 9D: the owner approved sanitizing the history. Before the rewrite, 26 commits carried a personal e-mail
 address and 13 a first name in the author/committer fields, and a few old file revisions contained the handle or
-the name (an early `LICENSE`, the first Debian `changelog`/`copyright`, `docs/AUDIT_PHASE5E.md`, two ACL examples in
+the name (an early `LICENSE`, the first Debian `changelog`/`copyright`, `docs/dev/AUDIT_PHASE5E.md`, two ACL examples in
 the hardware docs). Procedure and results: "History rewrite (Phase 9D)" below. New commits use the GitHub no-reply
 address (`git config user.email`).
 
@@ -333,7 +333,7 @@ all local refs, and `…-github.git`, a mirror of GitHub incl. `refs/pull/*`). T
 old `refs/pull/*`. A new private `openwitty` was
 created and pushed only from the five branches — no `refs/pull/*`, no issues, releases or secrets existed to move.
 The full-history scan before the push found one more leftover: a fragment of the tested system's root-filesystem
-UUID in two revisions of `docs/PHASE8A12_USB_CORE_DELAY_INIT_QUIRK_ASSESSMENT.md` (removed again in a later commit).
+UUID in two revisions of `docs/dev/PHASE8A12_USB_CORE_DELAY_INIT_QUIRK_ASSESSMENT.md` (removed again in a later commit).
 It was replaced with `00000000` by `git filter-repo --replace-text` in a disposable clone; only the development
 branch changed (155 commits from 2026-10-23 on get new IDs; `main` and the three other branches are unchanged).
 Verified before the push: 241 commits as before, identical authors, committers and dates, identical tip tree,

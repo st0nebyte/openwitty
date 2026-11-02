@@ -76,7 +76,7 @@ needs the device. Nothing here is hardware-verified.
 
 ## 3b. Hardware session 2026-10-14 — option C confirmed
 
-First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what changed:
+First real hardware session (`docs/dev/HARDWARE_TEST_RESULTS.md`). Summary of what changed:
 
 * **Option C is no longer hypothetical.** The CONNECT 2 (serial redacted, bcdDevice `0121`)
   exposes interface 3, class `ff/f0/00` (vendor-specific, 0 endpoints), unbound to any driver. A
@@ -105,14 +105,14 @@ First real hardware session (`docs/HARDWARE_TEST_RESULTS.md`). Summary of what c
 
 ### 3c. Hardware session 2026-10-15 — option C confirmed for writes too
 
-`docs/HARDWARE_TEST_RESULTS.md` §13. A real `bm=0x21 req=0x03` MEM SET (the write counterpart of the
+`docs/dev/HARDWARE_TEST_RESULTS.md` §13. A real `bm=0x21 req=0x03` MEM SET (the write counterpart of the
 already-verified GET) against interface 3, changing exactly one byte of the full 128-byte settings
 struct (LED brightness), was accepted by the device and produced a visible, confirmed effect — then
 reversed. No driver conflict, no explicit claim needed, no audio disruption (card present throughout). This is
 the first real-hardware write on this project and confirms option C is not read-only: the same
 userspace, no-kernel-patch access path works for SET as well as GET, at least for this one field.
 
-**Settling delay, measured more precisely 2026-10-15** (`docs/HARDWARE_TEST_RESULTS.md` §15.1): a GET
+**Settling delay, measured more precisely 2026-10-15** (`docs/dev/HARDWARE_TEST_RESULTS.md` §15.1): a GET
 issued immediately after the SET (same process, microseconds later) returned the pre-write value; a
 GET from a separate process ~1ms later already returned the correct post-write value — convergence is
 far faster than the original "tens-to-hundreds of ms" characterization suggested; that estimate is

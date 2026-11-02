@@ -262,7 +262,7 @@ int cmdRead(const ReadArgs& a) {
 //     (none), no reset, no mode switch, no trigger words, no DFU.
 #ifdef LEWITT_HAVE_USB
 // ---- single-field experimental writes ------------------------------------------------------
-// Two fields exist, each approved separately (see docs/HARDWARE_TEST_RESULTS.md):
+// Two fields exist, each approved separately (see docs/dev/HARDWARE_TEST_RESULTS.md):
 //   led-brightness <0-100>   settings byte 37   (executed on hardware 2026-10-14, Phase 6C)
 //   instrument-mute <on|off> settings byte 12   (Phase 6E: PREPARED, never executed on hardware)
 //   speaker-volume <dB>      settings bytes 20-21, i16 Q8.8 in -60..0 dB (Phase 8C)

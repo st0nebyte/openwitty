@@ -1,5 +1,5 @@
 // commitAndVerify() / WriteVerification state machine. All simulated; no hardware.
-// Mirrors real behaviour observed in docs/HARDWARE_TEST_RESULTS.md's Phase 6D timing experiment
+// Mirrors real behaviour observed in docs/dev/HARDWARE_TEST_RESULTS.md's Phase 6D timing experiment
 // (a GET immediately after a SET can return stale data) without relying on wall-clock timing:
 // MockTransport's stale-reads-after-write and external-change injection are count-based, and
 // PollPolicy's sleeper is overridden with a no-op so these tests run instantly and deterministically.

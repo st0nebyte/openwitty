@@ -6,7 +6,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)
 name=openwitty
-# Arch version = CMake project version + pre-release label without dots (0.1.0 + alpha.1 -> 0.1.0alpha1),
+# Arch version = CMake project version + pre-release label without dots (0.1.0 + beta.1 -> 0.1.0beta1; no label: 0.1.0),
 # the same rule as LEWITT_VERSION_ARCH in CMakeLists.txt; must equal the PKGBUILD's pkgver.
 base=$(sed -n 's/^project(openwitty VERSION \([0-9.]*\).*/\1/p' "$root/CMakeLists.txt")
 suffix=$(sed -n 's/^set(LEWITT_VERSION_SUFFIX "\(.*\)")/\1/p' "$root/CMakeLists.txt" | tr -d .)

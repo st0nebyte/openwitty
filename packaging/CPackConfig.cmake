@@ -6,7 +6,7 @@ set(CPACK_PACKAGE_VENDOR "unofficial community project")
 set(CPACK_PACKAGE_CONTACT "st0nebyte <noreply@users.noreply.github.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Unofficial, experimental control application for the LEWITT CONNECT 2")
 set(CPACK_PACKAGE_DESCRIPTION
-    "Independent Linux control application and diagnostic tool for the\nLEWITT CONNECT 2 USB audio interface (experimental alpha, tested with one\ndevice on one system). Shows the live device state read-only, keeps the\ndesktop volume in step with the speaker volume knob (optional user service),\nand includes a simulated device. Not affiliated with LEWITT.")
+    "Independent Linux control application for the LEWITT CONNECT 2 USB audio\ninterface (tested with one device on one system): controls the device's\nsettings, keeps the desktop volume in step with the volume knob (optional\nuser service and tray icon) and includes a simulated device.\nUnofficial; not made by or affiliated with LEWITT.")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/st0nebyte/openwitty")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_STRIP_FILES ON)

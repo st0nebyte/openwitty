@@ -174,7 +174,7 @@ TEST(Mock, WriteOnlyAndSizeChecks) {
 }
 
 // Panic Mute (MUTE button hold), confirmed on real hardware 2026-10-16
-// (docs/HARDWARE_TEST_RESULTS.md): sets exactly the four primary mute bytes (2, 12, 22, 29)
+// (docs/dev/HARDWARE_TEST_RESULTS.md): sets exactly the four primary mute bytes (2, 12, 22, 29)
 // simultaneously; loopback mute (19) and the channel-select byte (56) are confirmed untouched;
 // there is no separate dedicated flag. MockTransport::simulatePanicMute() mirrors this exactly.
 TEST(Session, PanicMuteSetsExactlyTheFourPrimaryMuteFields) {

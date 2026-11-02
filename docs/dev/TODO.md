@@ -1,31 +1,31 @@
 # TODO
 
-> **Current plan (Phase 11, updated 2026-10-28):** `docs/FEATURE_COMPLETION_ROADMAP.md`, section "Phase 11 status and
+> **Current plan (Phase 11, updated 2026-10-28):** `docs/dev/FEATURE_COMPLETION_ROADMAP.md`, section "Phase 11 status and
 > remaining plan" — what is hardware-verified, the owner system's state, and the ordered next steps (DAW tests,
 > channel naming, high-risk session, research items). Also: feature matrix, hardware-validation roadmap. The numbered items below are the historical log; where they
-> disagree with the roadmap (e.g. "Next" items), the roadmap is current. Release status: `docs/RELEASE_READINESS.md`.
+> disagree with the roadmap (e.g. "Next" items), the roadmap is current. Release status: `docs/dev/RELEASE_READINESS.md`.
 
 ## Needs the device (do in this order, read-only first)
-1. ✔ done 2026-10-14: `openwitty-cli list`/`devices`; descriptors recorded (`docs/HARDWARE_TEST_RESULTS.md`).
+1. ✔ done 2026-10-14: `openwitty-cli list`/`devices`; descriptors recorded (`docs/dev/HARDWARE_TEST_RESULTS.md`).
 2. ✔ done 2026-10-14: `probe --execute` — **access method decided: interface 3** (unbound,
    vendor-specific `ff/f0/00`), not the AudioControl interface. See `docs/USB_ACCESS.md` §3b.
 3. ✔ done 2026-10-14: `read version|status|settings --interface 3` all answer read-only, over the
    same unbound interface (new `--interface N` flag on `openwitty-cli read`, no new USB call site).
    `settings` decodes cleanly into plausible real values (mic gain 27 dB, phantom on, headphone
-   -19.71 dB muted, etc.) — see `docs/HARDWARE_TEST_RESULTS.md` §7b. `version`/`api` return an
+   -19.71 dB muted, etc.) — see `docs/dev/HARDWARE_TEST_RESULTS.md` §7b. `version`/`api` return an
    unexplained byte-identical payload despite different `wValue` — open question, not yet resolved.
 4. ✔ done 2026-10-14/15: plan step 9 — physically confirmed mic/instrument gain, all four
    channels' volume/mute, and the channel-select byte (56) against real hardware. Mono, Clipguard,
    preamp style have no physical control on this unit (software/CONTROL-CENTER-only, owner-confirmed)
-   — documented as a hardware-access limitation. See `docs/HARDWARE_TEST_RESULTS.md` §§10, 12.
+   — documented as a hardware-access limitation. See `docs/dev/HARDWARE_TEST_RESULTS.md` §§10, 12.
 5. ✔ done 2026-10-15: first real hardware write, LED brightness (100→60→100, one transition visually
    witnessed), via a single narrowly-scoped, explicitly-gated CLI command (`write led-brightness`,
    needs `--execute` + `LEWITT_ALLOW_HARDWARE_WRITE=1`). Found a settling delay between a SET and a
-   GET reflecting it — see `docs/HARDWARE_TEST_RESULTS.md` §13, PROTOCOL.md, `docs/USB_ACCESS.md` §3c.
+   GET reflecting it — see `docs/dev/HARDWARE_TEST_RESULTS.md` §13, PROTOCOL.md, `docs/USB_ACCESS.md` §3c.
 6. ✔ done 2026-10-15: timing experiment pinned the settling delay down precisely — convergence
    within ~1ms (not "tens-to-hundreds of ms" as first estimated), explained by the near-zero gap
    between a write and the very next same-process read, not a slow device. See
-   `docs/HARDWARE_TEST_RESULTS.md` §15.1.
+   `docs/dev/HARDWARE_TEST_RESULTS.md` §15.1.
 7. ✔ done 2026-10-15 (software only, no hardware writes): built `DeviceSession::commitAndVerify()`
    (`core/WriteVerification.hpp`) — a real `WriteState` machine that only reports success after a
    read confirms it, bounded read-only polling, no automatic SET retries. 11 new mock tests. GUI
@@ -45,15 +45,15 @@
 9. **Correction, 2026-10-16:** Phase 6B's HARDWARE_TEST_RESULTS.md §12.7 overstated a negative
    finding as "no long-press gesture exists on any front-panel button" when only preamp/Mono/
    Clipguard cycling on the select buttons had actually been asked about. The MUTE button's hold
-   gesture ("Panic Mute") was separately already documented (`docs/OFFICIAL_GUIDE.md`, phase 5-era
+   gesture ("Panic Mute") was separately already documented (`docs/dev/OFFICIAL_GUIDE.md`, phase 5-era
    static analysis) and is unaffected by that Phase 6B answer — now independently re-verified against
    the manufacturer's online guide. Wording corrected in HARDWARE_TEST_RESULTS.md, FEATURES.md,
-   PROTOCOL.md, `docs/OFFICIAL_GUIDE.md`.
+   PROTOCOL.md, `docs/dev/OFFICIAL_GUIDE.md`.
 10. ✔ done 2026-10-16: Panic Mute hardware-confirmed, 3 read-only trials — **exactly bytes
     2/12/22/29** set simultaneously regardless of selected channel; loopback (19) and channel-select
     (56) confirmed untouched; no separate flag exists. Added `MockTransport::simulatePanicMute()`,
     read-only `mute.allFour` derived GUI state, 3 new tests (108/108 total). No software Panic Mute
-    trigger implemented, per instruction. See `docs/HARDWARE_TEST_RESULTS.md` §16, PROTOCOL.md.
+    trigger implemented, per instruction. See `docs/dev/HARDWARE_TEST_RESULTS.md` §16, PROTOCOL.md.
 11. **Open, not yet investigated:** the reproducible but unidentified `status` message change
     (offsets 3–4, 12–13, same values across all 3 Panic Mute trials) — not in PROTOCOL.md's
     documented status field map. Worth a dedicated follow-up once there's a hypothesis for what it
@@ -63,7 +63,7 @@
     (descriptor-driven interface selection, read-only GUI connection states) — 137/137. First
     real-hardware GUI launch: every gain/mute binding confirmed exact against the CLI; live
     manual-interaction validation (channel select, gain, mute) also confirmed. See
-    `docs/HARDWARE_TEST_RESULTS.md` §17.
+    `docs/dev/HARDWARE_TEST_RESULTS.md` §17.
 13. **Next (Phase 7B):** selected-channel (byte 56) has no GUI binding at all — confirmed empirically
     this session, not just by code inspection. Add `SettingsMessage` accessor + `publish()` key +
     QML highlight. Also: consolidate `ui.status`/`ui.state` (two overlapping labels that both
@@ -99,7 +99,7 @@
 * Re-trace on Windows: MixToSpeakers, API handshake, schema merge.
 
 ## Backend (phase 5C follow-ups)
-* ✔ done 2026-10-14: hardware session, filled result template → `docs/HARDWARE_TEST_RESULTS.md`.
+* ✔ done 2026-10-14: hardware session, filled result template → `docs/dev/HARDWARE_TEST_RESULTS.md`.
 * Option C (`docs/USB_ACCESS.md`) confirmed working on real hardware; implement an "unbound
   interface" access method in `UsbTransport`/CLI (currently only `probe`'s hardcoded message-0x0A
   matrix uses it) so version/status/settings reads can use the same path.
@@ -114,7 +114,7 @@
 ## Phase 5E follow-ups
 
 - Owner decision: remove `build-asan/`/`build-tsan/` from history (commits eb2956b..91fdefd);
-  see docs/AUDIT_PHASE5E.md section 6. Not done without approval.
+  see docs/dev/AUDIT_PHASE5E.md section 6. Not done without approval.
 - Run namcap and `makepkg -s` on Arch/CachyOS; clang-tidy/cppcheck when obtainable rootless.
 - ~~USB mode: stop retrying after EACCES/EBUSY until the device list changes.~~ (Phase 7A, unit-tested)
 - Re-examine autogain completion inference before any write test.
@@ -142,7 +142,7 @@
 - ✔ Phase 7C (2026-10-17): real read-only GUI session confirmed live selection of all four
   channels, physical mic gain/mute, headphone volume, and owner-operated Panic Mute display.
   Measured status/settings GET rates were 3.999/1.999 Hz with zero SETs and zero transfer errors.
-  See `docs/HARDWARE_TEST_RESULTS.md` §18.
+  See `docs/dev/HARDWARE_TEST_RESULTS.md` §18.
 - ✔ Observed GUI corrections: physical mix reads on this unit span −100…0, not the old drawing
   range −1…+1; read-only knob scale corrected, mock behavior preserved. Panic Mute notice was
   observed overlapping the connection text; the banner now reserves its space.
@@ -159,13 +159,13 @@
 ## Phase 7D (read-only reliability)
 
 - Cooperative per-user OpenWitty control lease and opt-in monotonic latency trace implemented;
-  validation details in `docs/HARDWARE_TEST_RESULTS.md` §19. No polling-rate increase or new
+  validation details in `docs/dev/HARDWARE_TEST_RESULTS.md` §19. No polling-rate increase or new
   hardware write path.
 - Pending owner-approved controlled concurrent GET to characterize Phase 7C EIO; compare with
   lease behavior using the newly built GUI. Do not treat the lock as a device-permission fix or
   third-party exclusion mechanism.
 - ✔ Single-client real GUI stage-timing run covered physical gain, mute, selection, and mix;
-  details in `docs/HARDWARE_TEST_RESULTS.md` §19. Still pending an external physical-action marker
+  details in `docs/dev/HARDWARE_TEST_RESULTS.md` §19. Still pending an external physical-action marker
   to measure end-to-end action-to-visible latency; current trace cannot infer it.
 - Find independent evidence of audio/front-panel readiness if exposed; otherwise keep control
   readiness explicitly separate. Do not invent a status bit.

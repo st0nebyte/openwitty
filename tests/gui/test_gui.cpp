@@ -691,7 +691,7 @@ TEST(GuiSync, ExternalHardwareChangeAppearsWithoutLosingPendingEdit) {
     EXPECT_TRUE(c.values()["pending.in1.gain"].toBool());
 }
 
-// Panic Mute (MUTE hold), confirmed on real hardware 2026-10-16 (docs/HARDWARE_TEST_RESULTS.md):
+// Panic Mute (MUTE hold), confirmed on real hardware 2026-10-16 (docs/dev/HARDWARE_TEST_RESULTS.md):
 // sets exactly the four primary mute fields simultaneously, nothing else. simulatePanicMute()
 // mirrors that directly on the mock; the GUI must pick it up through the existing poll/merge path
 // like any other device-side change, and must not lose an unrelated pending edit.
@@ -3104,7 +3104,9 @@ TEST(Autosetup, FlowSwitches48VFirstAndRunsTheNoiseTest) {
     ASSERT_TRUE(waitFor([&] { pump(); return wiz->property("step").toInt() == 7; }, 5000)) << "advance to the noise test";
     QMetaObject::invokeMethod(wiz, "startNoiseTest");
     ASSERT_TRUE(waitFor([&] { pump(); return wiz->property("step").toInt() == 6; }, 5000)) << "then the summary";
-    EXPECT_TRUE(c.values().value("in1.denoise").toBool()) << "the device switched Denoise on after measuring";
+    // the published values may lag the wizard's step by a poll (seen on a slower Debian container)
+    EXPECT_TRUE(waitFor([&] { pump(); return c.values().value("in1.denoise").toBool(); }))
+        << "the device switched Denoise on after measuring";
 }
 
 // ---- Presets (P3) ----

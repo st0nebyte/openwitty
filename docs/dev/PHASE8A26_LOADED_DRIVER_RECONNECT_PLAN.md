@@ -73,7 +73,7 @@ Preconditions: no reboot since 8A.25; clean tree at the pushed commit; nothing p
    `python3 -I tools/diagnostics/loaded_reconnect.py classify --run-dir "$RUN" --cli build-release/openwitty-cli`
    (may be repeated later; the reconnect never).
 9. The user reports any audible effect (silence does not exclude electrical transients). Result document
-   `docs/PHASE8A26_LOADED_DRIVER_RECONNECT_RESULT.md`; no repetition.
+   `docs/dev/PHASE8A26_LOADED_DRIVER_RECONNECT_RESULT.md`; no repetition.
 
 No reboot, Limine change, module load/unload, volume/mute SET or playback is part of this procedure. Rollback: nothing to roll back
 (the device is simply left enumerated and bound); the temporary kernel argument disappears at the next normal boot.

@@ -11,7 +11,7 @@
 # The package installs the udev rule and a systemd *user* unit (openwitty-volumed.service); it never
 # enables the unit and never installs the kernel compatibility quirk (only an example in the docs).
 pkgname=openwitty
-pkgver=0.1.0alpha1
+pkgver=0.1.0
 pkgrel=1
 pkgdesc='Unofficial, experimental Linux control application for the LEWITT CONNECT 2'
 arch=('x86_64')

@@ -1,4 +1,4 @@
-// Phase 12C: "Follow active output" (owner spec, docs/FEATURE_COMPLETION_ROADMAP.md Phase 12). The CONNECT 2 routes the
+// Phase 12C: "Follow active output" (owner spec, docs/dev/FEATURE_COMPLETION_ROADMAP.md Phase 12). The CONNECT 2 routes the
 // native (kernel/desktop) volume to the output byte 59 names (0 none, 1 speakers, 2 headphones). OpenWitty keeps that
 // mapping on the audible output, decided from the device's own speaker/headphone mutes - never from the desktop's mute.
 #pragma once

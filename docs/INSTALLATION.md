@@ -1,10 +1,9 @@
 # Installation
 
-> **Unofficial and experimental.** OpenWitty is not affiliated with or endorsed by LEWITT and is not a
-> replacement for LEWITT CONTROL CENTER. It has been tested with **one CONNECT 2 on one system**
-> (CachyOS, Linux 7.3, KDE Plasma 6 on Wayland, PipeWire/WirePlumber). What is validated and what is not:
-> `README.md`, `FEATURES.md`, `docs/RELEASE_READINESS.md`. Licence: MIT (`LICENSE`); third-party notes:
-> `docs/THIRD_PARTY.md`.
+> **Unofficial.** OpenWitty is not made, supported or endorsed by LEWITT. It has been tested with **one
+> CONNECT 2 on one system** (CachyOS, Linux 7.3, KDE Plasma 6 on Wayland, PipeWire/WirePlumber). What is validated
+> and what is not: `README.md`, `FEATURES.md`, `docs/dev/RELEASE_READINESS.md`. Licence: MIT (`LICENSE`);
+> third-party notes: `docs/THIRD_PARTY.md`.
 
 Building and running need no root. Administrator steps are always optional, explicit and done by you:
 installing a package, the USB permission rule, and the kernel compatibility quirk. OpenWitty never
@@ -29,6 +28,18 @@ Run-time dependencies: Qt 6 (Core, Gui, Widgets, Network, DBus, Qml, Quick, Svg 
 libusb-1.0 and alsa-lib. The desktop integration was tested with PipeWire/WirePlumber; `systemd` (user session) is
 needed only for the optional background service.
 
+## Prebuilt packages
+
+Each [release](https://github.com/st0nebyte/openwitty/releases) has an Arch Linux package and a Debian 13 package:
+
+```sh
+sudo pacman -U openwitty-0.1.0-1-x86_64.pkg.tar.zst     # Arch Linux / CachyOS
+sudo apt install ./openwitty_0.1.0-1_amd64.deb          # Debian 13 (Qt 6.8 or newer)
+```
+
+For other Debian-based systems (e.g. Ubuntu), build the `.deb` yourself as described below: a package built on
+Debian 13 needs that distribution's library versions.
+
 ## Arch Linux / CachyOS
 
 Build the package from this repository as a normal user (never as root):
@@ -36,7 +47,7 @@ Build the package from this repository as a normal user (never as root):
 ```sh
 packaging/arch/make-source-tarball.sh            # tarball of the committed tree
 cd packaging/arch && makepkg -s                  # -s asks pacman for missing build dependencies
-sudo pacman -U openwitty-0.1.0alpha1-1-x86_64.pkg.tar.zst
+sudo pacman -U openwitty-0.1.0-1-x86_64.pkg.tar.zst
 ```
 
 Remove: `sudo pacman -R openwitty` (see "Uninstall" for your own settings and the service).
@@ -49,14 +60,14 @@ sudo apt install build-essential cmake ninja-build pkg-config libgtest-dev libus
     qml6-module-qtquick-shapes                                   # build dependencies
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLEWITT_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user
 cmake --build build && ctest --test-dir build --output-on-failure
-(cd build && cpack -G DEB)                                       # -> build/openwitty_0.1.0~alpha1-1_amd64.deb
-sudo apt install ./build/openwitty_0.1.0~alpha1-1_amd64.deb
+(cd build && cpack -G DEB)                                       # -> build/openwitty_0.1.0-1_amd64.deb
+sudo apt install ./build/openwitty_0.1.0-1_amd64.deb
 ```
 
 Inspect the package first with `dpkg-deb -I` / `dpkg-deb -c`. Its postinst only reloads the udev rules for
 LEWITT devices; it never touches drivers, the kernel quirk or the service. Remove: `sudo apt remove openwitty`.
-The Debian package has not been built or installed on a Debian/Ubuntu system since the desktop integration
-was added (see `docs/PACKAGING.md`).
+Tested on Debian 13 in a clean container for 0.1.0: build, all tests, `lintian`, install, start (simulated device),
+remove and purge (see `docs/PACKAGING.md`). Ubuntu has not been tested.
 
 ## User-local install (no root)
 
@@ -94,8 +105,8 @@ openwitty --mock          # simulated device: every control, always labelled "si
 openwitty                 # the real CONNECT 2 (permissions above)
 ```
 
-With a real device the window shows the live state read-only. Nothing on the device changes unless you turn
-on one of the options that say "writes the device" in Settings and confirm it.
+With a real device the window shows the live state and controls the device right away. Every change is read
+back; 48 V, the louder output modes and the routing changes ask once before they switch on.
 
 ## Desktop volume (KDE/PipeWire)
 
@@ -125,7 +136,7 @@ volume: available" without it; other kernels may not need it. Remove: `sudo rm
 > **explanation** (the login screen's WirePlumber applies its default volume) is strongly supported but has not
 > been traced. Turn down or switch off your speakers/headphones before logging out if a sudden level change would
 > be a problem. With autologin there is no login screen at boot; it appears after a logout. Details:
-> `docs/RELEASE_READINESS.md` ("Speaker level at the login screen").
+> `docs/dev/RELEASE_READINESS.md` ("Speaker level at the login screen").
 
 #### Optional: keep the login screen away from the CONNECT 2
 
@@ -245,16 +256,16 @@ The CONNECT 2 is a class-compliant USB audio device; DAWs need no OpenWitty code
   device's direct monitoring (mix knob towards "Input") or the DAW's monitoring, not both.
 * **96 kHz:** possible (see "Allow 44.1 and 96 kHz"), but Denoise and Comp are not available at that rate.
 
-### Show the volume knob in the desktop volume
+### Desktop volume follows the volume knob
 
 Linux cannot read back the CONNECT 2's speaker volume, so turning the **speaker volume knob** does not move
-the desktop volume. Turn on **"Show the volume knob in the desktop volume"**: while the window is open it keeps
+the desktop volume. Turn on **"Desktop volume follows the volume knob"**: while the window is open it keeps
 the desktop in step. It only sets the desktop's volume to the level the device already has (never louder,
 never unmuting) and never writes the device. The desktop slider and the device's Mute button work without it.
 
 ### Background service (optional)
 
-**"Keep it running when OpenWitty is closed"** enables the `openwitty-volumed` user service
+**"Keep working when the window is closed"** enables the `openwitty-volumed` user service
 (`systemctl --user enable --now openwitty-volumed.service`). It starts with your desktop session, mirrors the
 knob while the window is closed and hands the device to the window when you open it. Turning the switch off
 disables and stops it.
@@ -276,11 +287,22 @@ systemctl --user disable --now openwitty-volumed.service
 
 **"Show OpenWitty in the system tray"** (Settings → Desktop integration) starts `openwitty-tray` now and at every
 login (an XDG autostart entry in `~/.config/autostart/`); turning it off removes that entry and the icon. Its
-tooltip and menu show whether the volume knob is shown in the desktop volume and whether the background service
-runs; the menu has **Open OpenWitty**, **Desktop integration settings…** and **Quit tray icon**, and a left
+tooltip and menu show whether the CONNECT 2 is connected, whether the desktop volume follows the knob and whether
+the background service runs; the menu has **Open OpenWitty**, **Desktop integration settings…** and **Quit tray icon**, and a left
 click opens OpenWitty. The icon only reads the settings file and `systemctl --user show`: it never uses the
 device and never starts or stops the service. On a desktop without a system tray it exits quietly; OpenWitty
-works the same without it. Tested offscreen; on KDE Plasma it uses the standard Status Notifier tray.
+works the same without it. On KDE Plasma it uses the standard Status Notifier tray; GNOME needs an AppIndicator
+extension.
+
+### Window at login and its position (optional)
+
+* **"Open the window at login"** writes `~/.config/autostart/io.github.st0nebyte.openwitty-window.desktop`;
+  turning it off removes it.
+* **"Reopen the window where it was closed"**: on Wayland only the window manager may place windows. On
+  **KDE Plasma** OpenWitty writes one KWin window rule ("OpenWitty: reopen where it was closed", visible under
+  System Settings ▸ Window Management ▸ Window Rules) that remembers position and size; turning the switch off
+  removes it. In an **X11 session** the window saves its position in `~/.config/openwitty/gui.conf`. On other
+  Wayland desktops the switch is unavailable.
 
 ### What closing and quitting do
 
@@ -288,10 +310,11 @@ works the same without it. Tested offscreen; on KDE Plasma it uses the standard 
 |---|---|
 | Close the OpenWitty window | the window ends and releases the device; a running background service takes it back |
 | "Quit tray icon" | only the icon goes away (until the next login, if the tray setting is on) |
-| "Keep it running…" off | the background service is disabled and stopped |
+| "Keep working when the window is closed" off | the background service is disabled and stopped |
 | Open OpenWitty while it is open (launcher, tray) | the open window comes to the front; no second window, no second device session |
 
-**"Reset desktop integration"** turns everything off again, disables the service and removes the tray login entry. The settings live in
+**"Reset desktop integration"** turns everything off again, disables the service and removes the login entries
+(tray and window) and the KDE window rule. The settings live in
 `~/.config/openwitty/openwitty.conf`; deleting that file restores the defaults.
 
 OpenWitty's own controls need no permission switches: every setting that was verified on the real CONNECT 2 can be
@@ -305,7 +328,8 @@ not validated on hardware) and "Allow 44.1 and 96 kHz for apps". Permission keys
 
 1. In OpenWitty: Settings → Desktop integration → **Reset desktop integration** (or
    `systemctl --user disable --now openwitty-volumed.service`, `openwitty-tray --quit` and
-   `rm ~/.config/autostart/io.github.st0nebyte.openwitty-tray.desktop`).
+   `rm ~/.config/autostart/io.github.st0nebyte.openwitty-*.desktop`; the KDE window rule under System Settings ▸
+   Window Rules).
 2. Remove the program:
    * package: `sudo pacman -R openwitty` / `sudo apt remove openwitty`;
    * user-local: `xargs -d '\n' rm -f < build-local/install_manifest.txt` and `systemctl --user daemon-reload`

@@ -111,7 +111,7 @@ write (`verifyOnlyKnownFieldsChanged`), and the snapshot is re-read after the wr
 
 * **Tracked files (HEAD)**: ~130 files; sources, docs, own artwork (4 screenshots of the
   simulated GUI, 4 icon PNGs + SVG), scripts. No installers, firmware, decompiled code,
-  LEWITT images, captures, credentials or personal data. `docs/OFFICIAL_GUIDE.md` is a
+  LEWITT images, captures, credentials or personal data. `docs/dev/OFFICIAL_GUIDE.md` is a
   paraphrased summary (4.5 kB) of the public guide with the source URL; the guide's own
   text/screenshots are kept only in the git-ignored `research/guide/`.
 * **History (12 commits, single author identity `st0nebyte`)**: scanned for private keys,
@@ -132,7 +132,7 @@ write (`verifyOnlyKnownFieldsChanged`), and the snapshot is re-read after the wr
 ## 7. Remaining blockers before the first real-device session
 
 1. **Hardware**: nothing is verified. The first session must follow
-   `docs/HARDWARE_TEST_PLAN.md` (Appendix A) and is read-only.
+   `docs/dev/HARDWARE_TEST_PLAN.md` (Appendix A) and is read-only.
 2. **USB permissions**: the udev rule needs an administrator to install it (documented, not
    installed). EBUSY from `snd-usb-audio` is expected and is a research outcome, not a bug.
 3. **Licence**: resolved in Phase 5F — MIT (repository `LICENSE`, owner-provided); see docs/THIRD_PARTY.md.

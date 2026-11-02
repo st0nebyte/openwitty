@@ -2,7 +2,7 @@
 """OpenWitty volume bridge for the LEWITT CONNECT 2 (29c2:0004).
 
 REFERENCE IMPLEMENTATION ONLY (Phase 8C), superseded by the native openwitty-volumed (Phase 8D,
-docs/PHASE8D_VOLUME_INTEGRATION.md). Do not install it as a service: on start and on every card
+docs/dev/PHASE8D_VOLUME_INTEGRATION.md). Do not install it as a service: on start and on every card
 reappearance it pushes the current ALSA level to the device (it can raise the physical level at
 login), it does not track the hardware knob, it has no bounded-increase limit, and its per-write CLI
 calls collide with the GUI's control lease.

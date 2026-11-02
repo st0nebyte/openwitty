@@ -1,8 +1,10 @@
-openwitty (0.1.0~alpha1-1) unstable; urgency=low
+openwitty (0.1.0-1) unstable; urgency=low
 
-  * Initial experimental packaging (unreleased): live read-only device view,
-    desktop volume integration with an optional systemd user service, and a
-    simulated device. Tested with one CONNECT 2 on one system.
-  * Released under the MIT licence; project renamed OpenWitty.
+  * First public release: control of the LEWITT CONNECT 2 (every setting
+    verified on the real device), desktop volume integration with an optional
+    background service and tray icon, desktop names for the inputs and the
+    output, presets, simulated device. Unofficial; not made by LEWITT.
+    Tested with one CONNECT 2 on one system (KDE Plasma 6, PipeWire).
 
- -- st0nebyte <noreply@users.noreply.github.com>  Wed, 14 Oct 2026 12:00:00 +0000
+ -- st0nebyte <noreply@users.noreply.github.com>  Mon, 02 Nov 2026 12:00:00 +0000
+

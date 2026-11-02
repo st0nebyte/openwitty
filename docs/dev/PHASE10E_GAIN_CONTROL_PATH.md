@@ -3,7 +3,7 @@
 2026-10-26. **Offline analysis and passive evidence only.** Sources: Linux `sound/usb/mixer.c` (upstream, matching the
 behaviour logged by the installed 7.3 kernel), PipeWire 1.6.10 `spa/plugins/alsa/acp/acp.c` (installed version), the
 ACP path/profile files installed on the system, WirePlumber 0.5.18's saved state files, the Phase 8 USB traces, the
-Phase 10D inventory (`docs/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`) and the current boot's kernel journal. No mixer was
+Phase 10D inventory (`docs/dev/PHASE10D_PASSIVE_AUDIO_INVENTORY.md`) and the current boot's kernel journal. No mixer was
 opened, no PipeWire/ALSA control changed, no stream opened, no USB request issued, no service touched.
 
 Labels: **established** (code or recorded observation shows it), **likely** (follows from code + metadata, not seen on

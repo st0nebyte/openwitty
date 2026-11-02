@@ -1,5 +1,5 @@
 // Phase 7A: descriptor-driven control-interface selection. The positive fixture is the exact
-// descriptor layout recorded from a real CONNECT 2 (docs/HARDWARE_TEST_RESULTS.md §2); every
+// descriptor layout recorded from a real CONNECT 2 (docs/dev/HARDWARE_TEST_RESULTS.md §2); every
 // other table is synthetic. Selection itself is pure logic - nothing here touches USB.
 #include <gtest/gtest.h>
 

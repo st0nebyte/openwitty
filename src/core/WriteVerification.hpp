@@ -1,7 +1,7 @@
 // Write-state machine for settings commits on real hardware.
 //
 // A successful USB transfer (commit() returning ok) is NOT proof the device's internal state
-// actually reflects the write yet: Phase 6D (docs/HARDWARE_TEST_RESULTS.md) found a real CONNECT 2
+// actually reflects the write yet: Phase 6D (docs/dev/HARDWARE_TEST_RESULTS.md) found a real CONNECT 2
 // can answer a GET sent immediately after a SET with the pre-write value, while a GET a short time
 // later (empirically ~1ms was already enough, far under the ~20ms first poll default below) returns
 // the correct value. This header turns "the write ioctl didn't error" into a distinct, more

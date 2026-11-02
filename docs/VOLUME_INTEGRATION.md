@@ -67,7 +67,7 @@ history). Verified on one machine (CachyOS, Linux 7.3.0-5, KDE Plasma, PipeWire 
   −23.50 dB; the quirk lets that reach the device. No log of that write exists.
 * **Optional remedy (not validated):** a login-screen-only WirePlumber rule, `51-openwitty-connect2-login-screen.conf`;
   where to find it and how to install it: `docs/INSTALLATION.md`. Evidence and the live-check plan:
-  `docs/RELEASE_READINESS.md`.
+  `docs/dev/RELEASE_READINESS.md`.
 
 ## Command line (diagnostics; ordinary use is the Settings page)
 Modes are mutually exclusive: no flag = follow the settings file, or exactly one of `--mirror`, `--vendor-fallback`, `--dry-run`, `--check`; conflicting or

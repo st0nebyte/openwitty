@@ -36,10 +36,9 @@ if(LEWITT_REPRODUCIBLE)
     set(CMAKE_SKIP_BUILD_RPATH ON)
 endif()
 # Release version: CMake's numeric project version plus a pre-release label, kept in this one place.
-#   LEWITT_VERSION          0.1.0-alpha.1   (--version, man pages, git tag v0.1.0-alpha.1)
-#   LEWITT_VERSION_DEBIAN   0.1.0~alpha1    (dpkg: "~" sorts before 0.1.0)
-#   LEWITT_VERSION_ARCH     0.1.0alpha1     (pacman pkgver: no hyphen; vercmp sorts it before 0.1.0)
-set(LEWITT_VERSION_SUFFIX "alpha.1")
+# With a label (e.g. "beta.1"): 0.1.0-beta.1 (--version, git tag), Debian 0.1.0~beta1, Arch 0.1.0beta1.
+# Without one (a release): 0.1.0 everywhere, git tag v0.1.0.
+set(LEWITT_VERSION_SUFFIX "")
 if(LEWITT_VERSION_SUFFIX)
     set(LEWITT_VERSION "${PROJECT_VERSION}-${LEWITT_VERSION_SUFFIX}")
     string(REPLACE "." "" _ow_suffix_compact "${LEWITT_VERSION_SUFFIX}")

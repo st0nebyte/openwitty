@@ -1,7 +1,7 @@
 # Feature ideas (not planned yet)
 
 Features the official Windows app does not have but OpenWitty could, collected 2026-11-01. None of them is
-scheduled: the owner decides after the private beta week and the final review (`docs/FINAL_REVIEW_PLAN.md`).
+scheduled: the owner decides after the private beta week and the final review (`docs/dev/FINAL_REVIEW_PLAN.md`).
 Effort: S = small, M = moderate.
 
 | # | Idea | What it gives | Builds on | Effort |

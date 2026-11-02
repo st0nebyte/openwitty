@@ -39,7 +39,7 @@ capture is tracked here.
 | Slot `+0x18` uses the separate settings message object | Windows, `0x140201060`–`0x1402010a9`, object `+0xc8` | Status and settings are separate reads in the same update path | High |
 | Eight leaf getters each load a signed 16-bit value from the status buffer and multiply by `0.00390625` (`1/256`) | Windows, input 1 `0x1401ffca0` (object `+0x270`), input 2 `0x1401ffc80` (`+0x279`), loopback L/R `0x1401ffc60`/`0x1401ffc40` (`+0x282`/`+0x284`), speaker L/R `0x1401ffc20`/`0x1401ffc00` (`+0x286`/`+0x288`), headphone L/R `0x1401ffbe0`/`0x1401ffbc0` (`+0x28a`/`+0x28c`); multiplier VA `0x14093ef30` | The eight CONNECT 2 levels are decoded from one status snapshot as signed Q8.8 values. These getters contain no temporal smoothing or audio-sample acquisition | High |
 | A UI/property callback also reads status `+0x270` directly and applies the same multiplier | Windows, `0x14029e790`–`0x14029e7ab` | At least one presentation-facing value path consumes the decoded device status rather than a distinct PCM sample in this callback. Its caller and draw cadence remain unresolved | Medium |
-| Windows executable resolves Thesycon control API names, including `TUSBAUDIO_AudioControlRequestGet` | Windows string VA `0x140547e08`; see also `docs/REVERSE_ENGINEERING_TOOLS.md` | Windows has an AudioControl-request GET path. This alone does not prove every status read uses that exact API call without a full call-chain trace | Medium |
+| Windows executable resolves Thesycon control API names, including `TUSBAUDIO_AudioControlRequestGet` | Windows string VA `0x140547e08`; see also `docs/dev/REVERSE_ENGINEERING_TOOLS.md` | Windows has an AudioControl-request GET path. This alone does not prove every status read uses that exact API call without a full call-chain trace | Medium |
 | Existing macOS analysis identifies message id 2 as 64-byte `iface_status_t` and the USB MEM GET shape | `PROTOCOL.md` Transport, Messages, and `iface_status_t` sections; macOS 5.2.2 notes | Likely wire request: class/interface IN, UAC2 request `0x03` (UAC1 `0x85`), `wValue=0x0102`, `wIndex=0x3300 | interface`, length 64, timeout 500 ms. This is earlier documented macOS evidence, not a new Windows bus trace | High for prior macOS disassembly; medium for this Windows path |
 
 The status buffer starts at Windows object `+0x270`, so the eight getter
@@ -77,7 +77,7 @@ status GET every 250 ms) and animates presentation independently at the display
 frame cadence. `src/gui/MeterDynamics.hpp` applies a 20 ms attack, 450 ms
 release, 750 ms hold, and 24 dB/s peak-marker decay; these are OpenWitty
 presentation choices, **not** copied or verified LEWITT behavior. See
-`docs/PHASE7G_AUDIO_METER_PLAN.md` for the implemented pipeline.
+`docs/dev/PHASE7G_AUDIO_METER_PLAN.md` for the implemented pipeline.
 
 This static comparison establishes a shared status-message **source**, but
 cannot rank the remaining bottlenecks. A low status GET rate could limit
@@ -122,7 +122,7 @@ fields changed on every consecutive response at both rates; 38/39 interior 8 Hz 
 speaker-L values differed from both neighboring 250 ms-spaced samples. Therefore this
 device/signal supplied additional observations at 8 Hz. This does **not** reveal the original
 application's poll interval, establish firmware's maximum update rate or meter semantics, or
-justify 16 Hz automatically. See `docs/HARDWARE_TEST_RESULTS.md` §23 for timing and caveats.
+justify 16 Hz automatically. See `docs/dev/HARDWARE_TEST_RESULTS.md` §23 for timing and caveats.
 
 ## Native-Windows capture reported by the owner (Phase 7G.4)
 

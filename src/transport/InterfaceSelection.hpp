@@ -1,7 +1,7 @@
 // Choosing which USB interface carries the control (MEM) protocol. Pure logic: no libusb, no
 // sysfs, no I/O - callers hand in descriptor facts, so it is fully unit-testable.
 //
-// Hardware evidence (docs/HARDWARE_TEST_RESULTS.md §2, docs/USB_ACCESS.md §3b), CONNECT 2,
+// Hardware evidence (docs/dev/HARDWARE_TEST_RESULTS.md §2, docs/USB_ACCESS.md §3b), CONNECT 2,
 // VID 0x29C2 PID 0x0004, bcdDevice 0121:
 //   if 0  class 01/01/20  UAC2 AudioControl     bound to snd-usb-audio   -> EIO on MEM GET
 //   if 1,2 class 01/02/20 AudioStreaming         bound to snd-usb-audio

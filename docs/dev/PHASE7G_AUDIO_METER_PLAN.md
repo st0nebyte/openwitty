@@ -191,7 +191,7 @@ excluding USB transaction overhead.
 Monitor audio for glitches and confirm ALSA/PipeWire presence before/after. A 16 Hz trial is
 not part of this diagnostic and needs its own decision and approval.
 
-Measured results are in `docs/HARDWARE_TEST_RESULTS.md` §23. The 4/8 Hz commands returned
+Measured results are in `docs/dev/HARDWARE_TEST_RESULTS.md` §23. The 4/8 Hz commands returned
 40/80 successful status GETs with no errors; measured start intervals were 250/125 ms.
 Both runs changed active speaker meter bytes on every consecutive response. Within the 8 Hz
 run, 38/39 interior 125 ms midpoint speaker-L values differed from both neighboring
@@ -209,7 +209,7 @@ mode uses the same serialized worker/USB connection, retains 2 Hz settings, and 
 status freshness to fresh through 188 ms, delayed through 375 ms, then stale. The QML
 window title labels the experiment; the eight-channel frame animation and observed-only
 peak handling are unchanged. The first 4 Hz real-GUI trace and independent `/proc` memory
-snapshot are documented in `docs/HARDWARE_TEST_RESULTS.md` §24. The owner found the
+snapshot are documented in `docs/dev/HARDWARE_TEST_RESULTS.md` §24. The owner found the
 4 Hz real GUI meters "way too slow"; the opt-in 8 Hz GUI subsequently produced
 stable 125 ms polling with no traced USB errors and similar whole-process RSS.
 The owner judged 8 Hz better than 4 Hz, but still far from a real-time level bar;
@@ -227,7 +227,7 @@ intervals 21.347 and 21.379 ms), versus 34.813/s minimized with playback
 successive playback response; a separate 128-byte read did not change and no
 periodic control-transfer errors were observed. The original report and JSON
 remain on another computer and have not been independently inspected here.
-`docs/ORIGINAL_METER_RESEARCH.md` keeps those Windows observations distinct
+`docs/dev/ORIGINAL_METER_RESEARCH.md` keeps those Windows observations distinct
 from the Linux measurements below.
 
 The existing `openwitty-meter-probe` now accepts only 4, 8, 40, and 48 Hz, with
@@ -284,7 +284,7 @@ the latter is subjective feedback, not XRUN instrumentation. An active-signal
 answer whether 40 Hz yields additional genuine level observations during
 playback. Do not advance to 48 Hz, change the GUI rate, or infer a firmware
 update ceiling from this run. Details and caveats are in
-`docs/HARDWARE_TEST_RESULTS.md` §25.
+`docs/dev/HARDWARE_TEST_RESULTS.md` §25.
 
 ### Separately approved active-playback 40 Hz repeat
 
@@ -321,7 +321,7 @@ core over the run; current `/proc` RSS was 5,180 KiB. The previously anomalous
 ALSA/PipeWire and `snd-usb-audio` remained present, and the lease released.
 The owner reported no clicks or other audible noise during **this** run;
 objective XRUN data were not captured. The full comparison is in
-`docs/HARDWARE_TEST_RESULTS.md` §25.
+`docs/dev/HARDWARE_TEST_RESULTS.md` §25.
 
 The results support a capable, serialized read-only control path near the
 reported original Windows acquisition cadence, with fresh meter observations

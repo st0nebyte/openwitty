@@ -24,7 +24,7 @@ uses `LewittDeviceThesyconMacBackend::{ACMemGet,ACMemSet}`).
   derived from `bcdADC` in the AC header descriptor (`parseConfigDescriptor`) [?].
 * Unit ID `0x33` is hard-coded in the high byte of wIndex [V-bin].
 
-**[V-hw] 2026-10-15 — MEM SET hardware-confirmed** (`docs/HARDWARE_TEST_RESULTS.md` §13): a real
+**[V-hw] 2026-10-15 — MEM SET hardware-confirmed** (`docs/dev/HARDWARE_TEST_RESULTS.md` §13): a real
 `bm=0x21 req=0x03 wValue=0x0100 wIndex=0x3303` SET of the full 128-byte settings struct (one byte
 changed: offset 37, LED brightness) against interface 3 — the same unbound interface already
 confirmed for GET — was accepted by a real CONNECT 2 and visibly changed device state (LED
@@ -64,7 +64,7 @@ at 0x10084fc98 (slot 0 `mov eax,0xa`; slot 3 `xor eax,eax`; slot 4 `0x40`).
 Byte 0 = major, byte 1 = minor is read from a `pmovzxbw` of two bytes (medium
 confidence, now **hardware-confirmed**: a real CONNECT 2 (serial redacted)
 returned byte0=`0x01`/byte1=`0x00` for this GET — see
-`docs/HARDWARE_TEST_RESULTS.md` §4); bytes 2..63 are **not unknown-and-presumed-zero
+`docs/dev/HARDWARE_TEST_RESULTS.md` §4); bytes 2..63 are **not unknown-and-presumed-zero
 any more** — the real device returned non-zero, partially-ASCII data there
 (including its own `iSerial` string at bytes 26–45), captured verbatim but not
 yet mapped field-by-field. This response was obtained over interface 3 (an
@@ -150,13 +150,13 @@ offset was not located (probably device-side/driver state) — unknown.
 Everything not listed is unknown; read-modify-write preserves it.
 
 **Panic Mute (MUTE button hold)** — **[V-hw, hardware-confirmed 2026-10-16]**. The official online
-guide (verified 2026-10-16, see `docs/OFFICIAL_GUIDE.md`) states: a short MUTE press toggles the
+guide (verified 2026-10-16, see `docs/dev/OFFICIAL_GUIDE.md`) states: a short MUTE press toggles the
 currently-selected channel only (matches our hardware-confirmed behaviour for mic/instrument/
-speaker/headphone — §10/§12 of `docs/HARDWARE_TEST_RESULTS.md`); holding MUTE mutes **all input and
+speaker/headphone — §10/§12 of `docs/dev/HARDWARE_TEST_RESULTS.md`); holding MUTE mutes **all input and
 output channels simultaneously**; recovery requires unmuting each channel individually, not holding
 MUTE again.
 
-Hardware-confirmed (3 read-only trials, `docs/HARDWARE_TEST_RESULTS.md` §16): holding MUTE sets
+Hardware-confirmed (3 read-only trials, `docs/dev/HARDWARE_TEST_RESULTS.md` §16): holding MUTE sets
 **exactly** offsets 2 (`kMute[0]`), 12 (`kMute[1]`), 22 (`kSpeakerMute`), 29 (`kHeadphoneMute`) to
 `1` simultaneously, regardless of which channel is selected (rules out "selected channel only").
 **Confirmed NOT affected**: offset 19 (`kLoopbackMute`) and offset 56 (channel-select) — both stayed
@@ -243,7 +243,7 @@ is written back, so they must round-trip). Field list (offset:length):
 Fields known to the schema but with no UI id yet: 8, 17, 25, 26, 30, 54–56,
 58, 60–62, 63–66 (u32?), 68–69, 70.
 
-**Hardware-confirmed 2026-10-14/2026-10-15** (`docs/HARDWARE_TEST_RESULTS.md` §§10, 12): physically
+**Hardware-confirmed 2026-10-14/2026-10-15** (`docs/dev/HARDWARE_TEST_RESULTS.md` §§10, 12): physically
 operating the real CONNECT 2's front panel and diffing `read settings --interface 3` before/after
 confirms the following offsets exactly — in every case the predicted field, and only that field (plus
 byte 56, see below), changed:
@@ -263,7 +263,7 @@ First real (non-tautological) validation of any settings offsets on this project
 was confirmed (by direct observation on hardware) to act on whichever channel is currently selected,
 not a fixed channel — consistent with the byte-56 finding below.
 
-**Byte 56 — CONFIRMED channel-selection indicator** (`docs/HARDWARE_TEST_RESULTS.md` §§10.5, 12):
+**Byte 56 — CONFIRMED channel-selection indicator** (`docs/dev/HARDWARE_TEST_RESULTS.md` §§10.5, 12):
 repeatedly and predictably changes to reflect which channel is currently *selected* on the touch
 surface, **independent of any value edit** — confirmed by pressing a select button alone, with no
 wheel turn, and seeing only this byte move, for all four primary channels, each confirmed more than
@@ -435,7 +435,7 @@ restart it, so the word goes out in the next tick's trigger write.
 | Settings schema / sync merge | ✔ | not re-traced | high (single binary) |
 
 Nothing above is hardware-verified **except API handshake bytes 0–1**, first confirmed against a
-real CONNECT 2 on 2026-10-14 (`docs/HARDWARE_TEST_RESULTS.md`). Everything else remains
+real CONNECT 2 on 2026-10-14 (`docs/dev/HARDWARE_TEST_RESULTS.md`). Everything else remains
 static-analysis-only.
 
 ### Not found / still open
@@ -444,7 +444,7 @@ static-analysis-only.
   necessarily complete for mute/custom/mix/autogain button states).
 * Authoritative protocol/SET range for the input/playback mix value (Q8.8 sign-inverted); one
   device's physical wheel produced −100.00…0.00 in the read-only Phase 7C session (§18 of
-  `docs/HARDWARE_TEST_RESULTS.md`), but no SET was attempted.
+  `docs/dev/HARDWARE_TEST_RESULTS.md`), but no SET was attempted.
 * `iface_version_t` layout (no consumer).
 * Windows has not been re-traced for the above (same codebase; cross-check of
   the transport only).

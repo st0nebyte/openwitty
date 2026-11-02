@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 
 // Independent palette measured from public screenshots of Control Center 5.x
-// (see docs/GUI_DESIGN.md "Colour measurements"). No proprietary artwork is used.
+// (see docs/dev/GUI_DESIGN.md "Colour measurements"). No proprietary artwork is used.
 QtObject {
     readonly property color header: "#1e1d1e"
     readonly property color inputPanel: "#3e3e3e"

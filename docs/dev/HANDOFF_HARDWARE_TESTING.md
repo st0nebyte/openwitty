@@ -2,11 +2,11 @@
 
 > **Historical document (written before the first hardware session, 2026-10-14).** Its statements that the
 > software was never run on a CONNECT 2 or that all writes are disabled are outdated. Current status:
-> `README.md`, `FEATURES.md`, `docs/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md`,
-> `docs/RELEASE_READINESS.md`.
+> `README.md`, `FEATURES.md`, `docs/dev/HARDWARE_TEST_RESULTS.md`, `docs/VOLUME_INTEGRATION.md`,
+> `docs/dev/RELEASE_READINESS.md`.
 
 Written for a fresh Claude Code (or human) session with **no access to the conversation that
-produced this project**. Read this file, then `docs/CLAUDE_SESSION_START.md`.
+produced this project**. Read this file, then `docs/dev/CLAUDE_SESSION_START.md`.
 
 > **The software has never been run against a physical CONNECT 2.** Every protocol statement
 > below comes from static analysis of the vendor's macOS and Windows control applications and
@@ -113,7 +113,7 @@ other PIDs ("device mode not recognized"); OpenWitty does the same on hardware.
    *and* whether Linux lets userspace issue them (see §6).
 2. UAC2 `0x03` vs UAC1 `0x85/0x05` selection (vendor app switches on a version-like field ≥ 0x0B;
    not auto-selected here — try both, read-only).
-3. Meaning of autosetup result 1 vs 2; stale progress=100 behaviour (see `docs/AUDIT_PHASE5E.md`).
+3. Meaning of autosetup result 1 vs 2; stale progress=100 behaviour (see `docs/dev/AUDIT_PHASE5E.md`).
 4. Input-2 phantom, native-volume-mapping (byte 59) and the macOS-streaming flag offsets
    (only mobile-streaming @67 is located).
 5. Layout of `iface_version_t` (opaque).
@@ -167,7 +167,7 @@ openwitty-cli probe              # dry-run matrix; `--execute` performs the same
 openwitty --mock                 # GUI sanity check without hardware; plain `openwitty` = USB, read-only
 ```
 
-Follow `docs/HARDWARE_TEST_PLAN.md` (steps 1–10 + Appendix A abort criteria). Record raw hex
+Follow `docs/dev/HARDWARE_TEST_PLAN.md` (steps 1–10 + Appendix A abort criteria). Record raw hex
 verbatim. Stop at the first surprise (PID `000a`, vanished sound card, wrong sizes, 3 timeouts).
 
 ## 9. Troubleshooting
@@ -205,6 +205,6 @@ verbatim. Stop at the first surprise (PID `000a`, vanished sound card, wrong siz
 ## 12. Where things are documented
 
 `PROTOCOL.md` (wire/field evidence) · `ARCHITECTURE.md` · `FEATURES.md` · `docs/USB_ACCESS.md`
-(kernel-source-verified driver analysis) · `docs/USB_PERMISSIONS.md` · `docs/HARDWARE_TEST_PLAN.md`
-· `docs/AUDIT_PHASE5E.md` (audit, fixes, limitations) · `docs/PACKAGING.md`, `docs/INSTALLATION.md`
+(kernel-source-verified driver analysis) · `docs/USB_PERMISSIONS.md` · `docs/dev/HARDWARE_TEST_PLAN.md`
+· `docs/dev/AUDIT_PHASE5E.md` (audit, fixes, limitations) · `docs/PACKAGING.md`, `docs/INSTALLATION.md`
 · `docs/THIRD_PARTY.md` · `TESTING.md`, `DEVELOPMENT.md`, `TODO.md`.

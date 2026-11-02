@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# OpenWitty LB tests (docs/FEATURE_COMPLETION_ROADMAP.md, LB-2). Usage: lb_analyze.py <4-channel WAV>
+# OpenWitty LB tests (docs/dev/FEATURE_COMPLETION_ROADMAP.md, LB-2). Usage: lb_analyze.py <4-channel WAV>
 # Per-channel level of a raw 4-ch WAV in the L-tone window and the R-tone window, with 1 kHz / 2 kHz detection.
 import numpy as np, wave, sys
 w=wave.open(sys.argv[1]); n=w.getnchannels(); sw=w.getsampwidth(); sr=w.getframerate(); b=w.readframes(w.getnframes())

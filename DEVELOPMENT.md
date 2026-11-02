@@ -6,7 +6,7 @@ into `./.sysroot` (git-ignored), reusing system runtime libs. The script
 prints the environment variables to export. Reverse-engineering tools
 (Node 24, JDK 21, Ghidra, innoextract, REA) are bootstrapped by
 `tools/setup-rootless.sh` into `./.tools`; see
-`docs/REVERSE_ENGINEERING_TOOLS.md`.
+`docs/dev/REVERSE_ENGINEERING_TOOLS.md`.
 
 With root, the equivalent system packages are:
 Ubuntu/Debian `build-essential cmake ninja-build pkg-config libusb-1.0-0-dev libgtest-dev qt6-base-dev qt6-declarative-dev qml6-module-qtquick qml6-module-qtquick-window libasound2-dev`;
