@@ -79,10 +79,13 @@ Window {
 
         // header
         Rectangle { x: 0; y: 0; width: parent.width; height: 50; color: Theme.header
-            Text { x: 14; anchors.verticalCenter: parent.verticalCenter; color: Theme.text; font.pixelSize: 15
-                   font.letterSpacing: 0.5; text: "CONTROL CENTER" }
-            Text { x: 152; anchors.verticalCenter: parent.verticalCenter; color: Theme.accent; font.pixelSize: 15
-                   text: "| CONNECT 2" }
+            Text { x: 14; anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: -6
+                   color: Theme.text; font.pixelSize: 15; font.letterSpacing: 0.5; text: "CONTROL CENTER" }
+            Text { x: 152; anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: -6
+                   color: Theme.accent; font.pixelSize: 15; text: "| CONNECT 2" }
+            // LEWITT allows the look on condition that it clearly says it is not official.
+            Text { objectName: "unofficialLabel"; x: 14; y: 33; color: Theme.textDim; font.pixelSize: 9
+                   text: "OpenWitty · unofficial, not made by LEWITT" }
             GlyphIcon { x: 14; y: 13; width: 24; height: 24; kind: "headphones"; color: Theme.accent
                         visible: false }
             DeviceStatusIndicator { objectName: "headerConnectionIndicator"; x: 262; anchors.verticalCenter: parent.verticalCenter
