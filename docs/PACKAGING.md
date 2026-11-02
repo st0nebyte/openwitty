@@ -91,3 +91,10 @@ properties (uaccess, vendor-scoped, no 0666).
 * Build and install-test the `.deb` on Ubuntu 24.04 and Debian 12 (only Debian 13 was tested).
 * Install and smoke-test both packages in a clean VM/container (nothing was installed on the development host;
   only the user-local install was used on the device).
+
+## Building release packages
+
+`makepkg` records the build directory in the package's `.BUILDINFO`. Build release packages in a neutral
+directory (e.g. copy `PKGBUILD` and the source tarball to `/var/tmp/owbuild`) with `PACKAGER` set, so no local
+user name ends up in a published package. The 0.1.0 `.deb` was built inside the Debian 13 container (user
+`builder`). Check each package before uploading, e.g. `bsdtar -xf <pkg> -C x && grep -rla <your user name> x`.
