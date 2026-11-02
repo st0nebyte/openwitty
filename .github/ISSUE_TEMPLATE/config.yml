@@ -1,5 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
+  - name: Questions and ideas
+    url: https://github.com/st0nebyte/openwitty/discussions
+    about: Ask a question or suggest a feature in Discussions.
+  - name: Security problem
+    url: https://github.com/st0nebyte/openwitty/security/advisories/new
+    about: Report it privately, please not as a public issue.
   - name: Official LEWITT support
     url: https://www.lewitt-audio.com
     about: OpenWitty is unofficial. For LEWITT products, firmware and the official apps, contact LEWITT.

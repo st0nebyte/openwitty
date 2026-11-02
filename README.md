@@ -121,8 +121,10 @@ openwitty --mock          # simulated device, always labelled as simulated
 
 ## Contributing
 
-Bug reports, tests on other systems, protocol findings and code are welcome. For a bug, please include what
-happened, what you expected, your distribution and desktop, and the output of `openwitty-cli diagnose`.
+Bug reports, tests on other systems and protocol findings are welcome as
+[issues](https://github.com/st0nebyte/openwitty/issues); questions and ideas in
+[Discussions](https://github.com/st0nebyte/openwitty/discussions). Code is written by the maintainers; see
+[CONTRIBUTING.md](CONTRIBUTING.md). Security problems: [SECURITY.md](SECURITY.md).
 
 ## License
 
