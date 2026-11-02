@@ -60,6 +60,7 @@ QGuiApplication* app() {
         auto* d = new QTemporaryDir();
         qputenv("XDG_CONFIG_HOME", d->path().toUtf8());
         qputenv("LEWITT_NO_DEVICE_SERVICE", "1");   // never reach the developer's running OpenWitty service
+        qunsetenv("XDG_CURRENT_DESKTOP");           // window placement: never the developer's KWin rules
         return d;
     }();
     (void)configHome;
@@ -2386,6 +2387,54 @@ TEST(GuiPreferences10B, DefaultsPersistenceAndSafeFallback) {
         EXPECT_FALSE(p.onboardingDone()) << text;            // invalid or ambiguous: defaults
         EXPECT_TRUE(p.showTooltips()) << text;
     }
+}
+
+TEST(GuiPreferences10B, RememberPositionAndGeometryArePersistedAndClearedWhenOff) {
+    app();
+    QTemporaryDir d;
+    const QString path = d.path() + "/gui.conf";
+    {
+        GuiPreferences p(path);
+        EXPECT_FALSE(p.rememberPosition());                  // default off
+        EXPECT_TRUE(p.windowGeometry().isEmpty());
+        p.setRememberPosition(true);
+        p.setWindowGeometry("10,20,1200,800");
+    }
+    {
+        GuiPreferences p(path);
+        EXPECT_TRUE(p.rememberPosition());
+        EXPECT_EQ(p.windowGeometry(), "10,20,1200,800");
+        p.setRememberPosition(false);                        // off forgets the place
+    }
+    GuiPreferences p(path);
+    EXPECT_FALSE(p.rememberPosition());
+    EXPECT_TRUE(p.windowGeometry().isEmpty());
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write("remember_position = true\nwindow_geometry = 1,2,300,300\nwindow_geometry = 5,5,300,300\n");
+    f.close();
+    GuiPreferences dup(path);
+    EXPECT_TRUE(dup.rememberPosition());
+    EXPECT_TRUE(dup.windowGeometry().isEmpty());             // ambiguous: not used
+}
+
+TEST(GuiPreferences10B, WindowAtLoginAndReopenSwitchesAreInDesktopIntegration) {
+    app();
+    QTemporaryDir d;
+    GuiPreferences prefs(d.path() + "/gui.conf");
+    DeviceController c;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("prefs", &prefs);
+    auto root = loadMain(c, engine);
+    ASSERT_TRUE(root);
+    root->setProperty("showSettings", true);
+    QCoreApplication::processEvents();
+    QObject* atLogin = root->findChild<QObject*>("windowAutostartSwitch");
+    QObject* reopen = root->findChild<QObject*>("rememberPositionSwitch");
+    QObject* text = root->findChild<QObject*>("rememberPositionText");
+    ASSERT_TRUE(atLogin && reopen && text);
+    EXPECT_FALSE(reopen->property("enabled").toBool());      // test session: no KDE, no X11
+    EXPECT_TRUE(text->property("text").toString().contains("Not available here"));
 }
 
 TEST(GuiPreferences10B, SeparateFromTheSettingsFile) {

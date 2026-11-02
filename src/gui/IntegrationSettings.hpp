@@ -50,6 +50,11 @@ class IntegrationSettings : public QObject {
     // Optional system tray icon (openwitty-tray): installed at all, and started at login (XDG autostart).
     Q_PROPERTY(bool trayInstalled READ trayInstalled CONSTANT)
     Q_PROPERTY(bool trayAutostart READ trayAutostart NOTIFY changed)
+    // Optional: the window opens at login (its own XDG autostart entry).
+    Q_PROPERTY(bool windowAutostart READ windowAutostart NOTIFY changed)
+    // How "Reopen the window where it was closed" works here: "kwin" | "app" (X11) | "unsupported" (WindowPlacement).
+    Q_PROPERTY(QString placementMode READ placementMode NOTIFY changed)
+    Q_PROPERTY(bool kwinPositionRule READ kwinPositionRule NOTIFY changed)
 public:
     // Runs a command (program + arguments), returns its exit status and stdout. Injectable for tests.
     using Runner = std::function<int(const QString& program, const QStringList& args, QString* out)>;
@@ -106,6 +111,10 @@ public:
     bool trayInstalled() const;
     bool trayAutostart() const { return trayAutostart_; }
     QString trayProgram() const { return trayProgram_; }
+    bool windowAutostart() const { return windowAutostart_; }
+    QString placementMode() const { return placementMode_; }
+    bool kwinPositionRule() const { return kwinPositionRule_; }
+    void setPlacementModeForTesting(const QString& m) { placementMode_ = m; refreshPlacement(); emit changed(); }
     const lewitt::UserConfig& config() const { return cfg_; }
 
     Q_INVOKABLE void refresh();                        // config + service state + setup check
@@ -121,6 +130,11 @@ public:
     // On: write the login autostart entry and start the tray icon now (it is single-instance). Off: remove
     // the entry and ask a running tray icon to quit. Never touches the background service.
     Q_INVOKABLE bool setTrayAutostart(bool on);
+    // On: write the window's login autostart entry. Off: remove it. Nothing else changes.
+    Q_INVOKABLE bool setWindowAutostart(bool on);
+    // KDE Plasma only: write (on) or remove (off) OpenWitty's KWin rule that remembers the window's position and
+    // size, then ask KWin to reload its rules. Never touches another rule. False in any other mode.
+    Q_INVOKABLE bool setKwinPositionRule(bool on);
     // Writes (on) or removes (off) the PipeWire config for separate inputs; takes effect after restartAudio().
     Q_INVOKABLE bool setSplitSources(bool on);
     // Writes (on) or removes (off) the PipeWire file allowing 44.1/48/96 kHz; takes effect after restartAudio().
@@ -140,6 +154,7 @@ private:
     void loadConfig();
     void refreshService();
     void refreshSetup();
+    void refreshPlacement();
     int run(const QString& program, const QStringList& args, QString* out = nullptr);
 
     Runner runner_;
@@ -147,6 +162,10 @@ private:
     Launcher launcher_;
     QString trayProgram_;
     bool trayAutostart_{false};
+    QString guiProgram_;
+    bool windowAutostart_{false};
+    QString placementMode_{"unsupported"};
+    bool kwinPositionRule_{false};
     QString path_;
     lewitt::UserConfig cfg_;
     QStringList warnings_;

@@ -15,6 +15,7 @@
 #include "InstanceChannel.hpp"
 #include "IntegrationSettings.hpp"
 #include "lewitt/version.hpp"
+#include "WindowPlacement.hpp"
 
 int main(int argc, char** argv) {
     QGuiApplication app(argc, argv);
@@ -155,6 +156,19 @@ int main(int argc, char** argv) {
     if (p.isSet(hwCheck)) controller.enableHardwareCheck();   // before connecting: the baseline is taken at connect
     if (p.isSet(mock)) controller.connectMock();
     else controller.connectUsb();  // read-only; reports "not found" if absent
+    // "Reopen the window where it was closed" on X11 (on KDE Plasma KWin does it; Wayland apps cannot place windows).
+    const bool selfPlacement = prefs.rememberPosition() && QGuiApplication::platformName() == "xcb" &&
+                               !p.isSet(shot) && !p.isSet(sizeOpt);
+    if (selfPlacement)
+        if (auto* w = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0))) {
+            int x, y, ww, hh;
+            if (windowplace::parseGeometry(prefs.windowGeometry(), &x, &y, &ww, &hh)) w->setGeometry(x, y, ww, hh);
+            QObject::connect(&app, &QCoreApplication::aboutToQuit, &prefs, [w, &prefs] {
+                if (!prefs.rememberPosition()) return;
+                const QRect g = w->geometry();
+                prefs.setWindowGeometry(QString("%1,%2,%3,%4").arg(g.x()).arg(g.y()).arg(g.width()).arg(g.height()));
+            });
+        }
     if (p.isSet(sizeOpt) && !engine.rootObjects().isEmpty()) {
         auto parts = p.value(sizeOpt).split('x');
         if (parts.size() == 2)

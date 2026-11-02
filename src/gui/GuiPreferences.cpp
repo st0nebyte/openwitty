@@ -28,19 +28,28 @@ GuiPreferences::GuiPreferences(QString path, QObject* parent)
 void GuiPreferences::reload() {
     onboardingDone_ = false;
     showTooltips_ = true;
+    rememberPosition_ = false;
+    windowGeometry_.clear();
     QFile f(path_);
     if (path_.isEmpty() || !f.open(QIODevice::ReadOnly | QIODevice::Text)) return;   // missing: defaults
-    int onboarding = -2, tooltips = -2;                     // -2 unseen, -3 duplicated
+    int onboarding = -2, tooltips = -2, remember = -2;      // -2 unseen, -3 duplicated
+    int geometrySeen = 0;
     for (const QByteArray& raw : f.readAll().split('\n')) {
         const QString line = QString::fromUtf8(raw).section('#', 0, 0).trimmed();
         if (line.isEmpty() || line == "[gui]") continue;
         const QString key = line.section('=', 0, 0).trimmed(), value = line.section('=', 1).trimmed();
-        int* slot = key == "onboarding_done" ? &onboarding : key == "show_tooltips" ? &tooltips : nullptr;
+        if (key == "window_geometry") {
+            windowGeometry_ = ++geometrySeen == 1 ? value : QString();
+            continue;
+        }
+        int* slot = key == "onboarding_done" ? &onboarding : key == "show_tooltips" ? &tooltips
+                    : key == "remember_position" ? &remember : nullptr;
         if (!slot) continue;                                // unknown keys are ignored
         *slot = *slot == -2 ? parseBool(value) : -3;        // a duplicate is ambiguous: default
     }
     if (onboarding == 1) onboardingDone_ = true;
     if (tooltips == 0) showTooltips_ = false;
+    if (remember == 1) rememberPosition_ = true;
 }
 
 bool GuiPreferences::save() {
@@ -52,7 +61,9 @@ bool GuiPreferences::save() {
     QSaveFile f(path_);
     const QByteArray text = QByteArray("# OpenWitty window preferences (not device settings). Delete to reset.\n[gui]\n") +
                             "onboarding_done = " + (onboardingDone_ ? "true" : "false") + "\n" +
-                            "show_tooltips = " + (showTooltips_ ? "true" : "false") + "\n";
+                            "show_tooltips = " + (showTooltips_ ? "true" : "false") + "\n" +
+                            "remember_position = " + (rememberPosition_ ? "true" : "false") + "\n" +
+                            (windowGeometry_.isEmpty() ? QByteArray() : "window_geometry = " + windowGeometry_.toUtf8() + "\n");
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text) || f.write(text) != text.size() || !f.commit()) {
         error_ = "cannot save " + path_;
         return false;
@@ -73,4 +84,18 @@ void GuiPreferences::setShowTooltips(bool on) {
     showTooltips_ = on;
     save();
     emit changed();
+}
+
+void GuiPreferences::setRememberPosition(bool on) {
+    if (rememberPosition_ == on) return;
+    rememberPosition_ = on;
+    if (!on) windowGeometry_.clear();
+    save();
+    emit changed();
+}
+
+void GuiPreferences::setWindowGeometry(const QString& g) {
+    if (windowGeometry_ == g) return;
+    windowGeometry_ = g;
+    save();
 }

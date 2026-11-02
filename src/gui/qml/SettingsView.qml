@@ -387,6 +387,23 @@ Rectangle {
             Text { visible: integration.trayInstalled; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
                    text: "The panel icon shows whether the CONNECT 2 is connected and the desktop volume follows the "
                        + "knob; a click opens this window. \"Quit tray icon\" in its menu removes only the icon." }
+            ToggleSwitch { objectName: "windowAutostartSwitch"; width: 310; label: "Open the window at login"
+                           checked: integration.windowAutostart
+                           tip: "Opens this window when you log in"
+                           onToggled: (b) => integration.setWindowAutostart(b) }
+            ToggleSwitch { objectName: "rememberPositionSwitch"; width: 310; label: "Reopen the window where it was closed"
+                           enabled: integration.placementMode !== "unsupported" || checked
+                           checked: integration.placementMode === "kwin" ? integration.kwinPositionRule
+                                    : typeof prefs !== "undefined" && prefs.rememberPosition
+                           tip: "Remembers the window's position and size"
+                           onToggled: (b) => { if (typeof prefs !== "undefined") prefs.setRememberPosition(b);
+                                               if (integration.placementMode === "kwin") integration.setKwinPositionRule(b); } }
+            Text { objectName: "rememberPositionText"; width: 310; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 10
+                   text: ({"kwin": "KDE Plasma remembers the position and size (an OpenWitty rule under System Settings "
+                                   + "▸ Window Rules).",
+                           "app": "The position and size are saved when the window closes.",
+                           "unsupported": "Not available here: on Wayland only the window manager may place windows. "
+                                          + "Works on KDE Plasma and in X11 sessions."})[integration.placementMode] }
             Rectangle { width: 310; height: 1; color: "#333" }
             // Phase 11A.4: separate desktop inputs from the four capture channels (order verified on hardware)
             ToggleSwitch { objectName: "splitSourcesSwitch"; width: 310; label: "Separate inputs for apps"

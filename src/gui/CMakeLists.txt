@@ -26,7 +26,8 @@ install(TARGETS openwitty-tray RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Backend facade as a static library so it can be tested without the QML app.
 qt_add_library(lewitt_gui_backend STATIC DeviceController.cpp DeviceController.hpp MeterPresentation.cpp MeterPresentation.hpp MeterDynamics.hpp
-    IntegrationSettings.cpp IntegrationSettings.hpp GuiPreferences.cpp GuiPreferences.hpp Presets.cpp Presets.hpp)
+    IntegrationSettings.cpp IntegrationSettings.hpp GuiPreferences.cpp GuiPreferences.hpp Presets.cpp Presets.hpp
+    WindowPlacement.cpp WindowPlacement.hpp)
 target_include_directories(lewitt_gui_backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(lewitt_gui_backend PUBLIC lewitt_core lewitt_desktop lewitt_desktopui Qt6::Core Qt6::Gui)
 

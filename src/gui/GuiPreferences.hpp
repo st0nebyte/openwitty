@@ -10,6 +10,9 @@ class GuiPreferences : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool onboardingDone READ onboardingDone NOTIFY changed)
     Q_PROPERTY(bool showTooltips READ showTooltips NOTIFY changed)
+    // "Reopen the window where it was closed" (default off). The geometry is used only on X11; on KDE Plasma KWin
+    // remembers it (see WindowPlacement.hpp).
+    Q_PROPERTY(bool rememberPosition READ rememberPosition NOTIFY changed)
 public:
     // path empty = the XDG default location
     explicit GuiPreferences(QString path = {}, QObject* parent = nullptr);
@@ -17,10 +20,14 @@ public:
     QString path() const { return path_; }
     bool onboardingDone() const { return onboardingDone_; }
     bool showTooltips() const { return showTooltips_; }
+    bool rememberPosition() const { return rememberPosition_; }
+    QString windowGeometry() const { return windowGeometry_; }   // "x,y,w,h" or empty
     QString lastError() const { return error_; }
 
     Q_INVOKABLE void setOnboardingDone(bool done);
     Q_INVOKABLE void setShowTooltips(bool on);
+    Q_INVOKABLE void setRememberPosition(bool on);
+    void setWindowGeometry(const QString& g);
     void reload();
     // First-run tour: only for an interactive start without an explicit page, until finished or skipped once.
     bool showOnboardingAtStart(bool screenshotRun, bool explicitPage) const {
@@ -35,5 +42,7 @@ private:
     QString path_;
     bool onboardingDone_{false};
     bool showTooltips_{true};
+    bool rememberPosition_{false};
+    QString windowGeometry_;
     QString error_;
 };

@@ -15,6 +15,8 @@
 #include "GuiActivation.hpp"
 #include "ServiceState.hpp"
 #include "TrayAutostart.hpp"
+#include "WindowPlacement.hpp"
+#include "lewitt/version.hpp"
 #include "core/OutputFollow.hpp"
 #include "desktop/SampleRates.hpp"
 #include "desktop/SplitSources.hpp"
@@ -40,11 +42,23 @@ IntegrationSettings::IntegrationSettings(QObject* parent, Runner runner, SetupPr
       launcher_(launcher ? std::move(launcher) : Launcher(spawnDetached)),
       trayProgram_(trayProgram.isEmpty() ? siblingProgram("openwitty-tray") : std::move(trayProgram)),
       trayAutostart_(trayAutostartEnabled()),
+      guiProgram_(siblingProgram("openwitty")),
+      windowAutostart_(windowAutostartEnabled()),
+      placementMode_(windowplace::detectMode()),
       path_(QString::fromStdString(userConfigPath())) {
     // Configuration and service state only; the setup check (opens the CONNECT 2's ALSA mixer) runs when
     // the Desktop integration page is opened (refresh()).
     loadConfig();
     refreshService();
+    refreshPlacement();
+}
+
+void IntegrationSettings::refreshPlacement() {
+    kwinPositionRule_ = false;
+    if (placementMode_ != "kwin") return;
+    QString out;
+    const QStringList c = windowplace::readRuleKey("positionrule");
+    kwinPositionRule_ = run(c.first(), c.mid(1), &out) == 0 && out.trimmed() == "4";
 }
 
 void IntegrationSettings::loadConfig() {
@@ -61,7 +75,9 @@ int IntegrationSettings::run(const QString& program, const QStringList& args, QS
 void IntegrationSettings::refresh() {
     loadConfig();
     trayAutostart_ = trayAutostartEnabled();
+    windowAutostart_ = windowAutostartEnabled();
     refreshService();
+    refreshPlacement();
     refreshSetup();
     emit changed();
 }
@@ -90,6 +106,40 @@ bool IntegrationSettings::setTrayAutostart(bool on) {
     lastError_ = err.isEmpty() ? QString() : "System tray icon: " + err + ".";
     emit changed();
     return ok && err.isEmpty();
+}
+
+bool IntegrationSettings::setWindowAutostart(bool on) {
+    QString err;
+    const bool ok = on ? enableWindowAutostart(guiProgram_, &err) : disableWindowAutostart(&err);
+    windowAutostart_ = windowAutostartEnabled();
+    lastError_ = err.isEmpty() ? QString() : "Open the window at login: " + err + ".";
+    emit changed();
+    return ok;
+}
+
+bool IntegrationSettings::setKwinPositionRule(bool on) {
+    if (placementMode_ != "kwin") return false;
+    QList<QStringList> cmds;
+    if (on) {
+        QString order, legacy;
+        const QStringList o = windowplace::readGeneralKey("Order"), r = windowplace::readGeneralKey("rules");
+        (void)run(o.first(), o.mid(1), &order);
+        (void)run(r.first(), r.mid(1), &legacy);
+        // the window's Wayland app id (main.cpp sets it as the desktop file name)
+        cmds = windowplace::ruleOnCommands(QStringLiteral(LEWITT_APP_DESKTOP_ID), order.trimmed(), legacy.trimmed());
+    } else {
+        cmds = windowplace::ruleOffCommands();
+    }
+    bool ok = true;
+    for (const auto& c : cmds) ok = run(c.first(), c.mid(1)) == 0 && ok;
+    const QStringList rc = windowplace::reconfigureCommand();
+    (void)run(rc.first(), rc.mid(1));   // KWin not running (other session): the rule applies at its next start
+    refreshPlacement();
+    ok = ok && kwinPositionRule_ == on;
+    lastError_ = ok ? QString() : QString("Reopen where it was closed: the KDE window rule could not be %1.")
+                                      .arg(on ? "written" : "removed");
+    emit changed();
+    return ok;
 }
 
 QString IntegrationSettings::findConnect2CaptureNode(const QByteArray& pwDumpJson) {
@@ -383,6 +433,8 @@ bool IntegrationSettings::resetToDefaults() {
                          ? QString("the background service state could not be checked")
                          : QString("the background service could not be disabled (%1)").arg(lastError_));
     if (trayAutostart_ && !setTrayAutostart(false)) problems << "the tray icon login entry could not be removed";
+    if (windowAutostart_ && !setWindowAutostart(false)) problems << "the window's login entry could not be removed";
+    if (kwinPositionRule_ && !setKwinPositionRule(false)) problems << "the KDE window rule could not be removed";
     if (problems.isEmpty()) {
         lastError_.clear();
     } else {

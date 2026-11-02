@@ -22,6 +22,7 @@
 #include "TrayAutostart.hpp"
 #include "TrayController.hpp"
 #include "TrayModel.hpp"
+#include "WindowPlacement.hpp"
 #include "core/UserConfig.hpp"
 
 namespace {
@@ -29,6 +30,7 @@ QApplication* app() {
     static QTemporaryDir* configHome = [] {
         auto* d = new QTemporaryDir();
         qputenv("XDG_CONFIG_HOME", d->path().toUtf8());
+        qunsetenv("XDG_CURRENT_DESKTOP");   // window placement: "unsupported" unless a test chooses a mode
         return d;
     }();
     static QTemporaryDir* runtime = [] {
@@ -384,4 +386,125 @@ TEST(TrayModel, ShowsWhetherTheConnect2IsPluggedIn) {
     m.refresh();
     EXPECT_EQ(changes, 1);
     EXPECT_EQ(m.deviceLine(), "CONNECT 2 not connected");
+}
+
+// ---- window at login, reopen where it was closed ----------------------------------------------------
+
+TEST(WindowAutostart, EntryIsWrittenAndRemovedOnlyOnRequestNextToTheTrayEntry) {
+    app();
+    disableWindowAutostart();
+    disableTrayAutostart();
+    EXPECT_FALSE(windowAutostartEnabled());
+    EXPECT_NE(windowAutostartPath(), trayAutostartPath());
+    ASSERT_TRUE(enableWindowAutostart("/opt/Open Witty/bin/openwitty"));
+    EXPECT_TRUE(windowAutostartEnabled());
+    EXPECT_FALSE(trayAutostartEnabled());                   // independent of the tray entry
+    QFile f(windowAutostartPath());
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(f.readAll());
+    EXPECT_TRUE(text.contains("Exec=\"/opt/Open Witty/bin/openwitty\"\n")) << text.toStdString();
+    EXPECT_TRUE(text.contains("Type=Application\n"));
+    EXPECT_TRUE(disableWindowAutostart());
+    EXPECT_FALSE(windowAutostartEnabled());
+    EXPECT_TRUE(disableWindowAutostart());                  // idempotent
+}
+
+TEST(WindowAutostart, SwitchWritesAndRemovesTheEntryAndResetRemovesIt) {
+    app();
+    disableWindowAutostart();
+    FakeSystemctl sc;
+    IntegrationSettings s(nullptr, sc.runner(), [] { return std::optional<lewitt::AudioSetupStatus>{}; },
+                          [](const QString&, const QStringList&) { return true; }, QCoreApplication::applicationFilePath());
+    EXPECT_FALSE(s.windowAutostart());
+    EXPECT_TRUE(s.setWindowAutostart(true));
+    EXPECT_TRUE(s.windowAutostart());
+    EXPECT_TRUE(windowAutostartEnabled());
+    EXPECT_TRUE(s.setWindowAutostart(false));
+    EXPECT_FALSE(windowAutostartEnabled());
+    ASSERT_TRUE(s.setWindowAutostart(true));
+    EXPECT_TRUE(s.resetToDefaults());
+    EXPECT_FALSE(windowAutostartEnabled());
+    EXPECT_FALSE(sc.changedService());
+}
+
+TEST(WindowPlacement, ModeDependsOnTheDesktopAndSession) {
+    using windowplace::detectMode;
+    EXPECT_EQ(detectMode("KDE", "wayland", true), "kwin");
+    EXPECT_EQ(detectMode("ubuntu:KDE", "xcb", true), "kwin");
+    EXPECT_EQ(detectMode("KDE", "wayland", false), "unsupported");   // no kwriteconfig6
+    EXPECT_EQ(detectMode("GNOME", "xcb", false), "app");
+    EXPECT_EQ(detectMode("GNOME", "wayland", false), "unsupported");
+    EXPECT_EQ(detectMode("", "offscreen", true), "unsupported");
+}
+
+TEST(WindowPlacement, GeometryIsParsedOnlyWhenSane) {
+    int x = 0, y = 0, w = 0, h = 0;
+    EXPECT_TRUE(windowplace::parseGeometry("100,-20,1200,800", &x, &y, &w, &h));
+    EXPECT_EQ(QList<int>({x, y, w, h}), QList<int>({100, -20, 1200, 800}));
+    for (const char* bad : {"", "1,2,3", "a,b,c,d", "0,0,10,10", "0,0,99999,800", "1,2,3,4,5"})
+        EXPECT_FALSE(windowplace::parseGeometry(bad, &x, &y, &w, &h)) << bad;
+}
+
+namespace {
+// kreadconfig6 / kwriteconfig6 over an in-memory kwinrulesrc ("group/key" -> value)
+struct FakeKConfig {
+    QMap<QString, QString> v;
+    QList<QStringList> calls;
+    CommandRunner runner() {
+        return [this](const QString& program, const QStringList& a, QString* out) {
+            calls.append(QStringList{program} + a);
+            if (program != "kreadconfig6" && program != "kwriteconfig6") return 0;
+            if (a.value(0) != "--file" || a.value(1) != "kwinrulesrc") return 1;
+            const QString k = a.value(3) + "/" + a.value(5);
+            if (program == "kreadconfig6") { if (out) *out = v.value(k) + "\n"; return 0; }
+            if (a.value(6) == "--delete") v.remove(k); else v[k] = a.value(6);
+            return 0;
+        };
+    }
+};
+}  // namespace
+
+TEST(WindowPlacement, KdeRuleIsWrittenRemovedAndNeverTouchesOtherRules) {
+    app();
+    FakeKConfig kc;
+    kc.v = {{"1/Description", "someone else's rule"}, {"1/minimizerule", "3"}, {"General/Order", "1"}};
+    const auto other = kc.v;
+    IntegrationSettings s(nullptr, kc.runner(), [] { return std::optional<lewitt::AudioSetupStatus>{}; },
+                          [](const QString&, const QStringList&) { return true; }, QCoreApplication::applicationFilePath());
+    EXPECT_NE(s.placementMode(), "kwin");                   // the test environment has no KDE session
+    s.setPlacementModeForTesting("unsupported");
+    EXPECT_FALSE(s.setKwinPositionRule(true));               // nothing written outside KDE
+    for (const auto& c : kc.calls) EXPECT_NE(c.value(0), "kwriteconfig6");
+    s.setPlacementModeForTesting("kwin");
+    EXPECT_FALSE(s.kwinPositionRule());
+    ASSERT_TRUE(s.setKwinPositionRule(true));
+    EXPECT_TRUE(s.kwinPositionRule());
+    EXPECT_EQ(kc.v.value("openwitty-window/wmclass"), "io.github.st0nebyte.openwitty");
+    EXPECT_EQ(kc.v.value("openwitty-window/wmclassmatch"), "1");
+    EXPECT_EQ(kc.v.value("openwitty-window/positionrule"), "4");
+    EXPECT_EQ(kc.v.value("openwitty-window/sizerule"), "4");
+    EXPECT_EQ(kc.v.value("General/Order"), "1,openwitty-window");
+    EXPECT_FALSE(kc.v.contains("General/rules"));            // no legacy list created
+    EXPECT_TRUE(kc.calls.contains(windowplace::reconfigureCommand()));
+    for (const auto& c : kc.calls)
+        if (c.value(0) == "kwriteconfig6") EXPECT_TRUE(c.value(4) == "openwitty-window" || c.value(4) == "General") << c.join(' ').toStdString();
+    ASSERT_TRUE(s.setKwinPositionRule(true));                // again: Order not duplicated
+    EXPECT_EQ(kc.v.value("General/Order"), "1,openwitty-window");
+    kc.v["openwitty-window/position"] = "100,80";            // KWin remembered a place
+    ASSERT_TRUE(s.setKwinPositionRule(false));
+    EXPECT_FALSE(s.kwinPositionRule());
+    for (auto it = kc.v.cbegin(); it != kc.v.cend(); ++it) EXPECT_FALSE(it.key().startsWith("openwitty-window/")) << it.key().toStdString();
+    for (auto it = other.cbegin(); it != other.cend(); ++it)
+        if (it.key() != "General/Order") EXPECT_EQ(kc.v.value(it.key()), it.value());
+    ASSERT_TRUE(s.setKwinPositionRule(true));
+    EXPECT_TRUE(s.resetToDefaults());                        // reset removes the rule too
+    EXPECT_FALSE(kc.v.contains("openwitty-window/positionrule"));
+}
+
+TEST(WindowPlacement, LegacyRuleListGetsTheGroupSoKwinKeepsIt) {
+    const auto c = windowplace::ruleOnCommands("app", "", "a, b");
+    EXPECT_TRUE(c.contains(QStringList{"kwriteconfig6", "--file", "kwinrulesrc", "--group", "General", "--key", "rules",
+                                       "a,b,openwitty-window"}));
+    for (const auto& x : windowplace::ruleOnCommands("app", "", ""))
+        EXPECT_NE(x.value(4), "General");                    // no list: KWin lists the group by itself
 }
