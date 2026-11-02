@@ -1,6 +1,8 @@
 // Single device owner: the service's socket server and the client transport (2026-11-01).
 #include <gtest/gtest.h>
 
+#include "core/RetryPolicy.hpp"
+
 #include <filesystem>
 #include <sys/stat.h>
 
@@ -134,7 +136,8 @@ TEST(DeviceService, WithTheServiceTheClientNeverOpensUsb) {
     s.server.setTransport(nullptr);   // the service has no device: an error, never a direct USB open
     auto st = t.open();
     ASSERT_FALSE(st.ok());
-    EXPECT_EQ(st.error().code, Errc::NotFound);
+    EXPECT_EQ(st.error().code, Errc::Disconnected);
+    EXPECT_TRUE(shouldRetryOpen(st.error().code, /*deviceListChanged=*/false));   // the window keeps trying (login)
     EXPECT_FALSE(directMade);
 }
 

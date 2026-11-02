@@ -378,8 +378,10 @@ bool DeviceServer::serve(int fd) {
             helloWaiting_ = false;
             t = transport_;
         }
+        // Temporary by nature (the service is still looking, e.g. right after login or a replug): Disconnected, not
+        // NotFound, so a window retries by itself instead of waiting for a device-list change.
         if (!t || !t->isOpen())
-            return sendError(fd, Error{Errc::NotFound, "the OpenWitty service has no CONNECT 2 right now"}).ok();
+            return sendError(fd, Error{Errc::Disconnected, "the OpenWitty service has no CONNECT 2 right now"}).ok();
         if (wantsControl) {
             controllerFd_ = fd;
             if (log_) log_("service: a window or command took control; the service pauses its own work");
